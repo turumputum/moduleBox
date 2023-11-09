@@ -1,0 +1,1 @@
+void init_rfid_slot(int num_of_slot);

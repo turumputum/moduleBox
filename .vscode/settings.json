@@ -1,0 +1,43 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.adapterTargetName": "esp32s3",
+    "idf.openOcdConfigs": [
+        "board/esp32s3-builtin.cfg"
+    ],
+    "idf.portWin": "COM167",
+    "files.associations": {
+        "esp_eth_mac.h": "c",
+        "esp_efuse.h": "c",
+        "event_groups.h": "c",
+        "gptimer.h": "c",
+        "compare": "c",
+        "complex": "c",
+        "format": "c",
+        "me_slot_config.h": "c",
+        "freertos.h": "c",
+        "stdio.h": "c",
+        "esp_timer.h": "c",
+        "random": "c",
+        "bit": "c",
+        "cstddef": "c",
+        "list": "c",
+        "string": "c",
+        "limits": "c",
+        "memory": "c",
+        "new": "c",
+        "functional": "c",
+        "array": "c",
+        "deque": "c",
+        "iterator": "c",
+        "system_error": "c",
+        "type_traits": "c",
+        "vector": "c",
+        "xhash": "c",
+        "xiosbase": "c",
+        "xmemory": "c",
+        "xutility": "c"
+    },
+    "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
+    "idf.flashType": "UART",
+    "cmake.configureOnOpen": false
+}

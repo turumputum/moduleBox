@@ -1,0 +1,1 @@
+void start_benewakeTOF_task(int num_of_slot);
