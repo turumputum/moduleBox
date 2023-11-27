@@ -10,7 +10,7 @@
 #include "leds.h"
 #include "esp_log.h"
 #include "driver/rmt.h"
-#include "led_strip.h"
+//#include "led_strip.h"
 #include <math.h>
 
 int effectTick;
@@ -23,100 +23,100 @@ int ledStep = 0;
 extern stateStruct me_state;
 extern configuration me_config;
 
-RgbColor RGB;
-HsvColor HSV;
+// RgbColor RGB;
+// HsvColor HSV;
 
 int currentBright;
 
-led_strip_t *strip;
+//led_strip_t *strip;
 
 static const char *TAG = "leds";
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-RgbColor HsvToRgb(HsvColor hsv) {
-	RgbColor rgb;
-	unsigned char region, remainder, p, q, t;
+// RgbColor HsvToRgb(HsvColor hsv) {
+// 	RgbColor rgb;
+// 	unsigned char region, remainder, p, q, t;
 
-	if (hsv.s == 0) {
-		rgb.r = hsv.v;
-		rgb.g = hsv.v;
-		rgb.b = hsv.v;
-		return rgb;
-	}
+// 	if (hsv.s == 0) {
+// 		rgb.r = hsv.v;
+// 		rgb.g = hsv.v;
+// 		rgb.b = hsv.v;
+// 		return rgb;
+// 	}
 
-	region = hsv.h / 43;
-	remainder = (hsv.h - (region * 43)) * 6;
+// 	region = hsv.h / 43;
+// 	remainder = (hsv.h - (region * 43)) * 6;
 
-	p = (hsv.v * (255 - hsv.s)) >> 8;
-	q = (hsv.v * (255 - ((hsv.s * remainder) >> 8))) >> 8;
-	t = (hsv.v * (255 - ((hsv.s * (255 - remainder)) >> 8))) >> 8;
+// 	p = (hsv.v * (255 - hsv.s)) >> 8;
+// 	q = (hsv.v * (255 - ((hsv.s * remainder) >> 8))) >> 8;
+// 	t = (hsv.v * (255 - ((hsv.s * (255 - remainder)) >> 8))) >> 8;
 
-	switch (region) {
-	case 0:
-		rgb.r = hsv.v;
-		rgb.g = t;
-		rgb.b = p;
-		break;
-	case 1:
-		rgb.r = q;
-		rgb.g = hsv.v;
-		rgb.b = p;
-		break;
-	case 2:
-		rgb.r = p;
-		rgb.g = hsv.v;
-		rgb.b = t;
-		break;
-	case 3:
-		rgb.r = p;
-		rgb.g = q;
-		rgb.b = hsv.v;
-		break;
-	case 4:
-		rgb.r = t;
-		rgb.g = p;
-		rgb.b = hsv.v;
-		break;
-	default:
-		rgb.r = hsv.v;
-		rgb.g = p;
-		rgb.b = q;
-		break;
-	}
+// 	switch (region) {
+// 	case 0:
+// 		rgb.r = hsv.v;
+// 		rgb.g = t;
+// 		rgb.b = p;
+// 		break;
+// 	case 1:
+// 		rgb.r = q;
+// 		rgb.g = hsv.v;
+// 		rgb.b = p;
+// 		break;
+// 	case 2:
+// 		rgb.r = p;
+// 		rgb.g = hsv.v;
+// 		rgb.b = t;
+// 		break;
+// 	case 3:
+// 		rgb.r = p;
+// 		rgb.g = q;
+// 		rgb.b = hsv.v;
+// 		break;
+// 	case 4:
+// 		rgb.r = t;
+// 		rgb.g = p;
+// 		rgb.b = hsv.v;
+// 		break;
+// 	default:
+// 		rgb.r = hsv.v;
+// 		rgb.g = p;
+// 		rgb.b = q;
+// 		break;
+// 	}
 
-	return rgb;
-}
+// 	return rgb;
+// }
+// HsvColor RgbToHsv(RgbColor rgb) {
+// 	HsvColor hsv;
+// 	unsigned char rgbMin, rgbMax;
 
-HsvColor RgbToHsv(RgbColor rgb) {
-	HsvColor hsv;
-	unsigned char rgbMin, rgbMax;
+// 	rgbMin = rgb.r < rgb.g ? (rgb.r < rgb.b ? rgb.r : rgb.b) : (rgb.g < rgb.b ? rgb.g : rgb.b);
+// 	rgbMax = rgb.r > rgb.g ? (rgb.r > rgb.b ? rgb.r : rgb.b) : (rgb.g > rgb.b ? rgb.g : rgb.b);
 
-	rgbMin = rgb.r < rgb.g ? (rgb.r < rgb.b ? rgb.r : rgb.b) : (rgb.g < rgb.b ? rgb.g : rgb.b);
-	rgbMax = rgb.r > rgb.g ? (rgb.r > rgb.b ? rgb.r : rgb.b) : (rgb.g > rgb.b ? rgb.g : rgb.b);
+// 	hsv.v = rgbMax;
+// 	if (hsv.v == 0) {
+// 		hsv.h = 0;
+// 		hsv.s = 0;
+// 		return hsv;
+// 	}
 
-	hsv.v = rgbMax;
-	if (hsv.v == 0) {
-		hsv.h = 0;
-		hsv.s = 0;
-		return hsv;
-	}
+// 	hsv.s = 255 * (rgbMax - rgbMin) / hsv.v;
+// 	if (hsv.s == 0) {
+// 		hsv.h = 0;
+// 		return hsv;
+// 	}
 
-	hsv.s = 255 * (rgbMax - rgbMin) / hsv.v;
-	if (hsv.s == 0) {
-		hsv.h = 0;
-		return hsv;
-	}
+// 	if (rgbMax == rgb.r)
+// 		hsv.h = 0 + 43 * (rgb.g - rgb.b) / (rgbMax - rgbMin);
+// 	else if (rgbMax == rgb.g)
+// 		hsv.h = 85 + 43 * (rgb.b - rgb.r) / (rgbMax - rgbMin);
+// 	else
+// 		hsv.h = 171 + 43 * (rgb.r - rgb.g) / (rgbMax - rgbMin);
 
-	if (rgbMax == rgb.r)
-		hsv.h = 0 + 43 * (rgb.g - rgb.b) / (rgbMax - rgbMin);
-	else if (rgbMax == rgb.g)
-		hsv.h = 85 + 43 * (rgb.b - rgb.r) / (rgbMax - rgbMin);
-	else
-		hsv.h = 171 + 43 * (rgb.r - rgb.g) / (rgbMax - rgbMin);
+// 	return hsv;
+// }
+// //
 
-	return hsv;
-}
-//
 //void initLeds() {
 //	uint32_t startTick = xTaskGetTickCount();
 //	uint32_t heapBefore = xPortGetFreeHeapSize();
@@ -236,48 +236,3 @@ HsvColor RgbToHsv(RgbColor rgb) {
 //	//ESP_LOGD(TAG, "ReFresh leds complite, Duration: %d ms. Heap usage: %d", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
 //
 //}
-
-void showState(int ledS) {
-	HSV.s = 255;
-	HSV.v = 255;
-	if (ledS == LED_STATE_SD_ERROR) {
-		HSV.h = 0; //red
-	} else if (ledS == LED_STATE_CONFIG_ERROR) {
-		HSV.h = 32; //orange
-	} else if (ledS == LED_STATE_CONTENT_ERROR) {
-		HSV.h = 64; //yellow
-	} else if (ledS == LED_STATE_SENSOR_ERROR) {
-		HSV.h = 192; //purple
-	} else if (ledS == LED_STATE_WIFI_FAIL) {
-		HSV.h = 224; //pink
-	} else if (ledS == LED_STATE_MSD_WORK) {
-		HSV.h = 120; //green
-	}
-
-	RGB = HsvToRgb(HSV);
-
-	for (int i = 0; i < LED_COUNT; i++) {
-		for (int y = 0; y < LED_COUNT; y++) {
-			if (i >= y) {
-				strip->set_pixel(strip, y, RGB.r, RGB.g, RGB.b);
-			} else {
-				strip->set_pixel(strip, y, 0, 0, 0);
-			}
-		}
-		strip->refresh(strip, 100);
-		vTaskDelay(pdMS_TO_TICKS(30));
-	}
-
-	for (int i = 0; i < LED_COUNT; i++) {
-		for (int y = 0; y < LED_COUNT; y++) {
-			if (i < y) {
-				strip->set_pixel(strip, y, RGB.r, RGB.g, RGB.b);
-			} else {
-				strip->set_pixel(strip, y, 0, 0, 0);
-			}
-		}
-		strip->refresh(strip, 100);
-		vTaskDelay(pdMS_TO_TICKS(30));
-	}
-
-}

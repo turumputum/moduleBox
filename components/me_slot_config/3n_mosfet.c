@@ -97,16 +97,16 @@ void init_3n_mosfet(int slot_num) {
 	ESP_ERROR_CHECK(ledc_channel_config(&ledc_ch_3));
 
 	//---add action to topic list---
-	char *str = calloc(strlen(me_config.device_name) + 12, sizeof(char));
-	//sprintf(str, "%s/setRGB_%d", me_config.device_name, slot_num);
-	sprintf(str, "%s/set", me_config.device_name);
-	me_state.action_topic_list[me_state.action_topic_list_index] = str;
-	me_state.action_topic_list_index++;
-	char *str2 = calloc(strlen(me_config.device_name) + 12, sizeof(char));
-	//sprintf(str2, "%s/setGlitch_%d", me_config.device_name, slot_num);
-	sprintf(str2, "%s/glitch", me_config.device_name);
-	me_state.action_topic_list[me_state.action_topic_list_index] = str2;
-	me_state.action_topic_list_index++;
+	// char *str = calloc(strlen(me_config.device_name) + 12, sizeof(char));
+	// //sprintf(str, "%s/setRGB_%d", me_config.device_name, slot_num);
+	// sprintf(str, "%s/set", me_config.device_name);
+	// me_state.action_topic_list[me_state.action_topic_list_index] = str;
+	// me_state.action_topic_list_index++;
+	// char *str2 = calloc(strlen(me_config.device_name) + 12, sizeof(char));
+	// //sprintf(str2, "%s/setGlitch_%d", me_config.device_name, slot_num);
+	// sprintf(str2, "%s/glitch", me_config.device_name);
+	// me_state.action_topic_list[me_state.action_topic_list_index] = str2;
+	// me_state.action_topic_list_index++;
 
 
 	ESP_LOGD(TAG, "3n_mosfet module inited for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

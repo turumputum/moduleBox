@@ -33,8 +33,8 @@ void analog_task(void *arg)
 
 	char tmpString[255];
 
-    int num_of_slot = *(int *)arg;
-	uint8_t sens_pin_num = SLOTS_PIN_MAP[num_of_slot][0];
+    int slot_num = *(int *)arg;
+	uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
     if(sens_pin_num>10){
         ESP_LOGE(TAG, "Wrong analog pin, chose another slot, task exit");
         vTaskDelete(NULL);
@@ -53,52 +53,52 @@ void analog_task(void *arg)
     uint16_t MIN_VAL = 0;
     uint16_t MAX_VAL = 4095;
     uint8_t flag_float_output=0;
-    if (strstr(me_config.slot_options[num_of_slot], "float_output")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "float_output")!=NULL){
 		flag_float_output = 1;
-		ESP_LOGD(TAG, "Set float output. Slot:%d", num_of_slot);
+		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
 	}
-	if (strstr(me_config.slot_options[num_of_slot], "max_val")!=NULL){
-		MAX_VAL = get_option_int_val(num_of_slot, "max_val");
-		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", MAX_VAL, num_of_slot);
+	if (strstr(me_config.slot_options[slot_num], "max_val")!=NULL){
+		MAX_VAL = get_option_int_val(slot_num, "max_val");
+		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", MAX_VAL, slot_num);
 	}
-    if (strstr(me_config.slot_options[num_of_slot], "min_val")!=NULL){
-		MIN_VAL = get_option_int_val(num_of_slot, "min_val");
-		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", MIN_VAL, num_of_slot);
+    if (strstr(me_config.slot_options[slot_num], "min_val")!=NULL){
+		MIN_VAL = get_option_int_val(slot_num, "min_val");
+		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", MIN_VAL, slot_num);
 	}
 
     uint8_t inverse  = 0;
-	if (strstr(me_config.slot_options[num_of_slot], "inverse")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
 		inverse=1;
 	}
 
     float k=1;
-    if (strstr(me_config.slot_options[num_of_slot], "filter_k")!=NULL){
-        k = get_option_float_val(num_of_slot, "filter_k");
-		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", k, num_of_slot);
+    if (strstr(me_config.slot_options[slot_num], "filter_k")!=NULL){
+        k = get_option_float_val(slot_num, "filter_k");
+		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", k, slot_num);
 	}
     
     uint16_t dead_band=10;
-    if (strstr(me_config.slot_options[num_of_slot], "dead_band")!=NULL){
-        dead_band = get_option_int_val(num_of_slot, "dead_band");
-		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d",dead_band, num_of_slot);
+    if (strstr(me_config.slot_options[slot_num], "dead_band")!=NULL){
+        dead_band = get_option_int_val(slot_num, "dead_band");
+		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d",dead_band, slot_num);
 	}
 
     uint8_t flag_custom_topic = 0;
 	char *custom_topic=NULL;
-	if (strstr(me_config.slot_options[num_of_slot], "custom_topic")!=NULL){
-		custom_topic = get_option_string_val(num_of_slot,"custom_topic");
+	if (strstr(me_config.slot_options[slot_num], "custom_topic")!=NULL){
+		custom_topic = get_option_string_val(slot_num,"custom_topic");
 		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
 		flag_custom_topic=1;
 	}
 
     if(flag_custom_topic==0){
 		char *str = calloc(strlen(me_config.device_name)+strlen("/analog_")+4, sizeof(char));
-		sprintf(str, "%s/analog_%d",me_config.device_name, num_of_slot);
-		me_state.triggers_topic_list[me_state.triggers_topic_list_index]=str;
+		sprintf(str, "%s/analog_%d",me_config.device_name, slot_num);
+		me_state.trigger_topic_list[slot_num]=str;
 	}else{
-		me_state.triggers_topic_list[me_state.triggers_topic_list_index]=custom_topic;
+		me_state.trigger_topic_list[slot_num]=custom_topic;
 	}
-	me_state.triggers_topic_list_index++;
+
 
 
     while (1) {
@@ -140,15 +140,15 @@ void analog_task(void *arg)
 			}else{
 
                 if(flag_float_output){
-				    //sprintf(str,"%s/analog_%d:%f", me_config.device_name, num_of_slot, f_res);
-					sprintf(tmpString,"%s/analog_%d:%f", me_config.device_name, num_of_slot, f_res);
+				    //sprintf(str,"%s/analog_%d:%f", me_config.device_name, slot_num, f_res);
+					sprintf(tmpString,"%s/analog_%d:%f", me_config.device_name, slot_num, f_res);
                 }else{
-                    //sprintf(str,"%s/analog_%d:%d", me_config.device_name, num_of_slot, resault);
-					sprintf(tmpString,"%s/analog_%d:%d", me_config.device_name, num_of_slot, resault);
+                    //sprintf(str,"%s/analog_%d:%d", me_config.device_name, slot_num, resault);
+					sprintf(tmpString,"%s/analog_%d:%d", me_config.device_name, slot_num, resault);
                 }
 			}
 
-			report(tmpString);
+			report(tmpString, slot_num);
 			//free(str); 
 
         }
@@ -158,13 +158,13 @@ void analog_task(void *arg)
     
 }
 
-void start_analog_task(int num_of_slot){
+void start_analog_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = num_of_slot;
-	// int num_of_slot = *(int*) arg;
+	int t_slot_num = slot_num;
+	// int slot_num = *(int*) arg;
 	
 	xTaskCreate(analog_task, "analog_task", 1024 * 4, &t_slot_num, 12, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
-	ESP_LOGD(TAG, "analog_task init ok: %d Heap usage: %lu free heap:%u", num_of_slot, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	ESP_LOGD(TAG, "analog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

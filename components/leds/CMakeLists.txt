@@ -1,5 +1,3 @@
-file(GLOB ws2812_rmt_drv_lib ws2812_rmt_drv/*.c)
-
-idf_component_register(SRCS "leds.c" "p9813.c" ${ws2812_rmt_drv_lib}
-                    INCLUDE_DIRS "include" "ws2812_rmt_drv"
+idf_component_register(SRCS "leds.c" "p9813.c"
+                    INCLUDE_DIRS "include" 
                     REQUIRES stateConfig)

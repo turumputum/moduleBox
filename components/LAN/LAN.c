@@ -123,7 +123,7 @@ void osc_recive_task(){
 						//printf("%i ", ); break;
 						exec_message_t message;
 						memset(message.str,0,strlen(message.str));
-						message.length = sprintf(message.str, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
+						sprintf(message.str, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
 
 						ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
 						if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
@@ -134,7 +134,7 @@ void osc_recive_task(){
 						//printf("%i ", ); break;
 						exec_message_t message;
 						memset(message.str,0,strlen(message.str));
-						message.length = sprintf(message.str, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
+						sprintf(message.str, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
 
 						ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
 						if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {

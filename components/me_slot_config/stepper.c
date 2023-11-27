@@ -27,84 +27,85 @@ uint32_t testCount=0;
 
 void stepper_task(void *arg){
     char str[255];
-    int num_of_slot = *(int*) arg;
-	uint8_t dir_pin_num = SLOTS_PIN_MAP[num_of_slot][0];
-    uint8_t step_pin_num = SLOTS_PIN_MAP[num_of_slot][1];
+    int slot_num = *(int*) arg;
+	uint8_t dir_pin_num = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t step_pin_num = SLOTS_PIN_MAP[slot_num][1];
     
     InitStepper(&stepper, DRIVER, step_pin_num, dir_pin_num, 0);
-	ESP_LOGD(TAG,"SETUP stepper dir_pin:%d step_pin:%d Slot:%d", dir_pin_num, step_pin_num, num_of_slot);
+	ESP_LOGD(TAG,"SETUP stepper dir_pin:%d step_pin:%d Slot:%d", dir_pin_num, step_pin_num, slot_num);
     //---
     stepper._dirInverted=0;
-	if (strstr(me_config.slot_options[num_of_slot], "dir_inverse")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "dir_inverse")!=NULL){
 		stepper._dirInverted=1;
         setPinsInvertedStpDir(&stepper, 1,0,0);
 	}
-    ESP_LOGD(TAG, "Set dir_inverse_val:%d Slot:%d", stepper._dirInverted, num_of_slot);
+    ESP_LOGD(TAG, "Set dir_inverse_val:%d Slot:%d", stepper._dirInverted, slot_num);
     //---
     int max_speed=100;
-	if (strstr(me_config.slot_options[num_of_slot], "max_speed")!=NULL){
-		max_speed = get_option_int_val(num_of_slot, "max_speed");
+	if (strstr(me_config.slot_options[slot_num], "max_speed")!=NULL){
+		max_speed = get_option_int_val(slot_num, "max_speed");
 	}
     setMaxSpeed(&stepper,max_speed);
-    ESP_LOGD(TAG, "Set max_speed:%d Slot:%d", max_speed, num_of_slot);
+    ESP_LOGD(TAG, "Set max_speed:%d Slot:%d", max_speed, slot_num);
     //---
     int acceleration=100;
-	if (strstr(me_config.slot_options[num_of_slot], "acceleration")!=NULL){
-		acceleration = get_option_int_val(num_of_slot, "acceleration");
+	if (strstr(me_config.slot_options[slot_num], "acceleration")!=NULL){
+		acceleration = get_option_int_val(slot_num, "acceleration");
 	}
     setAcceleration(&stepper, acceleration);
-    ESP_LOGD(TAG, "Set acceleration:%d Slot:%d", acceleration, num_of_slot);
+    ESP_LOGD(TAG, "Set acceleration:%d Slot:%d", acceleration, slot_num);
     //---
     stepper._max_pos=0;
-    if (strstr(me_config.slot_options[num_of_slot], "max_pos")!=NULL){
-		stepper._max_pos = get_option_int_val(num_of_slot, "max_pos");
-        ESP_LOGD(TAG, "Set max position:%d Slot:%d", acceleration, num_of_slot);
+    if (strstr(me_config.slot_options[slot_num], "max_pos")!=NULL){
+		stepper._max_pos = get_option_int_val(slot_num, "max_pos");
+        ESP_LOGD(TAG, "Set max position:%d Slot:%d", acceleration, slot_num);
 	}
     
     //---sensor block---
     int sensor_up_inverse = 0;
-    if (strstr(me_config.slot_options[num_of_slot], "sensor_up_inverse")!=NULL){
-		sensor_up_inverse = get_option_int_val(num_of_slot, "sensor_up_inverse");
+    if (strstr(me_config.slot_options[slot_num], "sensor_up_inverse")!=NULL){
+		sensor_up_inverse = get_option_int_val(slot_num, "sensor_up_inverse");
 	}
     int sensor_down_inverse = 0;
-    if (strstr(me_config.slot_options[num_of_slot], "sensor_down_inverse")!=NULL){
-		sensor_down_inverse = get_option_int_val(num_of_slot, "sensor_down_inverse");
+    if (strstr(me_config.slot_options[slot_num], "sensor_down_inverse")!=NULL){
+		sensor_down_inverse = get_option_int_val(slot_num, "sensor_down_inverse");
 	}
     int sensor_slot=-1;
-	if (strstr(me_config.slot_options[num_of_slot], "sensor_slot")!=NULL){
-		sensor_slot = get_option_int_val(num_of_slot, "sensor_slot");
-        ESP_LOGD(TAG, "Set sensor_slot:%d for Stepper on Slot:%d", sensor_slot, num_of_slot);
+	if (strstr(me_config.slot_options[slot_num], "sensor_slot")!=NULL){
+		sensor_slot = get_option_int_val(slot_num, "sensor_slot");
+        ESP_LOGD(TAG, "Set sensor_slot:%d for Stepper on Slot:%d", sensor_slot, slot_num);
         set_stepper_sensor(&stepper,SLOTS_PIN_MAP[sensor_slot][0], sensor_up_inverse, SLOTS_PIN_MAP[sensor_slot][1], sensor_down_inverse);
 	}
     int sensor_num=0;
-    if (strstr(me_config.slot_options[num_of_slot], "sensor_num")!=NULL){
-		sensor_num = get_option_int_val(num_of_slot, "sensor_num");
+    if (strstr(me_config.slot_options[slot_num], "sensor_num")!=NULL){
+		sensor_num = get_option_int_val(slot_num, "sensor_num");
     }
 
-    char moveTo_trig[strlen(me_config.device_name)+18];
-    sprintf(moveTo_trig,"%s/stepper_moveTo", me_config.device_name);
-    me_state.action_topic_list[me_state.action_topic_list_index] = moveTo_trig;
-    me_state.action_topic_list_index++;
+    //TO_DO rewrite command interface
+    // char moveTo_trig[strlen(me_config.device_name)+18];
+    // sprintf(moveTo_trig,"%s/stepper_moveTo", me_config.device_name);
+    // me_state.action_topic_list[me_state.action_topic_list_index] = moveTo_trig;
+    // me_state.action_topic_list_index++;
     
-    char setSpeed_trig[strlen(me_config.device_name)+20];
-    sprintf(setSpeed_trig,"%s/stepper_setSpeed", me_config.device_name);
-    me_state.action_topic_list[me_state.action_topic_list_index] = setSpeed_trig;
-    me_state.action_topic_list_index++;
+    // char setSpeed_trig[strlen(me_config.device_name)+20];
+    // sprintf(setSpeed_trig,"%s/stepper_setSpeed", me_config.device_name);
+    // me_state.action_topic_list[me_state.action_topic_list_index] = setSpeed_trig;
+    // me_state.action_topic_list_index++;
     
-    char stop_trig[strlen(me_config.device_name)+15];
-    sprintf(stop_trig,"%s/stepper_stop", me_config.device_name);
-    me_state.action_topic_list[me_state.action_topic_list_index] = stop_trig;
-    me_state.action_topic_list_index++;
+    // char stop_trig[strlen(me_config.device_name)+15];
+    // sprintf(stop_trig,"%s/stepper_stop", me_config.device_name);
+    // me_state.action_topic_list[me_state.action_topic_list_index] = stop_trig;
+    // me_state.action_topic_list_index++;
     
-    char setCurrentPos_trig[strlen(me_config.device_name)+25];
-    sprintf(setCurrentPos_trig,"%s/stepper_setCurrentPos", me_config.device_name);
-    me_state.action_topic_list[me_state.action_topic_list_index] = setCurrentPos_trig;
-    me_state.action_topic_list_index++;
+    // char setCurrentPos_trig[strlen(me_config.device_name)+25];
+    // sprintf(setCurrentPos_trig,"%s/stepper_setCurrentPos", me_config.device_name);
+    // me_state.action_topic_list[me_state.action_topic_list_index] = setCurrentPos_trig;
+    // me_state.action_topic_list_index++;
 
-    char currentPos_action[strlen(me_config.device_name)+40];
-    sprintf(currentPos_action,"%s/stepper_0", me_config.device_name);
-    me_state.triggers_topic_list[me_state.triggers_topic_list_index] = currentPos_action;
-    me_state.triggers_topic_list_index++;
+    // char currentPos_action[strlen(me_config.device_name)+40];
+    // sprintf(currentPos_action,"%s/stepper_0", me_config.device_name);
+    // me_state.trigger_topic_list[me_state.trigger_topic_list_index] = currentPos_action;
+    // me_state.trigger_topic_list_index++;
 
     // homing procedure
     uint16_t tick=0;
@@ -141,7 +142,7 @@ void stepper_task(void *arg){
         }else{
             memset(str, 0, strlen(str));
             sprintf(str, "%s/stepper_%d:down sensor FAIL", me_config.device_name, 0);
-            report(str);
+            report(str, 0);
         }
     }
     if(sensor_num==2){
@@ -158,11 +159,11 @@ void stepper_task(void *arg){
         }else{
             memset(str, 0, strlen(str));
             sprintf(str, "%s/stepper_%d:up sensor FAIL", me_config.device_name, 0);
-            report(str);
+            report(str, 0);
         }
     }
 
-    if (strstr(me_config.slot_options[num_of_slot], "stop_on_sensor")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "stop_on_sensor")!=NULL){
         stepper._stop_on_sensor=1;
     }else{
         stepper._stop_on_sensor=0;
@@ -170,7 +171,7 @@ void stepper_task(void *arg){
     setMaxSpeed(&stepper,max_speed);
 
     uint8_t flag_float_report=0;
-    if (strstr(me_config.slot_options[num_of_slot], "float_report")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "float_report")!=NULL){
         if(stepper._max_pos!=0){
             flag_float_report=1;
             ESP_LOGD(TAG, "Float report enabled");
@@ -193,7 +194,7 @@ void stepper_task(void *arg){
             }else{
                 sprintf(str, "%s/stepper_%d:%ld", me_config.device_name, 0, currentPosition(&stepper));
             }
-            report(str);
+            report(str, 0);
         }
 
         if(strlen(stepper.report_msg)>0){
@@ -260,12 +261,12 @@ void stepper_stop(void){
 }
 
 
-void start_stepper_task(int num_of_slot){
+void start_stepper_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = num_of_slot;
+	int t_slot_num = slot_num;
 	char tmpString[60];
-	sprintf(tmpString, "task_stepper_%d", num_of_slot);
+	sprintf(tmpString, "task_stepper_%d", slot_num);
 	xTaskCreate(stepper_task, tmpString, 1024*12, &t_slot_num,12, NULL);
 
-	ESP_LOGD(TAG,"Stepper task created for slot: %d Heap usage: %lu free heap:%u", num_of_slot, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	ESP_LOGD(TAG,"Stepper task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

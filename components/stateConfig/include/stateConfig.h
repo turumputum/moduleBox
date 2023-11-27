@@ -1,7 +1,8 @@
-#include "leds.h"
+//#include "leds.h"
 //#include "freertos/task.h"
 #include <ff.h>
 
+#include <stdint.h>
 #define MAX_NUM_OF_TRACKS 10
 #define FILE_NAME_LEGHT 300
 #define INIT_OK 0
@@ -10,6 +11,8 @@
 #define NUM_OF_SLOTS 6
 
 static const char* VERSION = "1.0";
+
+
 
 typedef enum {
     LED_STATE_DISABLE = 0,
@@ -47,13 +50,16 @@ typedef struct {
 
 //	led_state_t bt_state_mass[8];
 //	led_state_t ledState;
+	QueueHandle_t executor_queue;
+	QueueHandle_t reporter_queue;
 
-	TaskHandle_t slot_task[8];
+	QueueHandle_t command_queue[NUM_OF_SLOTS];
+	QueueHandle_t interrupt_queue[NUM_OF_SLOTS];  
 
-	char *triggers_topic_list[16];
-	uint8_t triggers_topic_list_index;
-	char *action_topic_list[16];
-	uint8_t action_topic_list_index;
+	TaskHandle_t slot_task[NUM_OF_SLOTS];
+
+	char *trigger_topic_list[NUM_OF_SLOTS];
+	char *action_topic_list[NUM_OF_SLOTS];
 
 } stateStruct;
 
@@ -133,5 +139,6 @@ void writeErrorTxt(const char *buff);
 uint8_t loadContent(void);
 int saveConfig(void);
 
+void debugTopicLists(void);
 uint8_t scanFileSystem();
 uint8_t scan_dir(const char *path);

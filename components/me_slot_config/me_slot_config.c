@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include "executor.h"
 #include "stateConfig.h"
-#include "include/buttons.h"
+#include "buttonLed.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -20,6 +20,7 @@
 #include "esp_heap_caps.h"
 #include "stepper.h"
 #include "in_out.h"
+#include "smartLed.h"
 #include "myMqtt.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -27,6 +28,7 @@ static const char *TAG = "ME_SLOT_CONFIG";
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
+extern stateStruct me_state;
 extern configuration me_config;
 
 //uint8_t SLOTS_PIN_MAP[4][3] = {{4,5,10},{17,18,0},{3,41,0},{2,1,0}}; //inty park solution, old boards v2.0
@@ -39,17 +41,23 @@ uint8_t SLOTS_PIN_MAP[6][4] = {{4,5,10,38},{40,21,47,48},{17,18,15,0},{3,8,39,0}
 int init_slots(void){
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
+	reporter_init();
 
 	for(int i=0;i<NUM_OF_SLOTS; i++){
 		ESP_LOGD(TAG,"[%d] check mode:%s", i,me_config.slot_mode[i]);
 		if(!memcmp(me_config.slot_mode[i], "audio_player_mono", 17)){
-			audioInit();
+			audioInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_optorelay", 16)){
 			start_button_task(i);
 			//init_optorelay(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
 			start_button_task(i);
-			init_led(i);
+			start_led_task(i);
+			//init_led(i);
+		}else if(!memcmp(me_config.slot_mode[i], "button_smartLed", 10)){
+			start_button_task(i);
+			start_smartLed_task(i);
+			//init_led(i);
 		}else if(!memcmp(me_config.slot_mode[i], "3n_mosfet", 9)){
 			init_3n_mosfet(i);
 		}else if(!memcmp(me_config.slot_mode[i], "encoderPWM", 10)){
@@ -65,9 +73,11 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
-			init_out(i);
+			start_out_task(i);
 			start_in_task(i);
-			
+		}else{
+			me_state.action_topic_list[i] = strdup("none");
+			me_state.trigger_topic_list[i] = strdup("none");
 		}
 	}
 
@@ -77,8 +87,8 @@ int init_slots(void){
 	return ESP_OK;
 }
 
-int get_option_int_val(int num_of_slot, char* string){
-	char *ind_of_vol = strstr(me_config.slot_options[num_of_slot], string);
+int get_option_int_val(int slot_num, char* string){
+	char *ind_of_vol = strstr(me_config.slot_options[slot_num], string);
 	char options_copy[strlen(ind_of_vol)];
 	strcpy(options_copy, ind_of_vol);
 	char *rest;
@@ -95,8 +105,8 @@ int get_option_int_val(int num_of_slot, char* string){
 	}
 }
 
-float get_option_float_val(int num_of_slot, char* string){
-	char *ind_of_vol = strstr(me_config.slot_options[num_of_slot], string);
+float get_option_float_val(int slot_num, char* string){
+	char *ind_of_vol = strstr(me_config.slot_options[slot_num], string);
 	char options_copy[strlen(ind_of_vol)];
 	strcpy(options_copy, ind_of_vol);
 	char *rest;
@@ -112,10 +122,10 @@ float get_option_float_val(int num_of_slot, char* string){
 		return -1;
 	}
 }
-char* get_option_string_val(int num_of_slot, char* option){
+char* get_option_string_val(int slot_num, char* option){
 	char* resault;
 
-	char *ind_of_vol = strstr(me_config.slot_options[num_of_slot], option);
+	char *ind_of_vol = strstr(me_config.slot_options[slot_num], option);
 	char options_copy[strlen(ind_of_vol)];
 	strcpy(options_copy, ind_of_vol);
 	char *rest;
@@ -134,10 +144,10 @@ char* get_option_string_val(int num_of_slot, char* option){
 }
 
 
-// char* get_option_string_val(int num_of_slot, char* option, char* custom_topic){
+// char* get_option_string_val(int slot_num, char* option, char* custom_topic){
 // 	char* resault;
 
-// 	char *ind_of_vol = strstr(me_config.slot_options[num_of_slot], option);
+// 	char *ind_of_vol = strstr(me_config.slot_options[slot_num], option);
 // 	char options_copy[strlen(ind_of_vol)];
 // 	strcpy(options_copy, ind_of_vol);
 // 	char *rest;

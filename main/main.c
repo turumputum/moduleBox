@@ -63,6 +63,7 @@
 #include "reporter.h"
 #include "encoders.h"
 #include "rfid.h"
+#include "in_out.h"
 
 #include "myCDC.h"
 
@@ -73,6 +74,8 @@
 #include "TOFs.h"
 
 #include "stepper.h"
+
+#include "smartLed.h"
 
 
 extern uint8_t SLOTS_PIN_MAP[6][4];
@@ -205,28 +208,22 @@ void nvs_init()
 
 void setLogLevel(uint8_t level)
 {
-	if (level == 3)
-	{
+	if (level == 3){
 		level = ESP_LOG_INFO;
 	}
-	else if (level == 4)
-	{
+	else if (level == 4){
 		level = ESP_LOG_DEBUG;
 	}
-	else if (level == 2)
-	{
+	else if (level == 2){
 		level = ESP_LOG_WARN;
 	}
-	else if (level == 1)
-	{
+	else if (level == 1){
 		level = ESP_LOG_ERROR;
 	}
-	else if (level == 0)
-	{
+	else if (level == 0){
 		level = ESP_LOG_NONE;
 	}
-	else if (level == 5)
-	{
+	else if (level == 5){
 		level = ESP_LOG_VERBOSE;
 	}
 
@@ -270,6 +267,8 @@ void setLogLevel(uint8_t level)
 	esp_log_level_set("PN532", level);
 	esp_log_level_set("STEPPER", level);
 	esp_log_level_set("IN_OUT", level);
+	esp_log_level_set("SMART_LED", level);
+	esp_log_level_set("myCDC", level);
 }
 
 
@@ -295,20 +294,24 @@ void app_main(void)
 	nvs_init();
 
 	
+	xTaskCreatePinnedToCore(executer_task, "executer_task",  1024 * 4,NULL ,configMAX_PRIORITIES - 12, NULL, 0);
 	xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 1, usb_device_stack, &usb_device_taskdef);
 	
 
 	xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
 	
-	xTaskCreate(crosslinker_task, "cross_linker", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
+	
+
+	//xTaskCreate(crosslinker_task, "cross_linker", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	//xTaskCreate(heap_report, "heap_report", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	
 
-	exec_mailbox = xQueueCreate(10, sizeof(exec_message_t));
-	if (exec_mailbox == NULL)
-	{
-		ESP_LOGE(TAG, "Exec_Mailbox create FAIL");
-	}
+	// exec_mailbox = xQueueCreate(10, sizeof(exec_message_t));
+	// if (exec_mailbox == NULL)
+	// {
+	// 	ESP_LOGE(TAG, "Exec_Mailbox create FAIL");
+	// }
+
 
 	me_state.sd_init_res = ESP_FAIL;
 	me_state.sd_init_res = spisd_init();
@@ -342,22 +345,11 @@ void app_main(void)
 	}
 	
 
-	// gpio_config_t io_conf_p0 ={
-	// 		.intr_type = GPIO_INTR_DISABLE,
-	// 		.mode = GPIO_MODE_OUTPUT,
-	// 		.pin_bit_mask = (1ULL << SLOTS_PIN_MAP[0][1]),
-	// 		.pull_down_en = 0,
-	// 		.pull_up_en = 1
-	// 	};
-
-	// gpio_config(&io_conf_p0);
-
-	// gpio_set_level(SLOTS_PIN_MAP[0][1], 1);
-	// vTaskDelay(1000);
-	// gpio_set_level(SLOTS_PIN_MAP[0][1], 0);
-
-	
 	me_state.slot_init_res = init_slots();
+	debugTopicLists();
+	//start_out_task(0);
+
+	//start_smartLed_task(0);
 	//start_benewakeTOF_task(0);
 
 	//init_rfid_slot(0);
@@ -373,8 +365,7 @@ void app_main(void)
 	}
 
 	if (me_config.LAN_enable == 1)	{
-		LAN_init();
-		
+		LAN_init();	
 	}
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
@@ -385,12 +376,12 @@ void app_main(void)
 	while (1)
 	{
 
-		if (xQueueReceive(exec_mailbox, &exec_message, (25 / portTICK_PERIOD_MS)) == pdPASS)
-		{
-			ESP_LOGD(TAG, "Exec mail incoming:%s", exec_message.str);
-			// char *event = exec_message.str + strlen(me_config.device_name) + 1;
-			execute(exec_message.str);
-		}
+		// if (xQueueReceive(exec_mailbox, &exec_message, (25 / portTICK_PERIOD_MS)) == pdPASS)
+		// {
+		// 	ESP_LOGD(TAG, "Exec mail incoming:%s", exec_message.str);
+		// 	// char *event = exec_message.str + strlen(me_config.device_name) + 1;
+		// 	//execute(exec_message.str);
+		// }
 
 		vTaskDelay(pdMS_TO_TICKS(10));
 
