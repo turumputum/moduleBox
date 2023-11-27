@@ -44,47 +44,28 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     esp_mqtt_event_handle_t event = event_data;
     //esp_mqtt_client_handle_t client = event->client;
     //int msg_id;
+	
+
 	switch ((esp_mqtt_event_id_t) event_id) {
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_CONNECTED");
 		me_state.MQTT_init_res = ESP_OK;
 		ESP_LOGD(TAG, "MQTT_CONNEKT_OK");
 
-		for (int i = 0; i < me_state.action_topic_list_index; i++) {
-			mqtt_sub(me_state.action_topic_list[i]);
+		for (int i = 0; i < NUM_OF_SLOTS; i++) {
+			if(memcmp(me_state.action_topic_list[i],"none", 4)){
+				char tmpS[strlen(me_state.action_topic_list[i])+3];
+				sprintf(tmpS, "%s/#", me_state.action_topic_list[i]);
+				mqtt_sub(me_state.action_topic_list[i]);
+				mqtt_sub(tmpS);
+			}	
 		}
 
 		sprintf(willTopic, "clients/%s/state", me_config.device_name);
 		mqtt_pub(willTopic, "1");
 
-		char tmpStr[50];
-		char topicList[1024] = "{\n\"triggers\":[\n";
-		for (int i = 0; i < me_state.triggers_topic_list_index; i++) {
-			memset(tmpStr, 0, sizeof(tmpStr));
-			sprintf(tmpStr, "\"%s\",\n", me_state.triggers_topic_list[i]);
-			strcat(topicList, tmpStr);
-		}
-		topicList[strlen(topicList) - 2] = '\0';
-		strcat(topicList, "\n],\n\"actions\":[\n");
-		for (int i = 0; i < me_state.action_topic_list_index; i++) {
-			memset(tmpStr, 0, sizeof(tmpStr));
-			sprintf(tmpStr, "\"%s\",\n", me_state.action_topic_list[i]);
-			strcat(topicList, tmpStr);
-		}
-		topicList[strlen(topicList) - 2] = '\0';
-		strcat(topicList, "\n]\n}");
+		//declare action list to brocker
 
-		char topicList_topic[255];
-		sprintf(topicList_topic, "clients/%s/topics", me_config.device_name);
-
-		mqtt_pub(topicList_topic, topicList);
-		printf("%s\n", topicList);
-
-		//char topicList_payload[strlen("{\n\"triggers\":[\n \n],\n\"actions\":[\n")+strlen(me_state.triggers_topic_list)+strlen(me_state.action_topic_list)+3];
-		
-		//printf("%s\n",me_state.action_topic_list);
-		//msg_id = esp_mqtt_client_subscribe(client, "phonState_topic", 0);
-		//ESP_LOGD(TAG, "sent subscribe successful, msg_id=%d", msg_id);
 		break;
 	case MQTT_EVENT_DISCONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -101,20 +82,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		break;
 	case MQTT_EVENT_DATA:
 		ESP_LOGI(TAG, "MQTT_EVENT_DATA");
+		char strT[255];
+		sprintf(strT, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
+		execute(strT);
 
-		//uint8_t len = event->topic_len + event->data_len + 3;
-		//char str[len];
-//		sprintf(tmpStr, "%s:%s", event->topic, event->data);
-		exec_message_t message;
-		message.length = sprintf(message.str, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
-		ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
-		//message.length = strlen(tmpStr);
-		//strcpy(message.str, tmpStr);
-		if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
-			ESP_LOGE(TAG, "Send message FAIL");
-        }
-//		printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-//		printf("DATA=%.*s\r\n", event->data_len, event->data);
 		break;
 	case MQTT_EVENT_ERROR:
 		ESP_LOGI(TAG, "MQTT_EVENT_ERROR");

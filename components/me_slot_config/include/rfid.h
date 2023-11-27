@@ -1,1 +1,1 @@
-void init_rfid_slot(int num_of_slot);
+void init_rfid_slot(int slot_num);

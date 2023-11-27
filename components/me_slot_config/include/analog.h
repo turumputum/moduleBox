@@ -1,1 +1,1 @@
-void start_analog_task(int num_of_slot);
+void start_analog_task(int slot_num);

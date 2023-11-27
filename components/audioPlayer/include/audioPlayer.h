@@ -1,6 +1,7 @@
+#include "esp_err.h"
 
-void audioInit(void);
-void audioPlay(char *cmd);
+void audioInit(uint8_t slot_num);
+esp_err_t audioPlay(uint8_t truckNum);
 void audioStop(void);
 void audioPause(void);
 void setVolume_num(uint8_t vol);

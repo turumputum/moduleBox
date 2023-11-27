@@ -36,7 +36,7 @@ static const char *TAG = "RFID";
 
 int errorTick;
 
-// void init_rfid_slot(int num_of_slot){
+// void init_rfid_slot(int slot_num){
 //     PN532 reader;
 
 //     int res = PN532_I2C_Init(&reader, 5,4,0);   // For async command handling: >0 if response ready, 0 if not, -ve if error (e.g. no response expected)

@@ -28,6 +28,7 @@ extern uint8_t FLAG_PC_EJECT;
 //extern exec_message_t exec_message;
 extern QueueHandle_t exec_mailbox;
 
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "myCDC";
 
 void usbprint(char *msg) {
@@ -87,33 +88,8 @@ static void execCommand(char *cmd, int len) {
 
 	} else if (!memcmp(cmd, "Who are you?", 12)) {
 		char tmpStr[64];
-		if (FLAG_PC_EJECT == 0) {
-			sprintf(tmpStr, "monofonMSD\n");
-		} else if (FLAG_PC_EJECT == 1) {
-			sprintf(tmpStr, "monofon:%s\n\n", me_config.device_name);
-		}
-		usbprint(tmpStr);
-//	} else if (!memcmp(cmd, "get wifi_status", 15)) {
-//
-//		if (FLAG_PC_EJECT == 1) {
-//			char tmpStr[128];
-//			if (me_state.wifi_error == 1) {
-//				usbprint("Wifi connection error, 'error.txt' generated\r\n");
-//			} else {
-//				if (me_config.WIFI_mode == 0) {
-//					usbprint("Wifi disabled \r\n");
-//				} else if (me_config.WIFI_mode == 1) {
-//					sprintf(tmpStr, "Wifi softap mode.  SSID:%s password:%s channel:%d \r\n", me_config.ssidT, me_config.WIFI_pass, me_config.WIFI_channel);
-//					usbprint(tmpStr);
-//					//printf("Wifi clients: %s \r\n", me_state.wifiApClientString);
-//				} else if (me_config.WIFI_mode == 2) {
-//					wifi_ap_record_t ap;
-//					esp_wifi_sta_get_ap_info(&ap);
-//					sprintf(tmpStr, "Wifi client mode.  SSID:%s password:%s rssi:%d\r\n", me_config.WIFI_ssid, me_config.WIFI_pass, ap.rssi);
-//					usbprint(tmpStr);
-//				}
-//			}
-//		}
+			sprintf(tmpStr, "moduleBox:%s\n", me_config.device_name);
+			usbprint(tmpStr);
 	} else if (!memcmp(cmd, "get system_status", 17)) {
 		if (FLAG_PC_EJECT == 1) {
 			char tmpStr[128];
@@ -142,12 +118,6 @@ static void execCommand(char *cmd, int len) {
 			usbprint(stats_buffer);
 			usbprint("\r\n");
 		}
-	} else if (!memcmp(cmd, "set monofon_enable", 17)) {
-		if (FLAG_PC_EJECT == 1) {
-			me_config.monofonEnable = atoi(cmd + 18);
-			saveConfig();
-			usbprint("OK\r\n");
-		}
 	} else if (!memcmp(cmd, "reset config", 12)) {
 		if (FLAG_PC_EJECT == 1) {
 			remove("/sdcard/config.ini");
@@ -155,17 +125,12 @@ static void execCommand(char *cmd, int len) {
 			vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
 			esp_restart();
 		}
-	} else if (strstr(cmd, me_config.device_name) != NULL) {
-		exec_message_t message;
-		message.length = strlen(cmd);
-		strcpy(message.str, cmd);
-		if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
-			ESP_LOGE(TAG, "Send message FAIL");
-		}
-		//execute(cmd);
-	} else if (len > 3) {
-		printf("vot:%s\n", strstr(cmd, me_config.device_name));
-		usbprintf("unknown commnad: %s \n", cmd);
+	}else if (len < 3) {
+		// //printf("vot:%s\n", cmd);
+		// ESP_LOGD(TAG, "unknown commnad: %s \n", cmd);
+		// //usbprintf("unknown commnad: %s \n", cmd);
+	}else{
+		execute(cmd);
 	}
 }
 

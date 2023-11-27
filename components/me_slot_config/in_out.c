@@ -6,8 +6,18 @@
 #include "stateConfig.h"
 #include "esp_timer.h"
 
+#include "executor.h"
 #include "esp_log.h"
 #include "me_slot_config.h"
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "driver/gpio.h"
 
 extern uint8_t SLOTS_PIN_MAP[6][4];
 extern configuration me_config;
@@ -16,105 +26,125 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "IN_OUT";
 
-static void IRAM_ATTR gpio_isr_handler(void* arg)
-{
-    gpio_and_queue_t *gpio_and_queue = (gpio_and_queue_t*) arg;
-	int gpio_level = gpio_get_level(gpio_and_queue->gpio_num);
-    xQueueSendFromISR(gpio_and_queue->gpio_evt_queue, &gpio_level, NULL);
+static void IRAM_ATTR gpio_isr_handler(void* arg){
+    int slot_num = (int) arg;
+	uint8_t tmp=1;
+    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
 }
 
+void set_out_level(void* arg){
+	out_level_cmd_t cmd = *(out_level_cmd_t*)arg;
+	gpio_set_level(cmd.gpio_num, cmd.level);
+	ESP_LOGD(TAG, "Set level: %ld for slot: %d", cmd.level, cmd.slot_num);
+}
+
+
 void in_task(void *arg){
-	gpio_and_queue_t gpio_and_queue;
-    gpio_and_queue.gpio_evt_queue = xQueueCreate(10, sizeof(int));
+	int slot_num = *(int*) arg;
+	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
 
-	int num_of_slot = *(int*) arg;
-	uint8_t pin_num = SLOTS_PIN_MAP[num_of_slot][0];
+	me_state.interrupt_queue[slot_num] = xQueueCreate(5, sizeof(uint8_t));
+
 	gpio_reset_pin(pin_num);
-	//esp_rom_gpio_pad_select_gpio(pin_num);
-    // gpio_config_t in_conf = {};
-   	// in_conf.intr_type = GPIO_INTR_ANYEDGE;
-    // //bit mask of the pins, use GPIO4/5 here
-    // in_conf.pin_bit_mask = (1ULL<<pin_num);
-    // //set as input mode
-    // in_conf.mode = GPIO_MODE_INPUT;
-    // gpio_config(&in_conf);
-	// gpio_set_intr_type(pin_num, GPIO_INTR_ANYEDGE);
-    // gpio_install_isr_service(0);
-	// gpio_isr_handler_add(pin_num, gpio_isr_handler, &gpio_and_queue);
 	esp_rom_gpio_pad_select_gpio(pin_num);
-	gpio_set_pull_mode(pin_num, GPIO_PULLDOWN_ONLY);
-	gpio_set_direction(pin_num, GPIO_MODE_INPUT);
-
-	ESP_LOGD(TAG,"SETUP IN_pin_%d Slot:%d", pin_num, num_of_slot );
+    gpio_config_t in_conf = {};
+   	in_conf.intr_type = GPIO_INTR_ANYEDGE;
+    //bit mask of the pins, use GPIO4/5 here
+    in_conf.pin_bit_mask = (1ULL<<pin_num);
+    //set as input mode
+    in_conf.mode = GPIO_MODE_INPUT;
+    gpio_config(&in_conf);
+	gpio_set_intr_type(pin_num, GPIO_INTR_ANYEDGE);
+    gpio_install_isr_service(0);
+	gpio_isr_handler_add(pin_num, gpio_isr_handler, (void*)slot_num);
 	
-	int IN_state=0;
+	// esp_rom_gpio_pad_select_gpio(pin_num);
+	// gpio_set_pull_mode(pin_num, GPIO_PULLDOWN_ONLY);
+	// gpio_set_direction(pin_num, GPIO_MODE_INPUT);
+
+	ESP_LOGD(TAG,"SETUP IN_pin_%d Slot:%d", pin_num, slot_num );
+	
+	uint8_t IN_state=0;
 	int prev_state=0;
 	char str[255];
 
 	int IN_inverse=0;
-	if (strstr(me_config.slot_options[num_of_slot], "in_inverse")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "in_inverse")!=NULL){
 		IN_inverse=1;
 	}
 
-	uint8_t flag_custom_topic = 0;
-    char* custom_topic=NULL;
-    if (strstr(me_config.slot_options[num_of_slot], "custom_topic") != NULL) {
-    	custom_topic = get_option_string_val(num_of_slot, "custom_topic");
-		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
-        flag_custom_topic = 1;
-    }
+	int debounce_delay = 0;
+	if (strstr(me_config.slot_options[slot_num], "in_debounce_delay") != NULL) {
+		debounce_delay = get_option_int_val(slot_num, "in_debounce_delay");
+		ESP_LOGD(TAG, "Set debounce_delay:%d for slot:%d",debounce_delay, slot_num);
+	}
+    
+    if (strstr(me_config.slot_options[slot_num], "in_topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "in_topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.device_name)+strlen("/in_0")+3];
+		sprintf(t_str, "%s/in_%d",me_config.device_name, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
 
+
+	uint32_t tick=xTaskGetTickCount();
     for(;;) {
-		vTaskDelay(pdMS_TO_TICKS(10));
-		if(gpio_get_level(pin_num)){
-			IN_state=IN_inverse ? 0 : 1;
-		}else{
-			IN_state=IN_inverse ? 1 : 0;
+		//vTaskDelay(pdMS_TO_TICKS(10));
+		uint8_t tmp;
+		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
+			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+
+			if(gpio_get_level(pin_num)){
+				IN_state=IN_inverse ? 0 : 1;
+			}else{
+				IN_state=IN_inverse ? 1 : 0;
+			}
+
+			if(debounce_delay!=0){
+				if((xTaskGetTickCount()-tick)<debounce_delay){
+					ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
+					goto exit;
+				}
+			}
+			
+			
+			if(IN_state != prev_state){
+				prev_state = IN_state;
+
+				memset(str, 0, strlen(str));
+				sprintf(str, "%d", IN_state);
+
+				report(str, slot_num);
+				ESP_LOGD(TAG,"String:%s", str);
+				tick = xTaskGetTickCount();
+
+			}
+			//
+			
+			exit:
 		}
-		if(IN_state != prev_state){
-			prev_state = IN_state;
-
-			memset(str, 0, strlen(str));
-			//ESP_LOGD(TAG,"button_%d:%d inverse:%d", num_of_slot, button_state, button_inverse );
-			if (flag_custom_topic) {
-                sprintf(str, "%s:%d", custom_topic, IN_state);
-				//ESP_LOGD(TAG,"custom_topic:%s String:%s",custom_topic, str);
-            }else {
-                sprintf(str, "%s/in_%d:%d", me_config.device_name, num_of_slot, IN_state);
-            }
-            report(str);
-			ESP_LOGD(TAG,"String:%s", str);
-
-		}
-
-        // if(xQueueReceive(gpio_and_queue.gpio_evt_queue, &level, portMAX_DELAY)) {
-        //     printf("Slot[%d] intr, val: %d\n", num_of_slot, level);
-		// 	memset(str, 0, strlen(str));
-		// 	//ESP_LOGD(TAG,"button_%d:%d inverse:%d", num_of_slot, button_state, button_inverse );
-		// 	if (flag_custom_topic) {
-        //         sprintf(str, "%s:%d", custom_topic, level);
-		// 		//ESP_LOGD(TAG,"custom_topic:%s String:%s",custom_topic, str);
-        //     }else {
-        //         sprintf(str, "%s/in_%d:%d", me_config.device_name, num_of_slot, level);
-        //     }
-        //     report(str);
-		// 	ESP_LOGD(TAG,"String:%s", str);
-        // }
     }
 
 }
 
-void start_in_task(int num_of_slot){
+void start_in_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = num_of_slot;
+	int t_slot_num = slot_num;
 	char tmpString[60];
-	sprintf(tmpString, "task_in_%d", num_of_slot);
-	xTaskCreate(in_task, tmpString, 1024*4, &t_slot_num,12, NULL);
+	sprintf(tmpString, "task_in_%d", slot_num);
+	xTaskCreatePinnedToCore(in_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
 
-	ESP_LOGD(TAG,"In task created for slot: %d Heap usage: %lu free heap:%u", num_of_slot, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	ESP_LOGD(TAG,"In task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
-void init_out(int slot_num) {
+
+void out_task(void *arg) {
+	int slot_num = *(int*) arg;
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	//---init hardware---
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
@@ -123,26 +153,111 @@ void init_out(int slot_num) {
 	gpio_set_direction(pin_num, GPIO_MODE_OUTPUT);
 
 
-    //---set default state---
+    //---set inverse---
 	int out_inverse = 0;
 	if (strstr(me_config.slot_options[slot_num], "out_inverse") != NULL) {
 		out_inverse = 1;
+		ESP_LOGD(TAG, "Set out_inverse:%d for slot:%d",out_inverse, slot_num);
 	}
 	//---set default state---
 	uint8_t def_state = out_inverse;
 	if (strstr(me_config.slot_options[slot_num], "out_default_high") != NULL) {
-            def_state = !def_state;
+		def_state = !def_state;
+		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",def_state, slot_num);
 	}
 	ESP_ERROR_CHECK(gpio_set_level(pin_num, (uint32_t )def_state));
 
-	//---add action to topic list---
-	char *str = calloc(strlen(me_config.device_name) + 16, sizeof(char));
-	sprintf(str, "%s/out_%d", me_config.device_name, slot_num);
-	me_state.action_topic_list[me_state.action_topic_list_index] = str;
-	me_state.action_topic_list_index++;
+	//---set delay---
+	uint16_t delay_ms = 0;
+	if (strstr(me_config.slot_options[slot_num], "out_delay_ms") != NULL) {
+		delay_ms = get_option_int_val(slot_num, "out_delay_ms");
+		ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d",delay_ms, slot_num);
+	}
 
-	ESP_LOGD(TAG, "Out inited for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	//---set impulse---
+	uint16_t impulse_ms = 0;
+	if (strstr(me_config.slot_options[slot_num], "out_impulse_ms") != NULL) {
+		impulse_ms = get_option_int_val(slot_num, "out_impulse_ms");
+		ESP_LOGD(TAG, "Set impulse_ms:%d for slot:%d",impulse_ms, slot_num);
+	}
+
+	//---add action to topic list---
+	if (strstr(me_config.slot_options[slot_num], "out_topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "out_topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.device_name)+strlen("/out_0")+3];
+		sprintf(t_str, "%s/out_%d",me_config.device_name, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
+	}
+
+	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+	
+	uint32_t tickToToggle=0;
+	while(1){
+		command_message_t msg;
+		if (xQueueReceive(me_state.command_queue[slot_num], &msg, portMAX_DELAY) == pdPASS){
+			//ESP_LOGD(TAG, "incoming command:%s", msg.str+strlen(me_state.action_topic_list[slot_num]));
+			int val = atoi(msg.str+strlen(me_state.action_topic_list[slot_num])+1);
+			//ESP_LOGD(TAG, "incoming command val:%d", val);
+			out_level_cmd_t cmd={
+				.gpio_num=pin_num,
+				.level=out_inverse ? !val : val,
+				.slot_num = slot_num
+			};
+			
+			if(delay_ms<=0){
+				set_out_level(&cmd);
+			}else{
+				esp_timer_handle_t delay_timer;
+		
+				const esp_timer_create_args_t delay_timer_args = {
+					.callback = &set_out_level,
+					/* argument specified here will be passed to timer callback function */
+					//.arg = (void*) cmd,
+					.arg = &cmd,
+					.name = "delay"
+				};
+				ESP_ERROR_CHECK(esp_timer_create(&delay_timer_args, &delay_timer));
+				ESP_ERROR_CHECK(esp_timer_start_once(delay_timer, delay_ms*1000));
+			}
+
+			if(impulse_ms>0){
+				esp_timer_handle_t impulse_timer;
+				out_level_cmd_t cmd={
+					.gpio_num = pin_num,
+					.level = def_state,
+					.slot_num = slot_num
+				};
+				const esp_timer_create_args_t impulse_timer_args = {
+					.callback = &set_out_level,
+					/* argument specified here will be passed to timer callback function */
+					//.arg = (void*) cmd,
+					.arg = &cmd,
+					.name = "impulse"
+				};
+				ESP_ERROR_CHECK(esp_timer_create(&impulse_timer_args, &impulse_timer));
+				ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (delay_ms+impulse_ms)*1000));
+			}
+
+		}
+	}
 }
+
+void start_out_task(int slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "task_out_%d", slot_num);
+	xTaskCreatePinnedToCore(out_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
+
+	ESP_LOGD(TAG,"Out task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
 
 void impulse_off_callback(void* arg){
 	int slot_num =(int)arg;

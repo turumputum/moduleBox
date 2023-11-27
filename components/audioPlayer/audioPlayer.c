@@ -3,6 +3,7 @@
 
 #include "esp_log.h"
 
+
 #include "esp_vfs_fat.h"
 //#include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
@@ -23,13 +24,17 @@
 #include "periph_wifi.h"
 
 #include "reporter.h"
+#include "executor.h"
 
 #include "stateConfig.h"
+#include "me_slot_config.h"
 
 #include "board.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "AUDIO";
+
+extern uint8_t SLOTS_PIN_MAP[6][4];
 
 audio_pipeline_handle_t pipeline;
 audio_board_handle_t board_handle;
@@ -42,59 +47,87 @@ audio_event_iface_handle_t evt;
 extern stateStruct me_state;
 extern configuration me_config;
 
-void audioInit(void) {
+void audioSetIndicator(uint8_t slot_num, uint32_t level){
+	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
+	gpio_set_level(led_pin, level);// module led light
+}
+
+void trackShift(char* cmd_arg, uint8_t *truckNum){
+	//ESP_LOGD(TAG,"trackShift arg:%d", cmd_arg[0]);
+	if (cmd_arg[0] == 43) {
+		*truckNum += atoi(cmd_arg + 1);
+		if (*truckNum >= me_state.numOfTrack) {
+			*truckNum = 0;
+		}
+		ESP_LOGD(TAG, "Shift track. Current track index increment: %d", *truckNum);
+	} else if (cmd_arg[0] == 45) {
+		*truckNum -= atoi(cmd_arg + 1);
+		if (*truckNum >= me_state.numOfTrack) {
+			*truckNum = 0;
+		}
+		ESP_LOGD(TAG, "Shift track. Current track index decrement: %d", *truckNum);
+	} else if (cmd_arg[0] == 35) {
+		ESP_LOGD(TAG, "noShift track. Current track index: %d", me_state.currentTrack);
+	}else if (strstr(cmd_arg, "random")!=NULL) {
+		*truckNum = rand() % me_state.numOfTrack;
+		ESP_LOGD(TAG, "Shift track. Set random track index: %d", *truckNum);
+	}else {
+		*truckNum = atoi(cmd_arg);
+		if (*truckNum >= me_state.numOfTrack) {
+			*truckNum = 0;
+		}
+		ESP_LOGD(TAG, "Shift track. Current track index: %d of: %d ", *truckNum, me_state.numOfTrack);
+	}
+}
+
+void audio_task(void *arg) {
+	int slot_num = *(int*) arg;
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
+
+	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
 	//ESP_LOGD(TAG, "Start codec chip");
 
+	uint8_t currentTrack=0;
+
+	uint8_t volume=70;
 	if (strstr(me_config.slot_options[0], "volume")!=NULL){
-		char *ind_of_vol = strstr(me_config.slot_options[0], "volume");
-		char options_copy[strlen(ind_of_vol)];
-		strcpy(options_copy, ind_of_vol);
-		char *rest;
-		char *ind_of_eqal=strstr(ind_of_vol, ":");
-		if(ind_of_eqal!=NULL){
-			if(strstr(ind_of_vol, ",")!=NULL){
-				ind_of_vol = strtok_r(options_copy,",",&rest);
-			}
-			me_config.volume = atoi(ind_of_eqal+1);
-			ESP_LOGD(TAG, "Set volume:%d", me_config.volume);
-		}else{
-			ESP_LOGW(TAG, "Volume options wrong format:%s", ind_of_vol);
-		}
+		volume = get_option_int_val(slot_num, "volume");
+		ESP_LOGD(TAG, "Set volume:%d", volume);
 	}
 
-	if (strstr(me_config.slot_options[0], "delay")!=NULL){
-		char *ind_of_del = strstr(me_config.slot_options[0], "delay");
-		char options_copy[strlen(ind_of_del)];
-		strcpy(options_copy, ind_of_del);
-		char *rest;
-		char *ind_of_eqal=strstr(ind_of_del, ":");
-		if(ind_of_eqal!=NULL){
-			if(strstr(ind_of_del, ",")!=NULL){
-				ind_of_del = strtok_r(options_copy,",",&rest);
-			}
-			me_config.play_delay = atoi(ind_of_eqal+1);
-			ESP_LOGD(TAG, "Set play_delay:%d", me_config.play_delay);
-		}else{
-			ESP_LOGW(TAG, "Play_delay options wrong format:%s", ind_of_del);
-		}
-	}else{
-		me_config.play_delay=0;
+	uint16_t play_delay=0;
+	if (strstr(me_config.slot_options[0], "play_delay_ms")!=NULL){
+		play_delay = get_option_int_val(slot_num, "play_delay_ms");
+		ESP_LOGD(TAG, "Set play_delay:%d", me_config.play_delay);
 	}
 
+	uint8_t loop = 0;
 	if (strstr(me_config.slot_options[0], "loop")!=NULL){
-		me_config.loop=1;
+		play_delay = get_option_int_val(slot_num, "loop");
 		ESP_LOGD(TAG, "Set loop mode");
-	}else{
-		me_config.loop=0;
 	}
 
-	esp_rom_gpio_pad_select_gpio(38);
-	gpio_set_direction(38, GPIO_MODE_OUTPUT);
-	gpio_set_level(38, 0);
+	//---add action to topic list---
+	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.device_name)+strlen("/player_")+3];
+		sprintf(t_str, "%s/player_%d",me_config.device_name, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
+	}
 
-	board_handle = audio_board_init();
+	esp_rom_gpio_pad_select_gpio(led_pin);
+	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(led_pin, 0);
+
+	board_handle = audio_board_init();// TO_DO raspetrushit'
 	audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_DECODE, AUDIO_HAL_CTRL_START);
 
 	//ESP_LOGD(TAG, "Create audio pipeline for playback");
@@ -111,7 +144,7 @@ void audioInit(void) {
 	i2s_cfg.type = AUDIO_STREAM_WRITER;
 	i2s_cfg.task_prio = 23; //23
 	i2s_cfg.use_alc = true;
-	i2s_cfg.volume = -34 + (me_config.volume / 3);
+	i2s_cfg.volume = -34 + (volume / 3);
 	i2s_stream_writer = i2s_stream_init(&i2s_cfg);
 
 	fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
@@ -146,12 +179,70 @@ void audioInit(void) {
 	evt_cfg.queue_set_size = 10;//5
 	evt = audio_event_iface_init(&evt_cfg);
 
-	xTaskCreatePinnedToCore(listenListener, "audio_listener", 1024 * 4, NULL, 1, NULL, 0);
-
+	//xTaskCreatePinnedToCore(listenListener, "audio_listener", 1024 * 4, NULL, 1, NULL, 0);
 	audio_pipeline_set_listener(pipeline, evt);
-
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
 			xPortGetFreeHeapSize());
+
+	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+
+	while(1){
+		vTaskDelay(pdMS_TO_TICKS(30));
+		command_message_t cmd;
+		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 0) == pdPASS){
+			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
+			char *cmd_arg = strstr(command, ":")+1;
+			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+			if(!memcmp(command, "play", 4)){//------------------------------
+				trackShift(cmd_arg, &currentTrack);
+				vTaskDelay(pdMS_TO_TICKS(play_delay));
+				if(audioPlay(currentTrack)==ESP_OK){
+					audioSetIndicator(slot_num, 1);
+				}else{
+					audioSetIndicator(slot_num, 0);
+				}
+				setVolume_num(volume);
+			}else if(!memcmp(command, "stop", 4)){//------------------------------
+				audioStop();
+				audioSetIndicator(slot_num, 0);
+			}else if(!memcmp(command, "shift", 5)){//------------------------------
+				trackShift(cmd_arg, &currentTrack);
+				if(audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING){
+					if(audioPlay(currentTrack)==ESP_OK){
+					audioSetIndicator(slot_num, 1);
+					}else{
+						audioSetIndicator(slot_num, 0);
+					}
+				}
+			}else if(!memcmp(command, "setVolume", 9)){//------------------------------
+				setVolume_str(cmd_arg);
+			}
+		}
+		
+		//listen audio event
+		audio_event_iface_msg_t msg;
+		esp_err_t ret = audio_event_iface_listen(evt, &msg, 0);
+		if (msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
+			audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
+			if (el_state == AEL_STATE_FINISHED) {
+				audioStop();
+				audioSetIndicator(slot_num, 0);
+				
+				vTaskDelay(pdMS_TO_TICKS(10));
+				char tmpStr[strlen("/endOfTrack")+10];
+				sprintf(tmpStr,"/endOfTrack:%d", me_state.currentTrack);
+				report(tmpStr, slot_num);
+			}
+		}
+	}
+}
+
+void audioInit(uint8_t slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "task_player_%d", slot_num);
+	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
 }
 
 void audioDeinit(void) {
@@ -177,107 +268,30 @@ void setVolume_str(char *cmd){
 
 }
 
-void audioPlay(char *cmd) {
+esp_err_t audioPlay(uint8_t truckNum) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-
-	if (cmd[0] == 43) {
-		me_state.currentTrack += atoi(cmd + 1);
-		if (me_state.currentTrack >= me_state.numOfTrack) {
-			me_state.currentTrack = 0;
-		}
-		ESP_LOGD(TAG, "Current track index increment: %d", me_state.currentTrack);
-	} else if (cmd[0] == 45) {
-		me_state.currentTrack -= atoi(cmd + 1);
-		if (me_state.currentTrack >= me_state.numOfTrack) {
-			me_state.currentTrack = 0;
-		}
-		ESP_LOGD(TAG, "Current track index decrement: %d", me_state.currentTrack);
-	} else if (cmd[0] == 35) {
-		ESP_LOGD(TAG, "Play current truck:%d", me_state.currentTrack);
-	}else if (strstr(cmd, "random")!=NULL) {
-		me_state.currentTrack = rand() % me_state.numOfTrack;
-		ESP_LOGD(TAG, "Set random track index: %d", me_state.currentTrack);
-	}else if (strstr(cmd, "current")!=NULL) {
-		ESP_LOGD(TAG, "Play current track index: %d", me_state.currentTrack);
-	} else {
-		me_state.currentTrack = atoi(cmd);
-		if (me_state.currentTrack >= me_state.numOfTrack) {
-			//ESP_LOGD(TAG, "currentTrack:%d numOfTrack:%d", me_state.currentTrack, me_state.numOfTrack);
-			me_state.currentTrack = 0;
-		}
-		ESP_LOGD(TAG, "Current track index: %d of: %d ", me_state.currentTrack,me_state.numOfTrack);
-	}
 
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
 	if(el_state==AEL_STATE_RUNNING){
 		audioStop();
 	}
 
-	vTaskDelay(pdMS_TO_TICKS(me_config.play_delay));
-
+	
 	audio_element_info_t music_info = { 0 };
-	audio_element_set_uri(fatfs_stream_reader, me_config.soundTracks[me_state.currentTrack]);
+	audio_element_set_uri(fatfs_stream_reader, me_config.soundTracks[truckNum]);
 	audio_element_getinfo(mp3_decoder, &music_info);
 	ESP_LOGD(TAG, "Received music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d", music_info.sample_rates, music_info.bits, music_info.channels);
-	setVolume_num(me_config.volume);
 	audio_element_setinfo(i2s_stream_writer, &music_info);
 	rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
-	//url = "/sdcard/monofonRus.mp3";
-	//audio_hal_set_volume(board_handle->audio_hal, me_config.volume);
-	//i2s_alc_volume_set(audio_element_handle_t i2s_stream, int volume);
 
-	//ESP_LOGD(TAG, "Set volume: %d", me_config.volume);
-
-	//audio_pipeline_reset_ringbuffer(pipeline);
-	//audio_pipeline_reset_elements(pipeline);
-	//audio_pipeline_change_state(pipeline, AEL_STATE_INIT);
-	audio_pipeline_run(pipeline);
+	return audio_pipeline_run(pipeline);
 
 	ESP_LOGD(TAG, "Start playing file:%s Heap usage:%lu, Free heap:%u", me_config.soundTracks[me_state.currentTrack], heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-	
-	gpio_set_level(38, 1);
-
-	vTaskDelay(pdMS_TO_TICKS(10));
-	char tmpStr[strlen(me_config.device_name)+strlen("/player_start")+10];
-	sprintf(tmpStr,"%s/player_start:%d", me_config.device_name, me_state.currentTrack);
-	report(tmpStr);
-}
-
-void audioShift(char *cmd){
-	if (cmd[0] == 43) {
-		me_state.currentTrack += atoi(cmd + 1);
-		if (me_state.currentTrack >= me_state.numOfTrack) {
-			me_state.currentTrack = 0;
-		}
-		ESP_LOGD(TAG, "Shift track. Current track index increment: %d", me_state.currentTrack);
-	} else if (cmd[0] == 45) {
-		me_state.currentTrack -= atoi(cmd + 1);
-		if (me_state.currentTrack >= me_state.numOfTrack) {
-			me_state.currentTrack = 0;
-		}
-		ESP_LOGD(TAG, "Shift track. Current track index decrement: %d", me_state.currentTrack);
-	}else if (strstr(cmd, "random")!=NULL) {
-		me_state.currentTrack = rand() % me_state.numOfTrack;
-		ESP_LOGD(TAG, "Shift track. Set random track index: %d", me_state.currentTrack);
-	}else {
-		me_state.currentTrack = atoi(cmd);
-		if (me_state.currentTrack >= me_state.numOfTrack) {
-			me_state.currentTrack = 0;
-		}
-		ESP_LOGD(TAG, "Shift track. Current track index: %d of: %d ", me_state.currentTrack,me_state.numOfTrack);
-	}
-
-	if(audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING){
-		audioPlay("#");
-	}
 }
 
 void audioStop(void) {
-	//audio_pipeline_pause(pipeline);
-	//ESP_ERROR_CHECK(audio_pipeline_stop(pipeline));
-	
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
-	ESP_LOGD(TAG, "audioStop state: %d", el_state);
+	//ESP_LOGD(TAG, "audioStop state: %d", el_state);
 	if ((el_state != AEL_STATE_FINISHED) && (el_state != AEL_STATE_STOPPED)) {
 		audio_pipeline_stop(pipeline);
 		audio_pipeline_wait_for_stop(pipeline);
@@ -288,8 +302,6 @@ void audioStop(void) {
 	ESP_ERROR_CHECK(audio_pipeline_reset_ringbuffer(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_reset_elements(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_change_state(pipeline, AEL_STATE_INIT));
-
-	gpio_set_level(38, 0);
 
 	ESP_LOGD(TAG, "Stop playing. Free heap:%d", xPortGetFreeHeapSize());
 }
@@ -315,7 +327,7 @@ void listenListener(void *pvParameters) {
 
 				char tmpStr[strlen(me_config.device_name)+strlen("/player_end")+10];
 				sprintf(tmpStr,"%s/player_end:%d", me_config.device_name, me_state.currentTrack);
-				report(tmpStr);
+				report(tmpStr, 0);
 				
 			}
 		}
