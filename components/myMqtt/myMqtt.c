@@ -6,6 +6,11 @@
 #include "executor.h"
 #include "sdkconfig.h"
 
+#include "esp_netif.h"
+#include "mdns.h"
+
+
+
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "mqtt";
 
@@ -22,7 +27,7 @@ char willTopic[255];
 extern QueueHandle_t exec_mailbox;
 
 void mqtt_pub(const char *topic, const char *string){
-    int msg_id = esp_mqtt_client_publish(client, topic, string, 0, 0, 0);
+    int msg_id = esp_mqtt_client_publish(client, topic, string, 0, 0, 1);
     //ESP_LOGD(TAG, "sent publish successful, msg_id=%d", msg_id);
 }
 
@@ -64,7 +69,48 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		sprintf(willTopic, "clients/%s/state", me_config.device_name);
 		mqtt_pub(willTopic, "1");
 
-		//declare action list to brocker
+		//----------topic list generate-----------------
+		//---calc size
+		// int topic_list_size = strlen("{\n\"triggers\":[\n")+strlen("\n],\n\"actions\":[\n")+strlen("\n]\n}");
+		// for(int i=0; i<NUM_OF_SLOTS; i++){
+		// 	if(memcmp(me_state.action_topic_list[i],"none", 4)!=0){
+		// 		topic_list_size += strlen("\"\",\n");
+		// 		topic_list_size+=strlen(me_state.action_topic_list[i]);
+		// 	}
+		// 	if(memcmp(me_state.trigger_topic_list[i],"none", 4)!=0){
+		// 		topic_list_size += strlen("\"\",\n");
+		// 		topic_list_size+=strlen(me_state.trigger_topic_list[i]);
+		// 	}
+		// }
+		//---print to arrray
+		char tmpStr[100];
+		char topic_list[1024] = { 0 };
+		strcat(topic_list,"{\n\"triggers\":[\n");
+		for (int i = 0; i < NUM_OF_SLOTS; i++) {
+			if(memcmp(me_state.trigger_topic_list[i],"none", 4)!=0){
+				memset(tmpStr, 0, sizeof(tmpStr));
+				sprintf(tmpStr, "\"%s\",\n", me_state.trigger_topic_list[i]);
+				strcat(topic_list, tmpStr);
+			}
+		}
+		topic_list[strlen(topic_list) - 2] = '\0';
+		strcat(topic_list, "\n],\n\"actions\":[\n");
+		for (int i = 0; i < NUM_OF_SLOTS; i++) {
+			if(memcmp(me_state.action_topic_list[i],"none", 4)!=0){
+				memset(tmpStr, 0, sizeof(tmpStr));
+				sprintf(tmpStr, "\"%s\",\n", me_state.action_topic_list[i]);
+				strcat(topic_list, tmpStr);
+			}
+		}
+		topic_list[strlen(topic_list) - 2] = '\0';
+		strcat(topic_list, "\n]\n}");
+
+		char topicList_topic[255];
+		sprintf(topicList_topic, "clients/%s/topics", me_config.device_name);
+
+		ESP_LOGD(TAG, "Topic list:%s", topic_list);
+		mqtt_pub(topicList_topic, topic_list);
+		//---declare action list to brocker
 
 		break;
 	case MQTT_EVENT_DISCONNECTED:
@@ -116,13 +162,29 @@ int mqtt_app_start(void)
 	memset(willTopic, 0, sizeof(willTopic));
 	sprintf(willTopic, "clients/%s/state", me_config.device_name);
 
+	if(strstr(me_config.mqttBrokerAdress, ".local")!=NULL){
+		char hostname[strlen(me_config.mqttBrokerAdress)-5];
+		memcpy(hostname, me_config.mqttBrokerAdress, strlen(me_config.mqttBrokerAdress)-6);
+		struct esp_ip4_addr addr;
+    	addr.addr = 0;
+    	ESP_LOGD(TAG, "Resolve hostname:%s", hostname);
+		esp_err_t err = mdns_query_a(hostname, 2000,  &addr);
+		if(err){
+			if(err == ESP_ERR_NOT_FOUND){
+				ESP_LOGW(TAG, "%s: Host was not found!", esp_err_to_name(err));
+			}
+			ESP_LOGE(TAG, "Query Failed: %s", esp_err_to_name(err));
+		}else{
+			ESP_LOGI(TAG, "Query A: %s.local resolved to: " IPSTR, hostname, IP2STR(&addr));
+			sprintf(me_config.mqttBrokerAdress, IPSTR, IP2STR(&addr));
+		}
+	}
+
 	char brokerUri[strlen("mqtt://")+strlen(me_config.mqttBrokerAdress)+strlen(":1883")];
 	sprintf(brokerUri, "mqtt://%s:1883", me_config.mqttBrokerAdress);
 	ESP_LOGD(TAG, "Set brokerUri:%s", brokerUri);
 	
     esp_mqtt_client_config_t mqtt_cfg = {
-        //.uri = "mqtt://192.168.1.60:1883",
-		//.uri = "mqtt://192.168.1.60:1883",
     	.credentials.client_id = me_config.device_name,
 		.broker.address.uri = brokerUri,
         //.broker.address.uri = "mqtt://192.168.88.99:1883"

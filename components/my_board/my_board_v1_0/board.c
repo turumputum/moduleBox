@@ -27,7 +27,7 @@
 #include "audio_mem.h"
 
 //#include "periph_sdcard.h"
-#include "periph_adc_button.h"
+//#include "periph_adc_button.h"
 
 static const char *TAG = "AUDIO_BOARD";
 
@@ -57,17 +57,17 @@ audio_hal_handle_t audio_board_codec_init(void)
 esp_err_t audio_board_key_init(esp_periph_set_handle_t set)
 {
     esp_err_t ret = ESP_OK;
-    periph_adc_button_cfg_t adc_btn_cfg = PERIPH_ADC_BUTTON_DEFAULT_CONFIG();
-    adc_arr_t adc_btn_tag = ADC_DEFAULT_ARR();
-    adc_btn_tag.adc_ch = ADC1_CHANNEL_0; // GPIO36
-    adc_btn_tag.total_steps = 4;
-    int btn_array[5] = {200, 1355, 1820, 2280, 2930};
-    adc_btn_tag.adc_level_step = btn_array;
-    adc_btn_cfg.arr = &adc_btn_tag;
-    adc_btn_cfg.arr_size = 1;
-    esp_periph_handle_t adc_btn_handle = periph_adc_button_init(&adc_btn_cfg);
-    AUDIO_NULL_CHECK(TAG, adc_btn_handle, return ESP_ERR_ADF_MEMORY_LACK);
-    ret = esp_periph_start(set, adc_btn_handle);
+    // periph_adc_button_cfg_t adc_btn_cfg = PERIPH_ADC_BUTTON_DEFAULT_CONFIG();
+    // adc_arr_t adc_btn_tag = ADC_DEFAULT_ARR();
+    // adc_btn_tag.adc_ch = ADC1_CHANNEL_0; // GPIO36
+    // adc_btn_tag.total_steps = 4;
+    // int btn_array[5] = {200, 1355, 1820, 2280, 2930};
+    // adc_btn_tag.adc_level_step = btn_array;
+    // adc_btn_cfg.arr = &adc_btn_tag;
+    // adc_btn_cfg.arr_size = 1;
+    // esp_periph_handle_t adc_btn_handle = periph_adc_button_init(&adc_btn_cfg);
+    // AUDIO_NULL_CHECK(TAG, adc_btn_handle, return ESP_ERR_ADF_MEMORY_LACK);
+    // ret = esp_periph_start(set, adc_btn_handle);
     return ret;
 }
 

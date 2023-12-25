@@ -86,6 +86,19 @@ int spisd_init() {
 #ifdef FORCE_SD_40MHZ
     host.max_freq_khz  = 40000;
 #endif
+
+
+	gpio_pad_select_gpio(47);
+	gpio_set_direction(47, GPIO_MODE_INPUT);
+	gpio_pad_select_gpio(40);
+	gpio_set_direction(40, GPIO_MODE_INPUT);
+	gpio_pad_select_gpio(21);
+	gpio_set_direction(21, GPIO_MODE_INPUT);
+	if((gpio_get_level(47)!=1)||(gpio_get_level(40)!=1)||(gpio_get_level(21)!=1)){
+		ESP_LOGW(TAG, "SD card module not found(");
+		return ESP_FAIL;
+	}
+
 	gpio_pad_select_gpio(48);
 	gpio_set_direction(48, GPIO_MODE_OUTPUT);
 	gpio_set_level(48, 1);

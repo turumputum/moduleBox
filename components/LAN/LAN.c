@@ -28,10 +28,13 @@
 #include "reporter.h"
 #include "executor.h"
 
+#include "mdns.h"
+
 #define CONFIG_ETH_SPI_ETHERNET_W5500 1
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "LAN";
+
 
 void ftp_task(void *pvParameters);
 
@@ -156,15 +159,34 @@ void wait_lan()
 		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 
-	// if(me_config.MDNS_enable){
-	// 	mdns_start();
-	// }
-	// if(me_config.FTP_enable){
-	// 	//TO-DO speed up needed
-	// 	xTaskCreatePinnedToCore(ftp_task, "FTP", 1024 * 10, NULL, configMAX_PRIORITIES - 5, NULL, 0);
-	// }
+	if(me_config.MDNS_enable){
+		uint32_t startTick = xTaskGetTickCount();
+		uint32_t heapBefore = xPortGetFreeHeapSize();
+
+	 	ESP_ERROR_CHECK( mdns_init() );
+		ESP_ERROR_CHECK( mdns_hostname_set(me_config.device_name) );
+		//initialize service
+		ESP_ERROR_CHECK( mdns_service_add("FTP_server", "_ftp", "_tcp", 21, 0, 0) );
+		
+		// struct esp_ip4_addr addr;
+    	// addr.addr = 0;
+    	// esp_err_t err = mdns_query_a("hass", 2000,  &addr);
+		// if(err){
+		// 	if(err == ESP_ERR_NOT_FOUND){
+		// 		ESP_LOGW(TAG, "%s: Host was not found!", esp_err_to_name(err));
+		// 	}
+		// 	ESP_LOGE(TAG, "Query Failed: %s", esp_err_to_name(err));
+		// }
+		// ESP_LOGI(TAG, "Query A: %s.local resolved to: " IPSTR, "hass", IP2STR(&addr));
+
+
+		ESP_LOGD(TAG, "mDNS task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+		
+	}
+
 	if (strlen(me_config.mqttBrokerAdress) > 3)	{
 		mqtt_app_start();
+
 	}
 
 	if((me_state.osc_socket >= 0)&&(me_config.oscMyPort>0)){

@@ -9,6 +9,8 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/adc.h"
+
 #include "esp_err.h"
 #include "reporter.h"
 #include "audioPlayer.h"
@@ -22,9 +24,12 @@
 #include "in_out.h"
 #include "smartLed.h"
 #include "myMqtt.h"
+#include "sensor_2ch.h"
+#include "tenzo_button.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
+
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -36,6 +41,14 @@ extern configuration me_config;
 //uint8_t SLOTS_PIN_MAP[6][3] = {{4,5,10},{17,18,15},{7,6,0},{3,8,0},{3,8,0},{41,42,0}}; //v2.2
 uint8_t SLOTS_PIN_MAP[6][4] = {{4,5,10,38},{40,21,47,48},{17,18,15,0},{3,8,39,0},{2,1,41,0},{7,6,42,0}}; //v3.x
 
+adc_channel_t SLOT_ADC_MAP[6]={
+    ADC1_CHANNEL_3,
+    -1,
+    ADC2_CHANNEL_6,
+    ADC1_CHANNEL_2,
+    ADC1_CHANNEL_1,
+    ADC1_CHANNEL_6
+};
 
 
 int init_slots(void){
@@ -47,19 +60,18 @@ int init_slots(void){
 		ESP_LOGD(TAG,"[%d] check mode:%s", i,me_config.slot_mode[i]);
 		if(!memcmp(me_config.slot_mode[i], "audio_player_mono", 17)){
 			audioInit(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_optorelay", 16)){
-			start_button_task(i);
-			//init_optorelay(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
 			start_button_task(i);
 			start_led_task(i);
-			//init_led(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_smartLed", 10)){
 			start_button_task(i);
 			start_smartLed_task(i);
-			//init_led(i);
-		}else if(!memcmp(me_config.slot_mode[i], "3n_mosfet", 9)){
+		}else if(!memcmp(me_config.slot_mode[i], "sensor_2ch", 9)){
+			start_sensors_task(i);
+			me_state.action_topic_list[i] = strdup("none");
+		}else if(!memcmp(me_config.slot_mode[i], "pwmRGBled", 9)){
 			init_3n_mosfet(i);
+			me_state.trigger_topic_list[i] = strdup("none");
 		}else if(!memcmp(me_config.slot_mode[i], "encoderPWM", 10)){
 			start_encoderPWM_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "encoder_inc", 10)){
@@ -75,6 +87,9 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
 			start_out_task(i);
 			start_in_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 6)){
+			start_tenzo_button_task(i);
+			me_state.action_topic_list[i] = strdup("none");
 		}else{
 			me_state.action_topic_list[i] = strdup("none");
 			me_state.trigger_topic_list[i] = strdup("none");
@@ -124,10 +139,10 @@ float get_option_float_val(int slot_num, char* string){
 }
 char* get_option_string_val(int slot_num, char* option){
 	char* resault;
-
-	char *ind_of_vol = strstr(me_config.slot_options[slot_num], option);
-	char options_copy[strlen(ind_of_vol)];
-	strcpy(options_copy, ind_of_vol);
+	char *options_copy = strdup(me_config.slot_options[slot_num]);
+	char *ind_of_vol = strstr(options_copy, option);
+	//char options_copy[strlen(ind_of_vol)];
+	//strcpy(options_copy, ind_of_vol);
 	char *rest;
 	char *ind_of_eqal=strstr(ind_of_vol, ":");
 	if(ind_of_eqal!=NULL){
