@@ -69,13 +69,7 @@
 
 #include "p9813.h"
 
-#include "tachometer.h"
-
-#include "TOFs.h"
-
-#include "stepper.h"
-
-#include "smartLed.h"
+#include "3n_mosfet.h"
 
 
 extern uint8_t SLOTS_PIN_MAP[6][4];
@@ -269,6 +263,8 @@ void setLogLevel(uint8_t level)
 	esp_log_level_set("IN_OUT", level);
 	esp_log_level_set("SMART_LED", level);
 	esp_log_level_set("myCDC", level);
+	esp_log_level_set("SENSOR_2CH", level);
+	esp_log_level_set("TENZO_BUTTON", level);
 }
 
 
@@ -295,31 +291,20 @@ void app_main(void)
 
 	
 	xTaskCreatePinnedToCore(executer_task, "executer_task",  1024 * 4,NULL ,configMAX_PRIORITIES - 12, NULL, 0);
-	xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 1, usb_device_stack, &usb_device_taskdef);
+	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, NULL,0);
+	//xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, usb_device_stack, &usb_device_taskdef);
 	
 
 	xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
 	
 	
-
-	//xTaskCreate(crosslinker_task, "cross_linker", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
-	//xTaskCreate(heap_report, "heap_report", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
-	
-
-	// exec_mailbox = xQueueCreate(10, sizeof(exec_message_t));
-	// if (exec_mailbox == NULL)
-	// {
-	// 	ESP_LOGE(TAG, "Exec_Mailbox create FAIL");
-	// }
-
-
 	me_state.sd_init_res = ESP_FAIL;
 	me_state.sd_init_res = spisd_init();
 	if (me_state.sd_init_res != ESP_OK)	{
 		ESP_LOGE(TAG, "sdcard_init FAIL");
 		const char *base_path = "/sdcard";
 		const esp_vfs_fat_mount_config_t mount_config = {
-				.max_files = 4,
+				.max_files = 2,
 				.format_if_mount_failed = true,
 				.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
 		};
@@ -346,13 +331,8 @@ void app_main(void)
 	
 
 	me_state.slot_init_res = init_slots();
-	debugTopicLists();
-	//start_out_task(0);
-
-	//start_smartLed_task(0);
-	//start_benewakeTOF_task(0);
-
-	//init_rfid_slot(0);
+	
+	//debugTopicLists();
 	
 	if (strstr(me_config.slot_mode[0], "audio_player") != NULL) {
 		me_state.content_search_res = loadContent();

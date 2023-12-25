@@ -4,7 +4,7 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.portWin": "COM43",
+    "idf.portWin": "COM46",
     "files.associations": {
         "esp_eth_mac.h": "c",
         "esp_efuse.h": "c",
@@ -41,7 +41,13 @@
         "string_view": "c",
         "regex": "c",
         "xlocale": "c",
-        "xstring": "c"
+        "xstring": "c",
+        "rmt_encoder.h": "c",
+        "3n_mosfet.h": "c",
+        "cstring": "c",
+        "sstream": "c",
+        "tenzo_button.h": "c",
+        "i2s_stream.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

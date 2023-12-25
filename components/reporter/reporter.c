@@ -107,7 +107,7 @@ void reporter_task(void){
 	reporter_message_t received_message;
 	for(;;){
 		if (xQueueReceive(me_state.reporter_queue, &received_message, portMAX_DELAY) == pdPASS){
-			ESP_LOGD(TAG, "REPORT QueueReceive: %s len:%d from slot:%d", received_message.str, strlen(received_message.str), received_message.slot_num);
+			//ESP_LOGD(TAG, "REPORT QueueReceive: %s len:%d from slot:%d", received_message.str, strlen(received_message.str), received_message.slot_num);
 			int len = strlen(received_message.str)+strlen(me_state.trigger_topic_list[received_message.slot_num])+6;
 			char tmpStr[len];
 			memset(tmpStr, 0, strlen(tmpStr));
@@ -118,7 +118,7 @@ void reporter_task(void){
 			}else{
 				sprintf(tmpStr,"%s:%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}
-			//ESP_LOGD(TAG, "Report: %s", tmpStr);
+			ESP_LOGD(TAG, "Report: %s", tmpStr);
 			usbprint(tmpStr);
 
 			if(me_state.LAN_init_res==ESP_OK){

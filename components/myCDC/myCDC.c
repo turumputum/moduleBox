@@ -87,9 +87,30 @@ static void execCommand(char *cmd, int len) {
 				"<reset config> set default configuration\n\n");
 
 	} else if (!memcmp(cmd, "Who are you?", 12)) {
+		ESP_LOGD(TAG, "usbReport who i am.");
 		char tmpStr[64];
-			sprintf(tmpStr, "moduleBox:%s\n", me_config.device_name);
-			usbprint(tmpStr);
+		sprintf(tmpStr, "moduleBox:%s\n", me_config.device_name);
+		usbprint(tmpStr);
+	} else if (!memcmp(cmd, "Get topic list.", 15)) {
+		ESP_LOGD(TAG, "usbReport topiclist.");
+		char tmpStr[255];
+		for (int i = 0; i < NUM_OF_SLOTS; i++) {
+			if(memcmp(me_state.trigger_topic_list[i],"none", 4)!=0){
+				memset(tmpStr, 0, sizeof(tmpStr));
+				sprintf(tmpStr, "triggers:%s\n", me_state.trigger_topic_list[i]);
+				usbprint(tmpStr);
+			}
+		}
+		for (int i = 0; i < NUM_OF_SLOTS; i++) {
+			if(memcmp(me_state.action_topic_list[i],"none", 4)!=0){
+				memset(tmpStr, 0, sizeof(tmpStr));
+				sprintf(tmpStr, "actions:%s\n", me_state.action_topic_list[i]);
+				usbprint(tmpStr);
+			}
+		}
+		memset(tmpStr, 0, sizeof(tmpStr));
+		len = sprintf(tmpStr, "End of topic list.\n");
+		usbprint(tmpStr);
 	} else if (!memcmp(cmd, "get system_status", 17)) {
 		if (FLAG_PC_EJECT == 1) {
 			char tmpStr[128];

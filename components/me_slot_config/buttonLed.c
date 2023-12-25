@@ -67,6 +67,7 @@ void button_task(void *arg){
 		button_inverse=1;
 	}
 
+
 	int debounce_delay = 0;
 	if (strstr(me_config.slot_options[slot_num], "button_debounce_delay") != NULL) {
 		debounce_delay = get_option_int_val(slot_num, "button_debounce_delay");
@@ -84,7 +85,6 @@ void button_task(void *arg){
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
-
 
 	uint32_t tick=xTaskGetTickCount();
     for(;;) {
@@ -192,9 +192,9 @@ void led_task(void *arg){
 	}
 
     int animate;
-    if (strstr(me_config.slot_options[slot_num], "animate") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "ledMode") != NULL) {
         char* tmp=NULL;
-    	tmp = get_option_string_val(slot_num, "animate");
+    	tmp = get_option_string_val(slot_num, "ledMode");
 		if(!memcmp(tmp, "flash", 5)){
 			animate = FLASH;
 		}else if(!memcmp(tmp, "glitch", 5)){
