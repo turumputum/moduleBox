@@ -107,6 +107,7 @@ void tenzo_button_task(void *arg){
         }
 
         adc_channel.val = adc_channel.val / adc_channel.samples;
+        //printf("%d,",adc_channel.val);
         //ESP_LOGD(TAG, "ADC Channel[%d] Raw Data: %d", adc_channel.chan,  adc_channel.val);
         
         //--- dimonMagic math ---
@@ -121,9 +122,10 @@ void tenzo_button_task(void *arg){
         adc_channel.integrated = dcCorrected > integrThres ? (adc_channel.integrated + (dcCorrected * integrMult)/1024) : 0;
         adc_channel.integrated2 = dcCorrected > integrThres ? (adc_channel.integrated2 + adc_channel.integrated) : 0;
 
-        if((adc_channel.integrated>0)||(adc_channel.integrated2>0)){
-            ESP_LOGD(TAG, "dcCorrected:%d Iint_1:%d Int_2:%d detThres:%d",dcCorrected,adc_channel.integrated, adc_channel.integrated2, detThres);
-        }
+        //printf("%d,%d,%d\n",currentVal, adc_channel.integrated, adc_channel.integrated2);
+        // if((adc_channel.integrated>0)||(adc_channel.integrated2>0)){
+        //     ESP_LOGD(TAG, "dcCorrected:%d Iint_1:%d Int_2:%d detThres:%d",dcCorrected,adc_channel.integrated, adc_channel.integrated2, detThres);
+        // }
 
         char str[255];
 

@@ -1,7 +1,7 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
-#define ANALOGIN_OVERSAMPLING 16
+#define ANALOGIN_OVERSAMPLING 8
 
 typedef struct {
     adc_channel_t chan;

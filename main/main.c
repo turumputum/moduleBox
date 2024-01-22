@@ -164,44 +164,7 @@ void nvs_init()
 }
 
 
-// void mdns_start(void)
-// {
-// 	//TO-DO mdns dont work whith ethernet
-// 	uint32_t startTick = xTaskGetTickCount();
-// 	uint32_t heapBefore = xPortGetFreeHeapSize();
-// 	char mdnsName[80];
-
-// 	// set mDNS hostname (required if you want to advertise services)
-// 	if (strlen(me_config.device_name) == 0)
-// 	{
-// 		sprintf(mdnsName, "%s", (char *)me_config.ssidT);
-// 		strcpy(mdnsName, me_config.ssidT);
-// 		ESP_LOGD(TAG, "Set mdns name: %s  device_name len:%d ", mdnsName, strlen(me_config.device_name));
-// 	}
-// 	else
-// 	{
-// 		sprintf(mdnsName, "%s", me_config.device_name);
-// 		ESP_LOGD(TAG, "Set mdns name: %s  device_name len:%d ", mdnsName, strlen(me_config.device_name));
-// 	}
-
-// 	ESP_ERROR_CHECK(mdns_init());
-// 	ESP_ERROR_CHECK(mdns_hostname_set(mdnsName));
-// 	ESP_ERROR_CHECK(mdns_instance_name_set("me-instance"));
-// 	mdns_service_add(NULL, "_ftp", "_tcp", 21, NULL, 0);
-// 	mdns_service_instance_name_set("_ftp", "_tcp", "me FTP server");
-// 	strcat(mdnsName, ".local");
-// 	ESP_LOGD(TAG, "mdns hostname set to: %s", mdnsName);
-// 	mdns_txt_item_t serviceTxtData[1] = {
-// 		{"URL", strdup(mdnsName)},
-// 	};
-// 	// sprintf()
-// 	mdns_service_txt_set("_ftp", "_tcp", serviceTxtData, 1);
-
-// 	ESP_LOGD(TAG, "mdns_start complite. Duration: %d ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-// }
-
-void setLogLevel(uint8_t level)
-{
+void setLogLevel(uint8_t level){
 	if (level == 3){
 		level = ESP_LOG_INFO;
 	}

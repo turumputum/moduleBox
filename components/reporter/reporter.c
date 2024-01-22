@@ -118,7 +118,7 @@ void reporter_task(void){
 			}else{
 				sprintf(tmpStr,"%s:%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}
-			ESP_LOGD(TAG, "Report: %s", tmpStr);
+			//ESP_LOGD(TAG, "Report: %s", tmpStr);
 			usbprint(tmpStr);
 
 			if(me_state.LAN_init_res==ESP_OK){
