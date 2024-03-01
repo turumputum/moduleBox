@@ -10,7 +10,7 @@
 
 #define NUM_OF_SLOTS 6
 
-static const char* VERSION = "1.0";
+static const char* VERSION = "3.12";
 
 
 
@@ -95,6 +95,7 @@ typedef struct {
 	char *udpServerAdress;
 	uint16_t udpServerPort;
 	uint16_t udpMyPort;
+	char *udp_cross_link;
 
 	char *oscServerAdress;
 	uint16_t oscServerPort;

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "accelStepper.h"
+#include "executor.h"
 
 #include "reporter.h"
 #include "stateConfig.h"
@@ -25,11 +26,70 @@ static const char *TAG = "STEPPER";
 Stepper_t stepper;
 uint32_t testCount=0;
 
+void stepper_set_targetPos(char* str){
+    if(stepper.init_state<0){
+        return;
+    }
+
+    float raw_input = 0.0;
+    int32_t targetPos=0;
+
+    if(strstr(str, ".")!=NULL){
+        raw_input = atof(str);
+        targetPos = raw_input*stepper._max_pos;
+    }else{
+        if(strstr(str, "+")!=NULL){
+            ESP_LOGD(TAG, "Add current pos");
+            targetPos = currentPosition(&stepper)+atoi(str);
+        }else if(strstr(str, "-")!=NULL){
+            ESP_LOGD(TAG, "Minus current pos");
+            targetPos = currentPosition(&stepper)+atoi(str);
+        }else{
+            targetPos = atoi(str);
+        }
+    }
+    moveTo(&stepper,targetPos);
+    ESP_LOGD(TAG, "Move to:%ld float input:%s", targetPos, str);
+}
+
+void stepper_set_speed(int32_t speed){
+    if(stepper.init_state<0){
+        return;
+    }
+    ESP_LOGD(TAG, "Set speed to:%ld", speed);
+    setMaxSpeed(&stepper,speed);
+}
+
+void stepper_set_currentPos(int32_t val){
+    if(stepper.init_state<0){
+        return;
+    }
+    ESP_LOGD(TAG, "Set current pos to:%ld", val);
+    setCurrentPosition(&stepper, val);
+}
+
+void stepper_stop_on_sensor(int8_t val){
+    if(stepper.init_state<0){
+        return;
+    }
+    ESP_LOGD(TAG,"Stepper stop on sensoer val:%d",val);
+    stepper._stop_on_sensor=val;
+}
+
+void stepper_stop(void){
+    if(stepper.init_state<0){
+        return;
+    }
+    stop(&stepper);
+}
+
 void stepper_task(void *arg){
     char str[255];
     int slot_num = *(int*) arg;
 	uint8_t dir_pin_num = SLOTS_PIN_MAP[slot_num][0];
     uint8_t step_pin_num = SLOTS_PIN_MAP[slot_num][1];
+
+    me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
     
     InitStepper(&stepper, DRIVER, step_pin_num, dir_pin_num, 0);
 	ESP_LOGD(TAG,"SETUP stepper dir_pin:%d step_pin:%d Slot:%d", dir_pin_num, step_pin_num, slot_num);
@@ -46,7 +106,7 @@ void stepper_task(void *arg){
 		max_speed = get_option_int_val(slot_num, "max_speed");
 	}
     setMaxSpeed(&stepper,max_speed);
-    ESP_LOGD(TAG, "Set max_speed:%d Slot:%d", max_speed, slot_num);
+    ESP_LOGD(TAG, "Set max_speed:%d Slot:%d", max_speed, slot_num);//!!!!!!!!!!!!!!!!!!addd _cmin ptint
     //---
     int acceleration=100;
 	if (strstr(me_config.slot_options[slot_num], "acceleration")!=NULL){
@@ -81,31 +141,20 @@ void stepper_task(void *arg){
 		sensor_num = get_option_int_val(slot_num, "sensor_num");
     }
 
-    //TO_DO rewrite command interface
-    // char moveTo_trig[strlen(me_config.device_name)+18];
-    // sprintf(moveTo_trig,"%s/stepper_moveTo", me_config.device_name);
-    // me_state.action_topic_list[me_state.action_topic_list_index] = moveTo_trig;
-    // me_state.action_topic_list_index++;
-    
-    // char setSpeed_trig[strlen(me_config.device_name)+20];
-    // sprintf(setSpeed_trig,"%s/stepper_setSpeed", me_config.device_name);
-    // me_state.action_topic_list[me_state.action_topic_list_index] = setSpeed_trig;
-    // me_state.action_topic_list_index++;
-    
-    // char stop_trig[strlen(me_config.device_name)+15];
-    // sprintf(stop_trig,"%s/stepper_stop", me_config.device_name);
-    // me_state.action_topic_list[me_state.action_topic_list_index] = stop_trig;
-    // me_state.action_topic_list_index++;
-    
-    // char setCurrentPos_trig[strlen(me_config.device_name)+25];
-    // sprintf(setCurrentPos_trig,"%s/stepper_setCurrentPos", me_config.device_name);
-    // me_state.action_topic_list[me_state.action_topic_list_index] = setCurrentPos_trig;
-    // me_state.action_topic_list_index++;
+    if (strstr(me_config.slot_options[slot_num], "stepper_topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "stepper_topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.device_name)+strlen("/stepper_")+3];
+		sprintf(t_str, "%s/stepper_%d",me_config.device_name, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart stepper_topic:%s", me_state.action_topic_list[slot_num]);
+	}
 
-    // char currentPos_action[strlen(me_config.device_name)+40];
-    // sprintf(currentPos_action,"%s/stepper_0", me_config.device_name);
-    // me_state.trigger_topic_list[me_state.trigger_topic_list_index] = currentPos_action;
-    // me_state.trigger_topic_list_index++;
 
     // homing procedure
     uint16_t tick=0;
@@ -182,19 +231,28 @@ void stepper_task(void *arg){
     
     long prev_pos =currentPosition(&stepper);
     while(1){
-        vTaskDelay(pdMS_TO_TICKS(22));
+        vTaskDelay(pdMS_TO_TICKS(30));
+
+        command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            cmd = cmd + strlen(me_state.action_topic_list[slot_num]);
+            if(strstr(cmd, "moveTo")!=NULL){
+                stepper_set_targetPos(payload);
+            }
+       }
 
         if(currentPosition(&stepper) != prev_pos){
             //ESP_LOGD(TAG, "Distance to go:%ld speed:%ld delta:%d breakWay:%ld _n:%ld ,_cn:%ld", distanceToGo(&stepper), speed(&stepper), abs(currentPosition(&stepper)-prev_pos), stepper._break_way, stepper._n, stepper._cn);
-            
+            //ESP_LOGD(TAG, "_stepInterval:%ld _speed:%ld _cmin:%ld _n:%ld", stepper._stepInterval, stepper._speed, stepper._cmin,  stepper._n);
             prev_pos = currentPosition(&stepper);
             memset(str, 0, strlen(str));
-            if(flag_float_report){
-                sprintf(str, "%s/stepper_%d:%f", me_config.device_name, 0, (float)currentPosition(&stepper)/stepper._max_pos);
-            }else{
-                sprintf(str, "%s/stepper_%d:%ld", me_config.device_name, 0, currentPosition(&stepper));
-            }
-            report(str, 0);
+			sprintf(str, "%ld", prev_pos);
+			report(str, slot_num);
+
         }
 
         if(strlen(stepper.report_msg)>0){
@@ -205,60 +263,7 @@ void stepper_task(void *arg){
     }
 }
 
-void stepper_set_targetPos(char* str){
-    if(stepper.init_state<0){
-        return;
-    }
 
-    float raw_input = 0.0;
-    int32_t targetPos=0;
-
-    if(strstr(str, ".")!=NULL){
-        raw_input = atof(str);
-        targetPos = raw_input*stepper._max_pos;
-    }else{
-        if(strstr(str, "+")!=NULL){
-            targetPos = currentPosition(&stepper)+atoi(str);
-        }else if(strstr(str, "-")!=NULL){
-            targetPos = currentPosition(&stepper)-atoi(str);
-        }else{
-            targetPos = atoi(str);
-        }
-    }
-    moveTo(&stepper,targetPos);
-    ESP_LOGD(TAG, "Move to:%ld float input:%s", targetPos, str);
-}
-
-void stepper_set_speed(int32_t speed){
-    if(stepper.init_state<0){
-        return;
-    }
-    ESP_LOGD(TAG, "Set speed to:%ld", speed);
-    setMaxSpeed(&stepper,speed);
-}
-
-void stepper_set_currentPos(int32_t val){
-    if(stepper.init_state<0){
-        return;
-    }
-    ESP_LOGD(TAG, "Set current pos to:%ld", val);
-    setCurrentPosition(&stepper, val);
-}
-
-void stepper_stop_on_sensor(int8_t val){
-    if(stepper.init_state<0){
-        return;
-    }
-    ESP_LOGD(TAG,"Stepper stop on sensoer val:%d",val);
-    stepper._stop_on_sensor=val;
-}
-
-void stepper_stop(void){
-    if(stepper.init_state<0){
-        return;
-    }
-    stop(&stepper);
-}
 
 
 void start_stepper_task(int slot_num){
@@ -266,7 +271,8 @@ void start_stepper_task(int slot_num){
 	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_stepper_%d", slot_num);
-	xTaskCreate(stepper_task, tmpString, 1024*12, &t_slot_num,12, NULL);
+	//xTaskCreate(stepper_task, tmpString, 1024*12, &t_slot_num,configMAX_PRIORITIES, NULL);
+    xTaskCreatePinnedToCore(stepper_task, tmpString, 1024*12, &t_slot_num,configMAX_PRIORITIES-6, NULL,1);
 
 	ESP_LOGD(TAG,"Stepper task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

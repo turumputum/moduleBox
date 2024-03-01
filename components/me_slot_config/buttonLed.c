@@ -277,7 +277,7 @@ void led_task(void *arg){
 
 void start_led_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(led_task, "smartLed_task", 1024*4, &slot_num,12, NULL);
-	ESP_LOGD(TAG,"smartLed_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+    xTaskCreate(led_task, "led_task", 1024*4, &slot_num,12, NULL);
+	ESP_LOGD(TAG,"led_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

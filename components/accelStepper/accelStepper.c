@@ -60,7 +60,6 @@ void move(Stepper_t* motor, long relative)
 uint8_t runSpeed(Stepper_t* motor)
 {
     // Dont do anything unless we actually have a step interval
-	testCount = motor->_stepInterval;
     if (!motor->_stepInterval) return 0; // false
 	
 	//unsigned long time = HAL_GetTick() * 10; //Arduino: micros();
@@ -71,23 +70,16 @@ uint8_t runSpeed(Stepper_t* motor)
 
 	// Gymnastics to detect wrapping of either the nextStepTime and/or the current time
 	if (((nextStepTime >= motor->_lastStepTime) && ((time >= nextStepTime) || (time < motor->_lastStepTime)))
-	|| ((nextStepTime < motor->_lastStepTime) && ((time >= nextStepTime) && (time < motor->_lastStepTime))))
-	{
-		if (motor->_direction == DIRECTION_CW)
-		{
-			// Clockwise
+	|| ((nextStepTime < motor->_lastStepTime) && ((time >= nextStepTime) && (time < motor->_lastStepTime)))){
+		if (motor->_direction == DIRECTION_CW){	// Clockwise
 			motor->_currentPos += 1;
-		}
-		else
-		{
-			// Anticlockwise
+		}else{// Anticlockwise
 			motor->_currentPos -= 1;
 		}
 
 		step(motor, motor->_currentPos);
 
 		motor->_lastStepTime = time;
-
 		return 1; // true
     }
     else
@@ -129,8 +121,7 @@ void computeNewSpeed(Stepper_t* motor)
 	//motor->_break_way = (motor->_speed * motor->_speed)/(2 * motor->_acceleration);
 	motor->_break_way = stepsToStop;
 
-    if (distanceTo == 0 && stepsToStop <= 1)
-    {
+    if (distanceTo == 0 && stepsToStop <= 1){
     	// We are at the target and its time to stop
     	motor->_stepInterval = 0;
     	motor->_speed = 0;
@@ -138,25 +129,19 @@ void computeNewSpeed(Stepper_t* motor)
     	return;
     }
 
-    if (distanceTo > 0)
-    {
+    if (distanceTo > 0) {
 		// We are anticlockwise from the target
 		// Need to go clockwise from here, maybe decelerate now
-		if (motor->_n > 0)
-		{
+		if (motor->_n > 0){
 			// Currently accelerating, need to decel now? Or maybe going the wrong way?
 			if ((stepsToStop >= distanceTo) || motor->_direction == DIRECTION_CCW)
 				motor->_n = -stepsToStop; // Start deceleration
-		}
-		else if (motor->_n < 0)
-		{
+		}else if (motor->_n < 0)	{
 			// Currently decelerating, need to accel again?
 			if ((stepsToStop < distanceTo) && motor->_direction == DIRECTION_CW)
 				motor->_n = -motor->_n; // Start accceleration
 		}
-	}
-	else if (distanceTo < 0)
-	{
+	}else if (distanceTo < 0){
 		// We are clockwise from the target
 		// Need to go anticlockwise from here, maybe decelerate
 		if (motor->_n > 0){
@@ -173,16 +158,13 @@ void computeNewSpeed(Stepper_t* motor)
 	}
 
 	// Need to accelerate or decelerate
-	if (motor->_n == 0)
-	{
+	if (motor->_n == 0)	{
 		// First step from stopped
 		motor->_cn = motor->_c0;
 		motor->_direction = (distanceTo > 0) ? DIRECTION_CW : DIRECTION_CCW;
-	}
-	else
-	{
+	}else{
 		// Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
-		motor->_cn = motor->_cn - ((2 * motor->_cn) / ((4 * motor->_n) + 1)); // Equation 13
+		motor->_cn = motor->_cn - ((2 * motor->_cn) / ((2 * motor->_n) + 1)); // Equation 13
 		motor->_cn = (motor->_cn > motor->_cmin) ? motor->_cn : motor->_cmin; //max(motor->_cn, motor->_cmin);
 	}
 
@@ -261,8 +243,7 @@ static bool IRAM_ATTR timer_callback(gptimer_handle_t timer, const gptimer_alarm
 	return pdTRUE;
 }
 
-void InitStepper(Stepper_t* motor, uint8_t interface, uint16_t pin1, uint16_t pin2, uint8_t enable)
-{
+void InitStepper(Stepper_t* motor, uint8_t interface, uint16_t pin1, uint16_t pin2, uint8_t enable){
 	motor->_interface = interface;
 	motor->_currentPos = 0;
 	motor->_targetPos = 0;
@@ -293,9 +274,9 @@ void InitStepper(Stepper_t* motor, uint8_t interface, uint16_t pin1, uint16_t pi
 	
     // NEW
 	motor->_n = 0;
-	motor->_c0 = 0.0;
-    motor->_cn = 0.0;
-    motor->_cmin = 1.0;
+	motor->_c0 = 25;
+    motor->_cn = 0;
+    motor->_cmin = 1;
     motor->_direction = DIRECTION_CCW;
 
 	motor->init_state=-1;
@@ -482,8 +463,7 @@ void setOutputPins(Stepper_t* motor, uint8_t mask)
 
 
 
-void step(Stepper_t* motor, long step)
-{
+void step(Stepper_t* motor, long step){
 	if(((motor->_direction)&&(!motor->_dirInverted))||((!motor->_direction)&&(motor->_dirInverted))){
 		GPIO.out_w1ts = ((uint32_t)1 << motor->_pin[1]);
 	}else if(((motor->_direction)&&(motor->_dirInverted))||((!motor->_direction)&&(!motor->_dirInverted))){
@@ -492,7 +472,6 @@ void step(Stepper_t* motor, long step)
 
 	GPIO.out_w1ts = ((uint32_t)1 << motor->_pin[0]);
 	motor->_pulse_up_flag=1;
-
 }
    
 

@@ -58,6 +58,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->udpServerPort = atoi(value);
 	} else if (MATCH("UDP", "udpMyPort")) {
 		pconfig->udpMyPort = atoi(value);
+	} else if (MATCH("UDP", "udp_cross_link")) {
+		pconfig->udp_cross_link = strdup(value);
 	} else if (MATCH("OSC", "oscServerAdress")) {
 		pconfig->oscServerAdress = strdup(value);
 	} else if (MATCH("OSC", "oscServerPort")) {
@@ -148,9 +150,9 @@ void load_Default_Config(void) {
 	me_config.netMask = strdup("255.255.255.0");
 	me_config.gateWay = strdup("192.168.88.1");
 
-	me_config.MDNS_enable=0;
+	me_config.MDNS_enable=1;
 
-	me_config.FTP_login = 0;
+	me_config.FTP_enable = 1;
 	me_config.FTP_login = strdup("user");
 	me_config.FTP_pass = strdup("pass");
 
@@ -159,6 +161,7 @@ void load_Default_Config(void) {
 	me_config.udpServerAdress = strdup("");
 	me_config.udpServerPort = 0;
 	me_config.udpMyPort = 0;
+	me_config.udp_cross_link = strdup("");
 	
 	me_config.oscServerAdress = strdup("");
 	me_config.oscServerPort = 0;
@@ -240,20 +243,6 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
-//	sprintf(tmp, "WIFI_mode = %d ;0-disable, 1-AP mode, 2-station mode \r\n",
-//			me_config.WIFI_mode);
-//	fprintf(configFile, tmp);
-//	memset(tmp, 0, strlen(tmp));
-//	sprintf(tmp, "WIFI_ssid = %s \r\n", me_config.WIFI_ssid);
-//	fprintf(configFile, tmp);
-//	memset(tmp, 0, strlen(tmp));
-//	sprintf(tmp, "WIFI_pass = %s \r\n", me_config.WIFI_pass);
-//	fprintf(configFile, tmp);
-//	memset(tmp, 0, strlen(tmp));
-//	sprintf(tmp, "WIFI_channel = %d \r\n", me_config.WIFI_channel);
-//	fprintf(configFile, tmp);
-//	memset(tmp, 0, strlen(tmp));
-
 	sprintf(tmp, "\r\n[LAN] \r\n");
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
@@ -275,13 +264,7 @@ int saveConfig(void) {
 	sprintf(tmp, "\r\n[MDNS] \r\n");
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "MDNS_enable = %d \r\n", me_config.MDNS_enable);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "\r\n[FTP] \r\n");
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "FTP_enable  = %d \r\n", me_config.FTP_enable);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "FTP_login = %s \r\n", me_config.FTP_login);
@@ -300,6 +283,9 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "udp_cross_link = %s \r\n", me_config.udp_cross_link);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 

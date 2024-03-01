@@ -49,7 +49,7 @@ typedef struct {
 
 extern configuration me_config;
 extern stateStruct me_state;
-extern QueueHandle_t exec_mailbox;
+//extern QueueHandle_t exec_mailbox;
 
 static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
 	uint8_t mac_addr[6] = { 0 };
@@ -116,36 +116,71 @@ void osc_recive_task(){
 			ESP_LOGD(TAG, "OSC incoming fail(");
 		}else{
 			ESP_LOGD(TAG, "OSC incoming:%s", buff);
-			if (!tosc_parseMessage(&osc, buff, len)) {
-				//printf("Received OSC message: [%i bytes] %s %s ",
-					//len, // the number of bytes in the OSC message
-					//tosc_getAddress(&osc), // the OSC address string, e.g. "/button1"
-					tosc_getFormat(&osc); // the OSC format string, e.g. "f"
-				for (int i = 0; osc.format[i] != '\0'; i++) {
-					if(osc.format[i]== 'i'){
-						//printf("%i ", ); break;
-						exec_message_t message;
-						memset(message.str,0,strlen(message.str));
-						sprintf(message.str, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
+			// if (!tosc_parseMessage(&osc, buff, len)) {
+			// 	//printf("Received OSC message: [%i bytes] %s %s ",
+			// 		//len, // the number of bytes in the OSC message
+			// 		//tosc_getAddress(&osc), // the OSC address string, e.g. "/button1"
+			// 		tosc_getFormat(&osc); // the OSC format string, e.g. "f"
+			// 	for (int i = 0; osc.format[i] != '\0'; i++) {
+			// 		if(osc.format[i]== 'i'){
+			// 			//printf("%i ", ); break;
+			// 			exec_message_t message;
+			// 			memset(message.str,0,strlen(message.str));
+			// 			sprintf(message.str, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
 
-						ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
-						if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
-							ESP_LOGE(TAG, "Send message FAIL");
-						}
-					} 
-					if(osc.format[i]== 'f'){
-						//printf("%i ", ); break;
-						exec_message_t message;
-						memset(message.str,0,strlen(message.str));
-						sprintf(message.str, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
+			// 			ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
+			// 			if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
+			// 				ESP_LOGE(TAG, "Send message FAIL");
+			// 			}
+			// 		} 
+			// 		if(osc.format[i]== 'f'){
+			// 			//printf("%i ", ); break;
+			// 			exec_message_t message;
+			// 			memset(message.str,0,strlen(message.str));
+			// 			sprintf(message.str, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
 
-						ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
-						if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
-							ESP_LOGE(TAG, "Send message FAIL");
-						}
-					} 
-				}
-				printf("\n");
+			// 			ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
+			// 			if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
+			// 				ESP_LOGE(TAG, "Send message FAIL");
+			// 			}
+			// 		} 
+			// 	}
+			// 	printf("\n");
+			// }
+		}
+		vTaskDelay(pdMS_TO_TICKS(20));
+	}
+}
+
+
+void udp_recive_task(){
+	int buff_size=250;
+	char buff[buff_size];
+
+	struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
+    socklen_t socklen = sizeof(source_addr);
+
+	struct sockaddr_in dest_addr;
+	dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	dest_addr.sin_family = AF_INET;
+	dest_addr.sin_port = htons(me_config.udpMyPort);
+
+	int err = bind(me_state.udp_socket, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+	if (err < 0) {
+		ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+	}
+
+	ESP_LOGD(TAG, "UDP revive task STARTED, on port:%d",me_config.udpMyPort);
+	while(1){
+		int len=recvfrom(me_state.udp_socket, buff, buff_size-1, 0,(struct sockaddr *)&source_addr, &socklen);
+		if(len<0){
+			//ESP_LOGD(TAG, "UDP incoming fail(");
+		}else{
+			ESP_LOGD(TAG, "UDP incoming:%.*s",len, buff);
+			buff[len]='\0';
+			execute(buff);
+			if(strlen(me_config.udp_cross_link)>3){
+				crosslinks_process(me_config.udp_cross_link,buff);
 			}
 		}
 		vTaskDelay(pdMS_TO_TICKS(20));
@@ -167,19 +202,6 @@ void wait_lan()
 		ESP_ERROR_CHECK( mdns_hostname_set(me_config.device_name) );
 		//initialize service
 		ESP_ERROR_CHECK( mdns_service_add("FTP_server", "_ftp", "_tcp", 21, 0, 0) );
-		
-		// struct esp_ip4_addr addr;
-    	// addr.addr = 0;
-    	// esp_err_t err = mdns_query_a("hass", 2000,  &addr);
-		// if(err){
-		// 	if(err == ESP_ERR_NOT_FOUND){
-		// 		ESP_LOGW(TAG, "%s: Host was not found!", esp_err_to_name(err));
-		// 	}
-		// 	ESP_LOGE(TAG, "Query Failed: %s", esp_err_to_name(err));
-		// }
-		// ESP_LOGI(TAG, "Query A: %s.local resolved to: " IPSTR, "hass", IP2STR(&addr));
-
-
 		ESP_LOGD(TAG, "mDNS task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 		
 	}
@@ -191,6 +213,10 @@ void wait_lan()
 
 	if((me_state.osc_socket >= 0)&&(me_config.oscMyPort>0)){
 		xTaskCreate(osc_recive_task, "osc_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
+	}
+
+	if((me_state.udp_socket >= 0)&&(me_config.udpMyPort>0)){
+		xTaskCreate(udp_recive_task, "udp_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	}
 
 	if(me_config.FTP_enable){
@@ -316,38 +342,30 @@ int LAN_init(void) {
 		esp_netif_set_ip_info(eth_netif, &info_t);
 	}
 
-	if(me_config.udpServerAdress[0]!=0){
-		me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-		if (me_state.udp_socket < 0) {
-			printf("Failed to create socket for UDP: %d\n", errno);
-			return -1;
-		}else{
-			ESP_LOGD(TAG,"UDP socket OK num:%d", me_state.udp_socket);
-		}
-		//TO DO create task to execute actions
-		//struct sockaddr_in destAddr
-		//int res = sendto(sock, msg, msgLen, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
-		//"lwipopts.h"
-	}
 
-	if(me_config.oscServerAdress[0]!=0){
-		me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-		if (me_state.osc_socket < 0) {
-			printf("Failed to create socket for OSC: %d\n", errno);
-			return -1;
-		}else{
-			ESP_LOGD(TAG,"OSC socket OK num:%d", me_state.osc_socket);
-		}
-
-		struct timeval timeout;
-        timeout.tv_sec = 10;
-        timeout.tv_usec = 0;
-        setsockopt (me_state.osc_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
-
-		//TO DO create task to execute actions
+	me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (me_state.udp_socket < 0) {
+		printf("Failed to create socket for UDP: %d\n", errno);
+		return -1;
 	}else{
-		ESP_LOGD(TAG,"OSC skipped addr:%s", me_config.oscServerAdress);
+		ESP_LOGD(TAG,"UDP socket OK num:%d", me_state.udp_socket);
 	}
+
+
+
+	me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (me_state.osc_socket < 0) {
+		printf("Failed to create socket for OSC: %d\n", errno);
+		return -1;
+	}else{
+		ESP_LOGD(TAG,"OSC socket OK num:%d", me_state.osc_socket);
+	}
+
+	struct timeval timeout;
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
+	setsockopt (me_state.osc_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+
 
 	xTaskCreate(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	vTaskDelay(pdMS_TO_TICKS(1000));

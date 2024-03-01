@@ -73,6 +73,13 @@ void in_task(void *arg){
 		IN_inverse=1;
 	}
 
+	//---set delay---
+	uint16_t delay_ms = 0;
+	if (strstr(me_config.slot_options[slot_num], "in_delay_ms") != NULL) {
+		delay_ms = get_option_int_val(slot_num, "in_delay_ms");
+		ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d",delay_ms, slot_num);
+	}
+
 	int debounce_delay = 0;
 	if (strstr(me_config.slot_options[slot_num], "in_debounce_delay") != NULL) {
 		debounce_delay = get_option_int_val(slot_num, "in_debounce_delay");
@@ -119,6 +126,9 @@ void in_task(void *arg){
 				memset(str, 0, strlen(str));
 				sprintf(str, "%d", IN_state);
 
+				if(delay_ms!=0){
+					vTaskDelay(pdMS_TO_TICKS(delay_ms));
+				}
 				report(str, slot_num);
 				ESP_LOGD(TAG,"String:%s", str);
 				tick = xTaskGetTickCount();

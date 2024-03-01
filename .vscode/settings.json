@@ -4,7 +4,7 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.portWin": "COM43",
+    "idf.portWin": "COM15",
     "files.associations": {
         "esp_eth_mac.h": "c",
         "esp_efuse.h": "c",
@@ -47,7 +47,8 @@
         "cstring": "c",
         "sstream": "c",
         "tenzo_button.h": "c",
-        "i2s_stream.h": "c"
+        "i2s_stream.h": "c",
+        "encoders.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

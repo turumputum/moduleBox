@@ -102,12 +102,6 @@ void audio_task(void *arg) {
 		ESP_LOGD(TAG, "Set play_delay:%d", me_config.play_delay);
 	}
 
-	uint8_t loop = 0;
-	if (strstr(me_config.slot_options[0], "loop")!=NULL){
-		play_delay = get_option_int_val(slot_num, "loop");
-		ESP_LOGD(TAG, "Set loop mode");
-	}
-
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -209,7 +203,7 @@ void audio_task(void *arg) {
 				trackShift(cmd_arg, &currentTrack);
 				if(audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING){
 					if(audioPlay(currentTrack)==ESP_OK){
-					audioSetIndicator(slot_num, 1);
+						audioSetIndicator(slot_num, 1);
 					}else{
 						audioSetIndicator(slot_num, 0);
 					}

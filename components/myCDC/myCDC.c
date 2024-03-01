@@ -166,16 +166,12 @@ void cdc_task(void *params) {
 		// connected() check for DTR bit
 		// Most but not all terminal client set this when making connection
 		if (tud_cdc_connected()) {
-
 			// connected and there are data available
 			if (tud_cdc_available()) {
 				char *on = (char*) &tmpbuf[0];
-
 				uint32_t count = tud_cdc_read(tmpbuf, sizeof(tmpbuf));
-
 //				tud_cdc_write(tmpbuf, count);
 //				tud_cdc_write_flush();
-
 				while (count--) {
 					// dumb overrun protection
 					if (strBuffPtr >= sizeof(strBuff)) {
@@ -184,13 +180,10 @@ void cdc_task(void *params) {
 
 					if (('\r' == *on) || ('\n' == *on)) {
 						strBuff[strBuffPtr] = 0;
-
 						execCommand(strBuff, strBuffPtr);
-
 						strBuffPtr = 0;
 					} else {
 						strBuff[strBuffPtr] = *on;
-
 						strBuffPtr++;
 					}
 
@@ -203,7 +196,7 @@ void cdc_task(void *params) {
       		esp_restart();
 		}
 
-		vTaskDelay(1);
+		vTaskDelay(5);
 	}
 }
 

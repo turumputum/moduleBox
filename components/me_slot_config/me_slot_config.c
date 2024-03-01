@@ -26,6 +26,7 @@
 #include "myMqtt.h"
 #include "sensor_2ch.h"
 #include "tenzo_button.h"
+#include "flywheel.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -80,6 +81,7 @@ int init_slots(void){
 			start_benewakeTOF_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);
+			me_state.action_topic_list[i] = strdup("none");
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
 			start_analog_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
@@ -87,9 +89,12 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
 			start_out_task(i);
 			start_in_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 6)){
+		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
 			start_tenzo_button_task(i);
 			me_state.action_topic_list[i] = strdup("none");
+		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){
+			start_flywheel_task(i);
+			start_led_task(i);
 		}else{
 			me_state.action_topic_list[i] = strdup("none");
 			me_state.trigger_topic_list[i] = strdup("none");

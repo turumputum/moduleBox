@@ -40,8 +40,7 @@ void crosslinker(char* str)
 	//ESP_LOGD(TAG, "Crosslinker incoming:%s", received_message.str);
 	char *event = str + strlen(me_config.device_name) + 1;
 	int slot_num;
-	if (strstr(event, "player") != NULL)
-	{
+	if (strstr(event, "player") != NULL){
 		slot_num = 0;
 	}else{
 		if (strstr(event, "_") != NULL){
@@ -86,8 +85,10 @@ void crosslinker(char* str)
 				//ESP_LOGD(TAG, "Compare trigger:%s in event:%s", trigger, event);
 				if (strstr(event, trigger) != NULL){
 					ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
+					//ESP_LOGD(TAG, "strlen(me_config.device_name):%d  strlen(action):%d", strlen(me_config.device_name), strlen(action));
 					char output_action[strlen(me_config.device_name) + strlen(action) + 2];
 					sprintf(output_action, "%s/%s", me_config.device_name, action);
+					//ESP_LOGD(TAG, "output_action:%s", output_action);
 					execute(output_action);
 				}
 				else{
@@ -129,7 +130,7 @@ void reporter_task(void){
 					char *topic = strtok_r(tmpString, ":", &payload);
 					mqtt_pub(topic, payload);
 				}
-				if((me_state.osc_socket >= 0)){
+				if((me_state.osc_socket > 0)&&(me_config.oscServerPort>0)){
 					char msg_copy[strlen(tmpStr)+1];
 					if(tmpStr[0]!='/'){
 						strcpy(msg_copy+1, tmpStr);
@@ -174,6 +175,26 @@ void reporter_task(void){
 						//ESP_LOGD(TAG,"send osc OK: \n");
 					}
 				}
+				if((me_state.udp_socket > 0)&&(me_config.udpServerPort>0)){
+					struct sockaddr_in destAddr = {0};
+					destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
+					destAddr.sin_family = 2;
+					destAddr.sin_port = htons(me_config.udpServerPort);
+					int res = sendto(me_state.udp_socket, tmpStr, strlen(tmpStr), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
+					if (res < 0){
+						ESP_LOGE(TAG,"Failed to send osc errno: %d len:%d string:%s\n", errno, len, tmpStr);
+						err++;
+						if(err>10){
+							esp_restart();
+						}
+						return;
+					}else{
+						err--;
+						if(err<0)err=0;
+						//ESP_LOGD(TAG,"send osc OK: \n");
+					}
+				}
+
 			}
 			
 			crosslinker(tmpStr);
@@ -200,11 +221,9 @@ void report(char *msg, int slot_num){
 }
 
 
-
-
-void startup_crosslinks_exec(void){
-	char crosslinks[strlen(me_config.startup_cross_link)];
-	strcpy(crosslinks, me_config.startup_cross_link);
+void crosslinks_process(char *crosslinks_str, char *event){
+	char crosslinks[strlen(crosslinks_str)];
+	strcpy(crosslinks, crosslinks_str);
 	char *crosslink = NULL;
 	char *croslink_rest = crosslinks;
 	uint8_t last_link = 0;
@@ -212,26 +231,35 @@ void startup_crosslinks_exec(void){
 		if (strstr(croslink_rest, ",") != NULL){
 			crosslink = strtok_r(croslink_rest, ",", &croslink_rest);
 			//TO_DO verify cross link len
-		}else{
+		}
+		else{
 			crosslink = croslink_rest;
 			last_link = 1;
 		}
-		if (crosslink != NULL){
+		if (strstr(crosslink, "->") != NULL){
 			//ESP_LOGD(TAG, "Cross_link:%s", crosslink);
 			char *trigger;
 			char *action;
 
 			trigger = strtok_r(crosslink, "->", &action);
-			action = action + 1;
+			if(trigger[0]==' '){
+				trigger = trigger+1;//  cut " " at begin
+			}
+			if(strstr(trigger, "*")!= NULL){
+				trigger = strtok(trigger, ":");
+				//ESP_LOGD(TAG, "Any value trigger:%s ", trigger);
+			}
+			action = action + 1;// cut ":" at begin
 
-			if (strstr(trigger, "startup") != NULL){
-				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", "startup", trigger, action);
+			//ESP_LOGD(TAG, "Compare trigger:%s in event:%s", trigger, event);
+			if (strstr(event, trigger) != NULL){
+				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
 				char output_action[strlen(me_config.device_name) + strlen(action) + 2];
 				sprintf(output_action, "%s/%s", me_config.device_name, action);
 				execute(output_action);
 			}
 			else{
-				// ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
+				//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
 			}
 		}
 		if (last_link == 1){
@@ -240,5 +268,51 @@ void startup_crosslinks_exec(void){
 
 	} while (crosslink != NULL);
 }
+// void startup_crosslinks_exec(void){
+// 	char crosslinks[strlen(me_config.startup_cross_link)];
+// 	strcpy(crosslinks, me_config.startup_cross_link);
+// 	char *crosslink = NULL;
+// 	char *croslink_rest = crosslinks;
+// 	uint8_t last_link = 0;
+// 	do
+// 	{
+// 		if (strstr(croslink_rest, ",") != NULL)
+// 		{
+// 			crosslink = strtok_r(croslink_rest, ",", &croslink_rest);
+// 			// TO_DO verify cross link len
+// 		}
+// 		else
+// 		{
+// 			crosslink = croslink_rest;
+// 			last_link = 1;
+// 		}
+// 		if (crosslink != NULL)
+// 		{
+// 			// ESP_LOGD(TAG, "Cross_link:%s", crosslink);
+// 			char *trigger;
+// 			char *action;
+
+// 			trigger = strtok_r(crosslink, "->", &action);
+// 			action = action + 1;
+
+// 			if (strstr(trigger, "startup") != NULL)
+// 			{
+// 				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", "startup", trigger, action);
+// 				char output_action[strlen(me_config.device_name) + strlen(action) + 2];
+// 				sprintf(output_action, "%s/%s", me_config.device_name, action);
+// 				execute(output_action);
+// 			}
+// 			else
+// 			{
+// 				// ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
+// 			}
+// 		}
+// 		if (last_link == 1)
+// 		{
+// 			break;
+// 		}
+
+// 	} while (crosslink != NULL);
+// }
 
 
