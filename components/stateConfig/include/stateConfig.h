@@ -8,9 +8,9 @@
 #define INIT_OK 0
 #define INIT_FAIL -1
 
-#define NUM_OF_SLOTS 6
+#define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.12";
+static const char* VERSION = "3.20";
 
 
 
@@ -87,6 +87,7 @@ typedef struct {
 	char *gateWay;
 
 	char *device_name;
+	uint8_t USB_debug;
 
 	uint8_t FTP_enable;
 	char *FTP_login;

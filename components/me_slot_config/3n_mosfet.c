@@ -19,7 +19,7 @@
 
 #include "rgbHsv.h"
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+extern uint8_t SLOTS_PIN_MAP[10][4];
 
 uint8_t chennelCounter=0;
 

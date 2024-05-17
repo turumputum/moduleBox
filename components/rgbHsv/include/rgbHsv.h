@@ -1,14 +1,18 @@
 #define DEFAULT 0
 #define FLASH 1
 #define GLITCH 2
+#define SWIPER 3
+#define RAINBOW 4
 
-typedef struct RgbColor {
+typedef struct RgbColor{
+//typedef struct RgbColor{
 	unsigned char r;
 	unsigned char g;
 	unsigned char b;
 } RgbColor;
 
 typedef struct HsvColor {
+//typedef struct RgbColor{
 	unsigned char h;
 	unsigned char s;
 	unsigned char v;
@@ -20,4 +24,4 @@ HsvColor RgbToHsv(RgbColor rgb);
 void parseRGB(RgbColor *color, char* payload);
 uint8_t modeToEnum(char* str);
 
-void checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *currentBright, uint16_t *targetBright, uint16_t fade_increment);
+uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *currentBright, uint16_t *targetBright, uint16_t fade_increment);

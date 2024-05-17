@@ -21,7 +21,7 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+extern uint8_t SLOTS_PIN_MAP[10][4];
 extern adc_channel_t SLOT_ADC_MAP[6];
 extern configuration me_config;
 extern stateStruct me_state;

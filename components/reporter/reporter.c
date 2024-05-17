@@ -26,7 +26,8 @@ int err;
 
 typedef struct
 {
-	char str[MAX_STRING_LENGTH];
+	//char str[MAX_STRING_LENGTH];
+	char *str;
 	int  slot_num;
 } reporter_message_t;
 
@@ -35,22 +36,20 @@ QueueHandle_t mailbox;
 extern configuration me_config;
 extern stateStruct me_state;
 
-void crosslinker(char* str)
-{
-	//ESP_LOGD(TAG, "Crosslinker incoming:%s", received_message.str);
-	char *event = str + strlen(me_config.device_name) + 1;
+void crosslinker(char* str){
+	uint32_t startTick = xTaskGetTickCount();
 	int slot_num;
-	if (strstr(event, "player") != NULL){
-		slot_num = 0;
-	}else{
-		if (strstr(event, "_") != NULL){
-			char *num_index = strstr(event, "_") + 1;
-			slot_num = num_index[0] - '0';
+
+	for(int i=0; i<NUM_OF_SLOTS; i++){
+		if(strstr(str, me_state.trigger_topic_list[i])!=NULL){
+			slot_num = i;
+			break;
 		}else{
 			slot_num = -1;
 		}
 	}
-	//ESP_LOGD(TAG, "event:%s, slot_num=%d", event, slot_num);
+
+	//ESP_LOGD(TAG, "Crosslinker incoming:%s slot_num:%d", str, slot_num);
 
 	if ((slot_num >= 0)&&(strlen(me_config.slot_cross_link[slot_num])>0)){
 		char crosslinks[strlen(me_config.slot_cross_link[slot_num])];
@@ -62,36 +61,61 @@ void crosslinker(char* str)
 			if (strstr(croslink_rest, ",") != NULL){
 				crosslink = strtok_r(croslink_rest, ",", &croslink_rest);
 				//TO_DO verify cross link len
-			}
-			else{
+			}else{
 				crosslink = croslink_rest;
 				last_link = 1;
 			}
+			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s", crosslink, croslink_rest);
 			if (strstr(crosslink, "->") != NULL){
-				//ESP_LOGD(TAG, "Cross_link:%s", crosslink);
-				char *trigger;
-				char *action;
+				
+				char *event=strdup(str);
+				if(strstr(event, me_config.device_name)!=NULL){
+					event = event + strlen(me_config.device_name) + 1;
+				}
 
-				trigger = strtok_r(crosslink, "->", &action);
+				char *trigger=NULL;
+				char *action=NULL;
+				char *payload=NULL;
+
+				char *crosslinkCopy= NULL;
+				crosslinkCopy = strdup(crosslink);
+
+				trigger = strtok_r(crosslinkCopy, "->", &action);
 				if(trigger[0]==' '){
 					trigger = trigger+1;//  cut " " at begin
 				}
-				if(strstr(trigger, "*")!= NULL){
-					trigger = strtok(trigger, ":");
+				if(strstr(trigger, "#")!= NULL){
+					if(strstr(trigger, ":")!= NULL){
+						trigger = strtok(trigger, ":");
+					}
 					//ESP_LOGD(TAG, "Any value trigger:%s ", trigger);
+				}else if(strstr(trigger, "&")!= NULL){
+					if(strstr(trigger, ":")!= NULL){
+						trigger = strtok(trigger, ":");
+					}
+					if(strstr(event, ":")!= NULL){
+						event = strtok_r(event, ":", &payload);
+					}
+					//todo!!!!!!!!!!!!!!!!!! event val to action
+					//ESP_LOGD(TAG, "Lets transfer event payload to action.  event:%s  payload:%s", event, payload);
 				}
 				action = action + 1;// cut ":" at begin
 
 				//ESP_LOGD(TAG, "Compare trigger:%s in event:%s", trigger, event);
+				
 				if (strstr(event, trigger) != NULL){
-					ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
+					//ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
 					//ESP_LOGD(TAG, "strlen(me_config.device_name):%d  strlen(action):%d", strlen(me_config.device_name), strlen(action));
-					char output_action[strlen(me_config.device_name) + strlen(action) + 2];
-					sprintf(output_action, "%s/%s", me_config.device_name, action);
+					char output_action[strlen(me_config.device_name) + strlen(action) + 50];
+					if(payload!=NULL){
+						action = strtok(action, ":");
+						sprintf(output_action, "%s/%s:%s", me_config.device_name, action, payload);
+					}else{
+						sprintf(output_action, "%s/%s", me_config.device_name, action);
+					}
 					//ESP_LOGD(TAG, "output_action:%s", output_action);
 					execute(output_action);
-				}
-				else{
+				}else{
 					//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
 				}
 			}
@@ -101,6 +125,7 @@ void crosslinker(char* str)
 
 		} while (crosslink != NULL);
 	}
+	//ESP_LOGD(TAG, "Crosslink calc time:%ld", xTaskGetTickCount() - startTick);
 }
 
 void reporter_task(void){
@@ -213,10 +238,14 @@ void report(char *msg, int slot_num){
 	//	memset(tmpStr, 0,64);
 	//	sprintf(tmpStr, "monofonMSD\n");
 	reporter_message_t send_message;
-	strcpy(&send_message.str, msg);
+	//strcpy(&send_message.str, msg);
+	send_message.str = strdup(msg);
 	send_message.slot_num = slot_num;
-	xQueueSend(me_state.reporter_queue, &send_message, portMAX_DELAY);
-	//ESP_LOGD(TAG, "Set message to report queue: %d", send_message.slot_num);
+	esp_err_t ret = xQueueSend(me_state.reporter_queue, &send_message, portMAX_DELAY);
+	if(ret!= pdPASS){
+		ESP_LOGE(TAG, "QueueSend error:%d", ret);
+	}
+	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 
 }
 

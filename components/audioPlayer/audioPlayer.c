@@ -31,10 +31,12 @@
 
 #include "board.h"
 
+#include "esp_audio.h"
+
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "AUDIO";
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+extern uint8_t SLOTS_PIN_MAP[10][4];
 
 audio_pipeline_handle_t pipeline;
 audio_board_handle_t board_handle;
@@ -92,9 +94,19 @@ void audio_task(void *arg) {
 
 	uint8_t volume=70;
 	if (strstr(me_config.slot_options[0], "volume")!=NULL){
-		volume = get_option_int_val(slot_num, "volume");
+		float tmp = get_option_float_val(slot_num, "volume");
+		volume = (int)(100*tmp);
 		ESP_LOGD(TAG, "Set volume:%d", volume);
 	}
+
+	int attenuation=0;
+	if (strstr(me_config.slot_options[0], "attenuation")!=NULL){
+		attenuation = 1;
+		if (attenuation != 0) {
+			ESP_LOGD(TAG, "Enable attenuation");
+		}
+	}
+	
 
 	uint16_t play_delay=0;
 	if (strstr(me_config.slot_options[0], "play_delay_ms")!=NULL){
@@ -180,25 +192,46 @@ void audio_task(void *arg) {
 
 	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
+	int att_flag=0;
+	uint8_t att_vol=volume;
+
 	while(1){
 		vTaskDelay(pdMS_TO_TICKS(30));
 		command_message_t cmd;
 		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 0) == pdPASS){
 			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
-			char *cmd_arg = strstr(command, ":")+1;
+			char *cmd_arg = NULL;
+			if(command[0]=='/'){
+				command = command+1;
+			}
+			if(strstr(command, ":")!=NULL){
+				cmd_arg = strstr(command, ":")+1;
+			}else{
+				cmd_arg = strdup("0");
+			}
 			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "play", 4)){//------------------------------
-				trackShift(cmd_arg, &currentTrack);
-				vTaskDelay(pdMS_TO_TICKS(play_delay));
-				if(audioPlay(currentTrack)==ESP_OK){
-					audioSetIndicator(slot_num, 1);
+				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), currentTrack);
+				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(currentTrack==atoi(cmd_arg))){
+					ESP_LOGD(TAG, "skip restart track");
 				}else{
+					trackShift(cmd_arg, &currentTrack);
+					vTaskDelay(pdMS_TO_TICKS(play_delay));
+					if(audioPlay(currentTrack)==ESP_OK){
+						audioSetIndicator(slot_num, 1);
+					}else{
+						audioSetIndicator(slot_num, 0);
+					}
+					setVolume_num(volume);
+				}
+			}else if(!memcmp(command, "stop", 4)){//------------------------------
+				if(attenuation!=0){
+					att_flag=1;
+					//ESP_LOGD(TAG, "attenuation start");
+				}else{
+					audioStop();
 					audioSetIndicator(slot_num, 0);
 				}
-				setVolume_num(volume);
-			}else if(!memcmp(command, "stop", 4)){//------------------------------
-				audioStop();
-				audioSetIndicator(slot_num, 0);
 			}else if(!memcmp(command, "shift", 5)){//------------------------------
 				trackShift(cmd_arg, &currentTrack);
 				if(audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING){
@@ -212,7 +245,19 @@ void audio_task(void *arg) {
 				setVolume_str(cmd_arg);
 			}
 		}
-		
+
+		if(att_flag==1){
+			att_vol-=1;
+			//ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
+			setVolume_num(att_vol);
+			if(att_vol==0){
+				audioStop();
+				audioSetIndicator(slot_num, 0);
+				att_vol = volume;
+				att_flag=0;
+			}
+		}
+
 		//listen audio event
 		audio_event_iface_msg_t msg;
 		esp_err_t ret = audio_event_iface_listen(evt, &msg, 0);
@@ -274,7 +319,10 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	audio_element_info_t music_info = { 0 };
 	audio_element_set_uri(fatfs_stream_reader, me_config.soundTracks[truckNum]);
 	audio_element_getinfo(mp3_decoder, &music_info);
-	ESP_LOGD(TAG, "Received music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d", music_info.sample_rates, music_info.bits, music_info.channels);
+	//audio_element_getdata(mp3_decoder);
+	// music_info.byte_pos=music_info.total_bytes/2;
+	// audio_element_set_byte_pos(mp3_decoder, music_info.byte_pos);
+	ESP_LOGD(TAG, "Received music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d byte_pos:%lld total_bytes:%lld", music_info.sample_rates, music_info.bits, music_info.channels, music_info.byte_pos, music_info.total_bytes);
 	audio_element_setinfo(i2s_stream_writer, &music_info);
 	rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
 
@@ -289,8 +337,6 @@ void audioStop(void) {
 	if ((el_state != AEL_STATE_FINISHED) && (el_state != AEL_STATE_STOPPED)) {
 		audio_pipeline_stop(pipeline);
 		audio_pipeline_wait_for_stop(pipeline);
-
-
 	}
 	ESP_ERROR_CHECK(audio_pipeline_terminate(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_reset_ringbuffer(pipeline));
@@ -319,8 +365,8 @@ void listenListener(void *pvParameters) {
 				
 				vTaskDelay(pdMS_TO_TICKS(10));
 
-				char tmpStr[strlen(me_config.device_name)+strlen("/player_end")+10];
-				sprintf(tmpStr,"%s/player_end:%d", me_config.device_name, me_state.currentTrack);
+				char tmpStr[strlen(me_config.device_name)+strlen("/play_end")+10];
+				sprintf(tmpStr,"%s/play_end:%d", me_config.device_name, me_state.currentTrack);
 				report(tmpStr, 0);
 				
 			}

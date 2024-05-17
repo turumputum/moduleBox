@@ -18,7 +18,7 @@
 #include "me_slot_config.h"
 #include "reporter.h"
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
 extern uint8_t led_segment;

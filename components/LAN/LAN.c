@@ -199,9 +199,19 @@ void wait_lan()
 		uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	 	ESP_ERROR_CHECK( mdns_init() );
-		ESP_ERROR_CHECK( mdns_hostname_set(me_config.device_name) );
+
+
+		ESP_ERROR_CHECK( mdns_hostname_set(me_config.device_name));
+		ESP_ERROR_CHECK( mdns_instance_name_set(me_config.device_name));
+
+		//ESP_ERROR_CHECK( mdns_query_a(me_config.device_name, 2000,  &addr));
+
+
+		//mdns_query_ptr()
 		//initialize service
-		ESP_ERROR_CHECK( mdns_service_add("FTP_server", "_ftp", "_tcp", 21, 0, 0) );
+		char tmp[strlen(me_config.device_name)+strlen("FTP server on")+5];
+		sprintf(tmp,"FTP server on %s",me_config.device_name);
+		ESP_ERROR_CHECK( mdns_service_add(tmp, "_ftp", "_tcp", 21, 0, 0) );
 		ESP_LOGD(TAG, "mDNS task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 		
 	}

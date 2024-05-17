@@ -24,6 +24,9 @@
  */
 #include <stdlib.h>
 #include "tusb.h"
+#include "class/hid/hid_device.h"
+#include "esp_log.h"
+#include "stateConfig.h"
 
 #include "esp_mac.h"
 // Connect by enabling internal pull-up resistor on D+/D-
@@ -33,6 +36,10 @@ void dcd_connect(uint8_t rhport);
 void dcd_disconnect(uint8_t rhport);
 
 int RTC_IRAM_ATTR isMscEnabled();
+
+extern stateStruct me_state;
+extern configuration me_config;
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 /* A combination of interfaces must have a unique product id, since PC will save device driver after the first plug.
  * Same VID/PID with different interface e.g MSC (first), then CDC (later) will possibly cause system error on PC.
@@ -48,6 +55,9 @@ int RTC_IRAM_ATTR isMscEnabled();
 // String Descriptors
 //--------------------------------------------------------------------+
 
+static const char *TAG = "USB";
+
+
 char string_serial [ 23 ] = "0000000000001";
 
 // array of pointer to string descriptors
@@ -59,6 +69,7 @@ char const * string_desc_arr [] =
   string_serial,             // 3: Serials, should use chip ID
   "Monophone Console",        // 4: CDC Interface
   "Monophone Storage",        // 5: MSC Interface
+  "Monophone HID",            // 6: HID Interface
 };
 
 
@@ -109,6 +120,7 @@ enum
   ITF_NUM_CDC = 0,
   ITF_NUM_CDC_DATA,
   ITF_NUM_MSC,
+  ITF_NUM_HID,
   ITF_NUM_TOTAL
 };
 
@@ -140,9 +152,24 @@ enum
   #define EPNUM_MSC_OUT     0x03
   #define EPNUM_MSC_IN      0x83
 
+  #define EPNUM_HID_OUT     0x04
+  #define EPNUM_HID_IN      0x84
+
 #endif
 
-#define CONFIG_TOTAL_LEN_COMBO      (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_MSC_DESC_LEN)
+
+/**
+ * @brief HID report descriptor
+ *
+ * In this example we implement Keyboard + Mouse HID device,
+ * so we must define both report descriptors
+ */
+const uint8_t hid_report_descriptor[] = {
+    TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(HID_ITF_PROTOCOL_KEYBOARD) ),
+};
+
+
+#define CONFIG_TOTAL_LEN_COMBO      (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_MSC_DESC_LEN + TUD_HID_DESC_LEN)
 #define CONFIG_TOTAL_LEN_SINGLE     (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN)
 
 uint8_t const desc_fs_configuration_combo[] =
@@ -155,6 +182,9 @@ uint8_t const desc_fs_configuration_combo[] =
 
   // Interface number, string index, EP Out & EP In address, EP size
   TUD_MSC_DESCRIPTOR(ITF_NUM_MSC, 5, EPNUM_MSC_OUT, EPNUM_MSC_IN, 64),
+
+  // Interface number, string index, boot protocol, report descriptor len, EP In address, size & polling interval
+  TUD_HID_DESCRIPTOR(ITF_NUM_HID, 6, false, sizeof(hid_report_descriptor), EPNUM_HID_IN, 16, 10),
 };
 
 uint8_t const desc_fs_configuration_single[] =
@@ -305,7 +335,49 @@ void reconnectUsb()
     dcd_connect(0);
 }
 
+static char logBuff [ 1024 ];
+
+int _usb_log_vprintf(const char *fmt, va_list args) 
+{
+    if (tud_cdc_connected())
+    {
+      va_list             list_copy;
+
+      va_copy(list_copy, args);
+      int length = vsnprintf(logBuff, sizeof(logBuff) - 1, fmt, list_copy);
+      va_end(list_copy);
+
+        for (int i = 0; i < length;) {
+            int n = length - i;
+            int avail = (int) tud_cdc_write_available();
+            if (n > avail) n = avail;
+            if (n) {
+                int n2 = (int) tud_cdc_write(logBuff + i, (uint32_t)n);
+                tud_task();
+                tud_cdc_write_flush();
+                i += n2;
+            } else {
+                tud_task();
+                tud_cdc_write_flush();
+            }
+        }
+    }
+
+    return vprintf(fmt, args);
+}
+
+void set_usb_debug(void){
+  if(me_config.USB_debug){
+    ESP_LOGD(TAG, "USB debug enabled");
+    esp_log_set_vprintf(&_usb_log_vprintf);
+  }else{
+    ESP_LOGD(TAG, "USB debug disabled");
+  }
+}
+
 void usb_device_task(void *param) {
+  ESP_LOGD(TAG, "Starting USB device task");
+  
 	(void) param;
 
 	// init device stack on configured roothub port
@@ -325,4 +397,26 @@ void usb_device_task(void *param) {
 	}
 }
 
+// Invoked when received GET_REPORT control request
+// Application must fill buffer report's content and return its length.
+// Return zero will cause the stack to STALL request
+uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t* buffer, uint16_t reqlen)
+{
+  (void) instance;
+  (void) report_id;
+  (void) report_type;
+  (void) buffer;
+  (void) reqlen;
+
+  return 0;
+}
+
+
+// Invoked when received GET HID REPORT DESCRIPTOR request
+// Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
+uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
+{
+    // We use only one interface and one HID report descriptor, so we can ignore parameter 'instance'
+    return hid_report_descriptor;
+}
 

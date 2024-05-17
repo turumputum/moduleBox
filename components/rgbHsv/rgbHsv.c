@@ -129,14 +129,18 @@ uint8_t modeToEnum(char* str){
         return FLASH; 
     }else if(strstr(str, "glitch")!=NULL){
         return GLITCH;
+    }else if(strstr(str, "rainbow")!=NULL){
+        return RAINBOW;
     }else{
         return DEFAULT;
     }
 }
 
 
-void checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *currentBright, uint16_t *targetBright, uint16_t fade_increment){
-    if(currentRGB!=targetRGB){
+uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *currentBright, uint16_t *targetBright, uint16_t fade_increment){
+    uint8_t ret = 0;
+	if(currentRGB!=targetRGB){
+		ret=1;
         if(currentRGB->r < targetRGB->r){
             if((targetRGB->r - currentRGB->r) < fade_increment){
                currentRGB->r = targetRGB->r;
@@ -178,9 +182,9 @@ void checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *cu
                 currentRGB->b -= fade_increment;
             }
         }
-
     }
 	if(*currentBright!=*targetBright){
+		ret=1;
         if(*currentBright < *targetBright){
             if((*targetBright - *currentBright) < fade_increment){
               	*currentBright = *targetBright;
@@ -195,4 +199,5 @@ void checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *cu
             }
         }
     }
+	return ret;
 }

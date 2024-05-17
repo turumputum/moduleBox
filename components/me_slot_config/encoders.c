@@ -19,7 +19,9 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+#include "esp_rom_sys.h"
+
+extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
 extern uint8_t led_segment;
@@ -43,17 +45,19 @@ static void IRAM_ATTR rise_handler(void *args)
 {
 	pwmEvent_t *tickVals = (pwmEvent_t *)args;
 	tickVals->tick_rise = esp_timer_get_time();
+
+	//esp_rom_printf("rise_handler\n");
 }
 
 static void IRAM_ATTR fall_handler(void *args)
 {
+	//esp_rom_printf("fall_handler\n");
 	pwmEvent_t *tickVals = (pwmEvent_t *)args;
 
 	tickVals->tick_fall = esp_timer_get_time();
 
 	// if((abs((tickVals->tick_fall-tickVals->tick_rise)-tickVals->dTime)>15)&&((tickVals->tick_fall-tickVals->tick_rise)>2)){
-	if ((tickVals->tick_fall - tickVals->tick_rise) > 2)
-	{
+	if ((tickVals->tick_fall - tickVals->tick_rise) > 2){
 		tickVals->flag = 1;
 		tickVals->dTime = (tickVals->tick_fall - tickVals->tick_rise);
 	}
@@ -62,6 +66,8 @@ static void IRAM_ATTR fall_handler(void *args)
 void encoderPWM_task(void *arg)
 {
 	int slot_num = *(int *)arg;
+
+	char str[255];
 
 	uint8_t rise_pin_num = SLOTS_PIN_MAP[slot_num][0];
 	esp_rom_gpio_pad_select_gpio(rise_pin_num);
@@ -78,6 +84,7 @@ void encoderPWM_task(void *arg)
 	gpio_set_intr_type(fall_pin_num, GPIO_INTR_NEGEDGE);
 
 	pwmEvent_t tickVals;
+	tickVals.flag = 0;
 	gpio_install_isr_service(0);
 	gpio_isr_handler_add(rise_pin_num, rise_handler, (void *)&tickVals);
 	gpio_isr_handler_add(fall_pin_num, fall_handler, (void *)&tickVals);
@@ -85,130 +92,146 @@ void encoderPWM_task(void *arg)
 #define INCREMENTAL 0
 #define ABSOLUTE 1
 	uint8_t encoderMode = INCREMENTAL;
-	if (strstr(me_config.slot_options[slot_num], "absolute") != NULL)
-	{
+	if (strstr(me_config.slot_options[slot_num], "absolute") != NULL){
 		encoderMode = ABSOLUTE;
 		ESP_LOGD(TAG, "pwmEncoder mode: absolute slot:%d", slot_num);
-	}
-	else
-	{
+	}else{
 		ESP_LOGD(TAG, "pwmEncoder mode: incremental slot:%d", slot_num);
+	}
+
+
+	uint8_t float_output = 0;
+	if (strstr(me_config.slot_options[slot_num], "float_output") != NULL){
+		float_output = 1;
+		ESP_LOGD(TAG, "float_output mode: %d", slot_num);
+	}
+
+	uint8_t zero_shift = 0;
+	if (strstr(me_config.slot_options[slot_num], "zero_shift") != NULL){
+		zero_shift = get_option_int_val(slot_num, "zero_shift");
+		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
 	}
 
 #define MIN_VAL 3
 #define MAX_VAL 926
 	int pole = MAX_VAL - MIN_VAL;
 	int num_of_pos;
-	if (strstr(me_config.slot_options[slot_num], "num_of_pos") != NULL)
-	{
+	if (strstr(me_config.slot_options[slot_num], "num_of_pos") != NULL)	{
 		num_of_pos = get_option_int_val(slot_num, "num_of_pos");
-		if (num_of_pos <= 0)
-		{
+		if (num_of_pos <= 0){
 			ESP_LOGD(TAG, "pwmEncoder num_of_pos wrong format, set default slot:%d", slot_num);
 			num_of_pos = 24; // default val
 		}
-	}
-	else
-	{
+	}else{
 		num_of_pos = 24; // default val
 	}
 	ESP_LOGD(TAG, "pwmEncoder num_of_pos:%d slot:%d", num_of_pos, slot_num);
-	int offset;
-	int pos_length = pole / num_of_pos;
-	int64_t raw_val, filtred_val;
+	
+	float pos_length = (float)pole / num_of_pos;
+	uint16_t raw_val;
 	int current_pos, prev_pos = -1;
 
+	if (strstr(me_config.slot_options[slot_num], "encoder_topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "encoder_topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.device_name)+strlen("/encoder_0")+3];
+		sprintf(t_str, "%s/encoder_%d",me_config.device_name, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+	ESP_LOGD(TAG, "Lets wait first interrupt");
 	while (tickVals.flag != 1)
 	{
 		// vTaskDelay(pdMS_TO_TICKS(1)); / portTICK_PERIOD_MS
 		vTaskDelay(1 / portTICK_PERIOD_MS);
 	}
+	
 	raw_val = tickVals.dTime;
+	current_pos = (raw_val / pos_length)+zero_shift;
+	while(current_pos>=num_of_pos){
+		current_pos -= num_of_pos;
+	}
 
-	current_pos = raw_val / pos_length;
-	offset = (raw_val % pos_length) + (pos_length / 2); //
-	ESP_LOGD(TAG, "pwmEncoder first_val:%lld offset:%d pos_legth:%d", raw_val, offset, pos_length);
+	int offset = raw_val;
+	while(offset >= pos_length){
+		offset -= pos_length;
+	}
+	offset = -(offset - (pos_length / 2)); //
+	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, offset, pos_length);
 
-	#define ANTI_DEBOUNCE_INERATIONS 5
+	#define ANTI_DEBOUNCE_INERATIONS 3
 	int anti_deb_mass_index = 0;
 	int val_mass[ANTI_DEBOUNCE_INERATIONS];
 
-	while (1)
-	{
-		vTaskDelay(pdMS_TO_TICKS(10));
-		if (tickVals.flag)
-		{
+	while (1){
+		vTaskDelay(pdMS_TO_TICKS(25));
+		if (tickVals.flag){
 			raw_val = tickVals.dTime + offset;
-
-			val_mass[anti_deb_mass_index] = raw_val;
-			anti_deb_mass_index++;
-			if (anti_deb_mass_index == ANTI_DEBOUNCE_INERATIONS)
-			{
-				anti_deb_mass_index = 0;
-			}
-			int sum = 0;
-			for (int i = 1; i < ANTI_DEBOUNCE_INERATIONS; i++)
-			{
-				if (abs(val_mass[i] - val_mass[i - 1]) < 3)
-				{
-					sum++;
-				}
-			}
-			if (sum >= (ANTI_DEBOUNCE_INERATIONS - 1))
-			{
-				current_pos = raw_val / pos_length - 1;
-				if (current_pos >= num_of_pos)
-				{
-					current_pos = 0;
-				}
-			}
-
-			if (current_pos != prev_pos)
-			{
-				// printf("val_mas: %d %d %d %d %d \r\n",val_mass[0],val_mass[1],val_mass[2],val_mass[3],val_mass[4]);
-				//printf("Current_pos: %d  raw_val:%d sum_val:%d\r\n", current_pos, (int)raw_val, sum);
-				int str_len = strlen(me_config.device_name) + strlen("/encoder_") + 8;
-				char *str = (char *)malloc(str_len * sizeof(char));
-				char dir[20];
-				if (encoderMode == ABSOLUTE)
-				{
-					sprintf(str, "%s/encoder_%d:%d", me_config.device_name, slot_num, current_pos);
-				}
-				else
-				{
-					int delta = abs(current_pos - prev_pos);
-					if (delta < (num_of_pos / 2))
-					{
-						if (current_pos < prev_pos)
-						{
-							sprintf(dir, "+%d", delta);
-						}
-						else
-						{
-							sprintf(dir, "-%d", delta);
-						}
-					}
-					else
-					{
-						delta = num_of_pos - delta;
-						if (current_pos < prev_pos)
-						{
-							sprintf(dir, "-%d", delta);
-						}
-						else
-						{
-							sprintf(dir, "+%d", delta);
-						}
-					}
-
-					sprintf(str, "%s/encoder_%d:%s", me_config.device_name, slot_num, dir);
-				}
-				report(str, slot_num);
-				free(str);
-				prev_pos = current_pos;
-			}
-			tickVals.flag = 0;
+		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
+			raw_val = 0;
 		}
+
+		//raw_val = raw_val + offset;
+
+		while(raw_val > pole){
+			raw_val -= pole;
+		}
+
+		val_mass[anti_deb_mass_index] = raw_val;
+		anti_deb_mass_index++;
+		if (anti_deb_mass_index == ANTI_DEBOUNCE_INERATIONS){
+			anti_deb_mass_index = 0;
+		}
+		int sum = 0;
+		for (int i = 1; i < ANTI_DEBOUNCE_INERATIONS; i++){
+			if (abs(val_mass[i] - val_mass[i - 1]) < 3)	{
+				sum++;
+			}
+		}
+		if (sum >= (ANTI_DEBOUNCE_INERATIONS - 1)){
+			current_pos = (raw_val / pos_length)+zero_shift;
+			while(current_pos>=num_of_pos){
+				current_pos -= num_of_pos;
+			}
+		}
+
+		//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);
+
+		if (current_pos != prev_pos){
+			//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);
+			if (encoderMode == ABSOLUTE){
+				if(float_output){
+					sprintf(str, "%f", (float)current_pos/(num_of_pos-1));
+				}else{
+					sprintf(str, "%d", current_pos);
+				}
+			}else if (encoderMode == INCREMENTAL){
+				int delta = abs(current_pos - prev_pos);
+				if (delta < (num_of_pos / 2)){
+					if (current_pos < prev_pos)	{
+						sprintf(str, "-%d", delta);
+					}else{
+						sprintf(str, "+%d", delta);
+					}
+				}else{
+					delta = num_of_pos - delta;
+					if (current_pos < prev_pos)	{
+						sprintf(str, "+%d", delta);
+					}else{
+						sprintf(str, "-%d", delta);
+					}
+				}
+				//sprintf(str, "%s/encoder_%d:%s", me_config.device_name, slot_num, dir);
+			}
+			report(str, slot_num);
+			prev_pos = current_pos;
+		}
+		tickVals.flag = 0;
+		
 	}
 }
 

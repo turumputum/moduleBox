@@ -31,10 +31,28 @@ static int handler(void *user, const char *section, const char *name, const char
 	configuration *pconfig = (configuration*) user;
 
 #define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
+	for(int i=0; i<NUM_OF_SLOTS; i++ ){
+		//char str[10];
+		//sprintf(str, "SLOT_%d", i);
+		char str[]="SLOT_0";
+		str[5]='0'+i;
+		if (MATCH(str, "mode")) {
+			pconfig->slot_mode[i] = strdup(value);
+			return 1;
+		} else if (MATCH(str, "options")) {
+			pconfig->slot_options[i] = strdup(value);
+			return 1;
+		} else if (MATCH(str, "cross_link")) {
+			pconfig->slot_cross_link[i] = strdup(value);
+			return 1;
+		}
+	}
 
 	if (MATCH("SYSTEM", "device_name")) {
 		pconfig->device_name = strdup(value);
-	} else if (MATCH("LAN", "LAN_enable")) {
+	} else if (MATCH("SYSTEM", "USB_debug")) {
+		pconfig->USB_debug = atoi(value);
+	}  else if (MATCH("LAN", "LAN_enable")) {
 		pconfig->LAN_enable = atoi(value);
 	} else if (MATCH("LAN", "ipAdress")) {
 		pconfig->ipAdress = strdup(value);
@@ -66,44 +84,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->oscServerPort = atoi(value);
 	} else if (MATCH("OSC", "oscMyPort")) {
 		pconfig->oscMyPort = atoi(value);
-	}  else if (MATCH("MQTT", "mqttBrokerAdress")) {
+	} else if (MATCH("MQTT", "mqttBrokerAdress")) {
 		pconfig->mqttBrokerAdress = strdup(value);
-	} else if (MATCH("SLOT_0", "mode")) {
-		pconfig->slot_mode[0] = strdup(value);
-	} else if (MATCH("SLOT_0", "options")) {
-		pconfig->slot_options[0] = strdup(value);
-	} else if (MATCH("SLOT_0", "cross_link")) {
-		pconfig->slot_cross_link[0] = strdup(value);
-	} else if (MATCH("SLOT_1", "mode")) {
-		pconfig->slot_mode[1] = strdup(value);
-	} else if (MATCH("SLOT_1", "options")) {
-		pconfig->slot_options[1] = strdup(value);
-	} else if (MATCH("SLOT_1", "cross_link")) {
-		pconfig->slot_cross_link[1] = strdup(value);
-	} else if (MATCH("SLOT_2", "mode")) {
-		pconfig->slot_mode[2] = strdup(value);
-	} else if (MATCH("SLOT_2", "options")) {
-		pconfig->slot_options[2] = strdup(value);
-	} else if (MATCH("SLOT_2", "cross_link")) {
-		pconfig->slot_cross_link[2] = strdup(value);
-	} else if (MATCH("SLOT_3", "mode")) {
-		pconfig->slot_mode[3] = strdup(value);
-	} else if (MATCH("SLOT_3", "options")) {
-		pconfig->slot_options[3] = strdup(value);
-	} else if (MATCH("SLOT_3", "cross_link")) {
-		pconfig->slot_cross_link[3] = strdup(value);
-	} else if (MATCH("SLOT_4", "mode")) {
-		pconfig->slot_mode[4] = strdup(value);
-	} else if (MATCH("SLOT_4", "options")) {
-		pconfig->slot_options[4] = strdup(value);
-	} else if (MATCH("SLOT_4", "cross_link")) {
-		pconfig->slot_cross_link[4] = strdup(value);
-	} else if (MATCH("SLOT_5", "mode")) {
-		pconfig->slot_mode[5] = strdup(value);
-	} else if (MATCH("SLOT_5", "options")) {
-		pconfig->slot_options[5] = strdup(value);
-	} else if (MATCH("SLOT_5", "cross_link")) {
-		pconfig->slot_cross_link[5] = strdup(value);
 	} else if (MATCH("STARTUP", "cross_link")) {
 		pconfig->startup_cross_link = strdup(value);
 	}else {
@@ -137,7 +119,10 @@ void load_Default_Config(void) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	me_config.device_name = strdup("module_box");
+	me_config.USB_debug = 0;
 
+	me_config.LAN_enable = 0;
+	
 	me_config.WIFI_mode = 0; // disable
 
 	me_config.WIFI_ssid = strdup("");
@@ -175,6 +160,8 @@ void load_Default_Config(void) {
 
 	for (int i = 0; i < NUM_OF_SLOTS; i++) {
 		me_state.slot_task[i]=NULL;
+		me_state.trigger_topic_list[i]=strdup("none");
+		me_state.action_topic_list[i]=strdup("none");
 
 		char *str_0 = calloc(1, sizeof(char));
 		me_config.slot_mode[i] = str_0;
@@ -231,7 +218,7 @@ int saveConfig(void) {
 		return ESP_FAIL;
 	}
 
-	sprintf(tmp, ";config file Monofon. Ver:%s \r\n", VERSION);
+	sprintf(tmp, "         ;config file moduleBox. Ver:%s \r\n", VERSION);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
@@ -261,18 +248,6 @@ int saveConfig(void) {
 	sprintf(tmp, "gateWay = %s \r\n", me_config.gateWay);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "\r\n[MDNS] \r\n");
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "\r\n[FTP] \r\n");
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "FTP_login = %s \r\n", me_config.FTP_login);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "FTP_pass = %s \r\n", me_config.FTP_pass);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "\r\n[UDP] \r\n");
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
@@ -285,9 +260,9 @@ int saveConfig(void) {
 	sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udp_cross_link = %s \r\n", me_config.udp_cross_link);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
+	// sprintf(tmp, "udp_cross_link = %s \r\n", me_config.udp_cross_link);
+	// fprintf(configFile, tmp);
+	// memset(tmp, 0, strlen(tmp));
 
 
 	sprintf(tmp, "\r\n[OSC] \r\n");
@@ -311,7 +286,7 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
-	for (int i = 0; i < NUM_OF_SLOTS; i++) {
+	for (int i = 0; i < 6; i++) {
 		sprintf(tmp, "\r\n[SLOT_%d] \r\n", i);
 		fprintf(configFile, tmp);
 		memset(tmp, 0, strlen(tmp));
@@ -327,36 +302,7 @@ int saveConfig(void) {
 		memset(tmp, 0, strlen(tmp));
 	}
 
-	sprintf(tmp, "\r\n[STARTUP] \r\n");
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "cross_link = %s \r\n", "empty");
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-
-	// sprintf(tmp, "\r\n;Standard module_mode: button_optorelay, 3n_mosfet, audio_player_mono \r\n");
 	fprintf(configFile, help);
-	// memset(tmp, 0, strlen(tmp));
-	// sprintf(tmp, "\r\n;Button options: button_inverse\r\n");
-	// fprintf(configFile, tmp);
-	// memset(tmp, 0, strlen(tmp));
-	// sprintf(tmp, ";Button trigger: [device_name]/button_[num_of_slot]:val \r\n");
-	// fprintf(configFile, tmp);
-	// memset(tmp, 0, strlen(tmp));
-	// sprintf(tmp, "\r\n;Optorelay options: optorelay_default_high,optorelay_inverse\r\n");
-	// fprintf(configFile, tmp);
-	// memset(tmp, 0, strlen(tmp));
-	// sprintf(tmp, ";Optorelay action: [device_name]/optorelay_[num_of_slot]:val \r\n");
-	// fprintf(configFile, tmp);
-	// memset(tmp, 0, strlen(tmp));
-
-	// sprintf(tmp, ";Special module_mode for SLOT_0: audio_player_mono \r\n");
-	// 			fprintf(configFile, tmp);
-	// 			memset(tmp, 0, strlen(tmp));
-	// 			sprintf(tmp, ";Special module_options: volume:val, delay:val\r\n");
-	// 			fprintf(configFile, tmp);
-	// 			memset(tmp, 0, strlen(tmp));
-
 
 	vTaskDelay(pdMS_TO_TICKS(100));
 

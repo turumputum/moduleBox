@@ -7,14 +7,16 @@ idf_component_register(SRCS
                         "in_out.c" 
                         "stepper.c" 
                         "analog.c" 
-                        "rfid.c" 
+                        
                         "encoders.c" 
                         "me_slot_config.c" 
                         "executor.c" 
                         "3n_mosfet.c" 
                         "TOFs.c" 
-                        "tachometer.c" 
+                        "tachometer.c"
+                        "virtual_slots.c"
+                        "dwin_uart.c"
                     INCLUDE_DIRS "include"
-                    REQUIRES accelStepper stateConfig reporter audioPlayer reporter esp32-rotary-encoder driver rgbHsv)
+                    REQUIRES accelStepper stateConfig reporter audioPlayer reporter esp32-rotary-encoder driver rgbHsv myHID)
 
  

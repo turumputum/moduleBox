@@ -26,6 +26,7 @@
 #include "periph_adc_button.h"
 #include "board.h"
 
+#include "hlk_sens.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,14 +71,20 @@
 #include "rfid.h"
 #include "in_out.h"
 
+
 #include "myCDC.h"
 
 #include "p9813.h"
 
 #include "3n_mosfet.h"
+#include "max7219_task.h"
+#include "swiper.h"
+#include "smartLed.h"
+#include "someUnique.h"
+#include "disp_hd44780.h"
 
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+extern uint8_t SLOTS_PIN_MAP[10][4];
 
 extern void board_init(void);
 
@@ -110,6 +117,7 @@ extern uint8_t FLAG_PC_EJECT;
 extern const char* VERSION;
 
 extern void usb_device_task(void *param);
+extern void set_usb_debug(void);
 
 RTC_NOINIT_ATTR int RTC_flagMscEnabled;
 
@@ -233,8 +241,18 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("myCDC", level);
 	esp_log_level_set("SENSOR_2CH", level);
 	esp_log_level_set("TENZO_BUTTON", level);
+	esp_log_level_set("HID_BUTTON", level);
+	esp_log_level_set("USB", level);
 	esp_log_level_set("FLYWHEEL", level);
-}
+	esp_log_level_set("VIRTUAL_SLOTS", level);
+	esp_log_level_set("myHID", level);
+	esp_log_level_set("DWIN_UART", level);
+	esp_log_level_set("MAX7219", level);
+	esp_log_level_set("SWIPER", level);
+	esp_log_level_set("SOME_UNIQUE", level);
+	esp_log_level_set("DISP_HD44780", level);
+	esp_log_level_set("HLK_SENS", level);
+	}
 
 
 
@@ -386,9 +404,17 @@ void app_main(void)
 		writeErrorTxt(tmpString);
 	}
 	
+	set_usb_debug();
 
 	me_state.slot_init_res = init_slots();
+	//start_hlk2420_task(2);
+	//start_buttonMatrix4_task(0);
+	//start_disp_hd44780_task(2);
+	//start_max7219_task(0);
+	//start_swiper_task(0);
+	//start_pn532Uart_task(0);
 	
+	//start_dwinUart_task(1);
 	//debugTopicLists();
 	
 	if (strstr(me_config.slot_mode[0], "audio_player") != NULL) {
@@ -408,7 +434,7 @@ void app_main(void)
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 
 	//testStepper();"startup"
-	crosslinks_process(me_config.startup_cross_link,"startup");
+	//crosslinks_process(me_config.startup_cross_link,"startup");
 	//startup_crosslinks_exec();
 	
 	while (1)

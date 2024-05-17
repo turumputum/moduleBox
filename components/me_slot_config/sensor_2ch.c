@@ -18,7 +18,7 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 
-extern uint8_t SLOTS_PIN_MAP[6][4];
+extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
 
@@ -75,10 +75,10 @@ void sensors_task(void *arg){
 		ch_2_inverse=1;
 	}
 
-	int debounce_delay = 0;
-	if (strstr(me_config.slot_options[slot_num], "sens_debounce_delay") != NULL) {
-		debounce_delay = get_option_int_val(slot_num, "sens_debounce_delay");
-		ESP_LOGD(TAG, "Set debounce_delay:%d for slot:%d",debounce_delay, slot_num);
+	int debounce_gap = 0;
+	if (strstr(me_config.slot_options[slot_num], "sens_debounce_gap") != NULL) {
+		debounce_gap = get_option_int_val(slot_num, "sens_debounce_gap");
+		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
 
     int mode = INDEPENDENT_MODE;
@@ -124,8 +124,8 @@ void sensors_task(void *arg){
 				sens_2_state=ch_2_inverse ? 1 : 0;
 			}
 
-			if(debounce_delay!=0){
-				if((xTaskGetTickCount()-tick)<debounce_delay){
+			if(debounce_gap!=0){
+				if((xTaskGetTickCount()-tick)<debounce_gap){
 					ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
 					goto exit;
 				}
