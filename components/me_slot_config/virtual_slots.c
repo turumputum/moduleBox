@@ -208,7 +208,7 @@ void timer_task(void *arg) {
 		vTaskDelay(pdMS_TO_TICKS(10));
         uint8_t tmp;
         if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
-			report("timerEnd", slot_num);
+			report("/timerEnd:1", slot_num);
             //ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
         }
         command_message_t cmd;
@@ -259,4 +259,85 @@ void start_timer_task(int slot_num) {
 	sprintf(tmpString, "timer_task_%d", slot_num);
 	xTaskCreatePinnedToCore(timer_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "timer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+//---------------------------------WATCHDOG---------------------------------
+static void IRAM_ATTR watchdog_isr_handler(void* arg){
+    int slot_num = (int) arg;
+	uint8_t tmp=1;
+    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+}
+
+void watchdog_task(void *arg) {
+    int slot_num = *(int*) arg;
+
+    me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
+    me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+
+    uint32_t time = 3600; // in sek
+    if (strstr(me_config.slot_options[slot_num], "time") != NULL) {
+		time = get_option_int_val(slot_num, "time");
+	}
+    ESP_LOGD(TAG, "Set time :%ld for slot:%d", time, slot_num);
+
+    char t_str[strlen(me_config.device_name)+strlen("/watchdog_0")+3];
+    sprintf(t_str, "%s/watchdog_%d",me_config.device_name, slot_num);
+    me_state.trigger_topic_list[slot_num]=strdup(t_str);
+    me_state.action_topic_list[slot_num]=strdup(t_str);
+    ESP_LOGD(TAG, "Standart topic:%s", me_state.trigger_topic_list[slot_num]);
+
+    int strl = strlen(me_state.action_topic_list[slot_num])+strlen("restart")+1;
+    char tmpstr[strl];
+    sprintf(tmpstr, "%s/%s", me_state.action_topic_list[slot_num], "restart");
+    xQueueSend(me_state.command_queue[slot_num], &tmpstr, NULL);
+    
+    esp_timer_handle_t virtual_timer=NULL;
+    
+    while(1){
+		vTaskDelay(pdMS_TO_TICKS(10));
+        uint8_t tmp;
+        if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
+			//report("/timerEnd:1", slot_num);
+            ESP_LOGD(TAG,"%ld :: watchdog reset",xTaskGetTickCount());
+            vTaskDelay(1000);
+            esp_restart();
+        }
+        command_message_t cmd;
+		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 0) == pdPASS){
+			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
+			char *cmd_arg = NULL;
+			if(strstr(command, ":")!=NULL){
+				cmd_arg = strstr(command, ":")+1;
+			}else{
+				cmd_arg = strdup("0");
+			}
+			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+			if(!memcmp(command, "restart", 7)){ 
+                
+                if(virtual_timer!=NULL){
+                    esp_timer_stop(virtual_timer);
+                }
+
+                const esp_timer_create_args_t delay_timer_args = {
+                    .callback = &watchdog_isr_handler,
+                    .arg = (void*)slot_num,
+                    .name = "watchdog_timer"
+                };
+                esp_timer_create(&delay_timer_args, &virtual_timer);
+                esp_timer_start_once(virtual_timer, time*1000*1000);  
+                ESP_LOGD(TAG, "Start watchdog on time:%ld",time);
+            }
+        }
+    }
+
+}
+
+void start_watchdog_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "watchdog_task_%d", slot_num);
+	xTaskCreatePinnedToCore(watchdog_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+    ESP_LOGD(TAG, "watchdog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

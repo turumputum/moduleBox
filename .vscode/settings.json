@@ -4,7 +4,7 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.portWin": "COM175",
+    "idf.portWin": "COM12",
     "files.associations": {
         "esp_eth_mac.h": "c",
         "esp_efuse.h": "c",

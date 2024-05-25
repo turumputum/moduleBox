@@ -10,7 +10,7 @@
 
 #define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.20";
+static const char* VERSION = "3.21";
 
 
 

@@ -116,6 +116,8 @@ int init_slots(void){
 			start_counter_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "timer", 3)){
 			start_timer_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "watchdog", 3)){
+			start_watchdog_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "disp_hd44780", 12)){
 			start_disp_hd44780_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "disp_max7219", 12)){

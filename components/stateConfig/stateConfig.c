@@ -218,7 +218,7 @@ int saveConfig(void) {
 		return ESP_FAIL;
 	}
 
-	sprintf(tmp, "         ;config file moduleBox. Ver:%s \r\n", VERSION);
+	sprintf(tmp, ";config file moduleBox. Ver:%s \r\n", VERSION);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
