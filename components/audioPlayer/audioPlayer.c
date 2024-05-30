@@ -144,9 +144,9 @@ void audio_task(void *arg) {
 
 	//ESP_LOGD(TAG, "Create i2s stream to write data to codec chip");
 	i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
-	i2s_cfg.i2s_config.sample_rate = 48000;
-	i2s_cfg.i2s_config.dma_buf_count = 3; //3
-	i2s_cfg.i2s_config.dma_buf_len = 300; //300
+	// i2s_cfg.i2s_config.sample_rate = 48000;
+	// i2s_cfg.i2s_config.dma_buf_count = 3; //3
+	// i2s_cfg.i2s_config.dma_buf_len = 300; //300
 	i2s_cfg.type = AUDIO_STREAM_WRITER;
 	i2s_cfg.task_prio = 23; //23
 	i2s_cfg.use_alc = true;
@@ -194,11 +194,18 @@ void audio_task(void *arg) {
 
 	int att_flag=0;
 	uint8_t att_vol=volume;
+	command_message_t cmd;
+
+	char reportStr[strlen("/endOfTrack")+10];
+	//listen audio event
+	audio_event_iface_msg_t msg;
+	esp_err_t ret;
+	audio_element_state_t el_state;
 
 	while(1){
-		vTaskDelay(pdMS_TO_TICKS(30));
-		command_message_t cmd;
-		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 0) == pdPASS){
+		//vTaskDelay(pdMS_TO_TICKS(30));
+		
+		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, pdMS_TO_TICKS(30)) == pdPASS){
 			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
 			char *cmd_arg = NULL;
 			if(command[0]=='/'){
@@ -258,19 +265,28 @@ void audio_task(void *arg) {
 			}
 		}
 
-		//listen audio event
-		audio_event_iface_msg_t msg;
-		esp_err_t ret = audio_event_iface_listen(evt, &msg, 0);
+		//listen audio event mp3_decoder
+		el_state = audio_element_get_state(mp3_decoder);
+		if(el_state == AEL_STATE_ERROR){
+			ESP_LOGE(TAG, "mp3_decoder Error state: %d", el_state);
+			esp_restart();
+		}
+
+		//listen audio event i2s_stream_writer
+		ret = audio_event_iface_listen(evt, &msg, 0);
+		el_state = audio_element_get_state(i2s_stream_writer);
+		// if(ret == ESP_OK){
+		// 	ESP_LOGD(TAG, "audio_Event: %d el_state: %d", msg.cmd, el_state);
+		// }
 		if (msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
-			audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
 			if (el_state == AEL_STATE_FINISHED) {
 				audioStop();
 				audioSetIndicator(slot_num, 0);
-				
+				//ESP_LOGD(TAG, "endOfTrack EVENT !!!!!!!!!!!!!!!!!");
 				vTaskDelay(pdMS_TO_TICKS(10));
-				char tmpStr[strlen("/endOfTrack")+10];
-				sprintf(tmpStr,"/endOfTrack:%d", me_state.currentTrack);
-				report(tmpStr, slot_num);
+				memset(reportStr, 0, strlen(reportStr));
+				sprintf(reportStr,"/endOfTrack:%d", me_state.currentTrack);
+				report(reportStr, slot_num);
 			}
 		}
 	}
@@ -352,26 +368,23 @@ void audioPause(void) {
 	audio_pipeline_pause(pipeline);
 }
 
-void listenListener(void *pvParameters) {
-	while (1) {
-		
-
-		audio_event_iface_msg_t msg;
-		esp_err_t ret = audio_event_iface_listen(evt, &msg, portMAX_DELAY);
-		if (msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
-			audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
-			if (el_state == AEL_STATE_FINISHED) {
-				audioStop();
+// void listenListener(void *pvParameters) {
+// 	while (1) {
+// 		audio_event_iface_msg_t msg;
+// 		esp_err_t ret = audio_event_iface_listen(evt, &msg, portMAX_DELAY);
+// 		if (msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
+// 			audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
+// 			if (el_state == AEL_STATE_FINISHED) {
+// 				audioStop();
 				
-				vTaskDelay(pdMS_TO_TICKS(10));
-
-				char tmpStr[strlen(me_config.device_name)+strlen("/play_end")+10];
-				sprintf(tmpStr,"%s/play_end:%d", me_config.device_name, me_state.currentTrack);
-				report(tmpStr, 0);
+// 				vTaskDelay(pdMS_TO_TICKS(10));
+// 				char tmpStr[strlen(me_config.device_name)+strlen("/play_end")+10];
+// 				sprintf(tmpStr,"%s/play_end:%d", me_config.device_name, me_state.currentTrack);
+// 				report(tmpStr, 0);
 				
-			}
-		}
+// 			}
+// 		}
 
-	}
+// 	}
 
-}
+// }

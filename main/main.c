@@ -366,7 +366,7 @@ void app_main(void)
 
 	
 	xTaskCreatePinnedToCore(executer_task, "executer_task",  1024 * 4,NULL ,configMAX_PRIORITIES - 12, NULL, 0);
-	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, NULL,0);
+	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL,0);
 	//xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, usb_device_stack, &usb_device_taskdef);
 	
 
@@ -432,7 +432,7 @@ void app_main(void)
 	}
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
-
+	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
 	//testStepper();"startup"
 	//crosslinks_process(me_config.startup_cross_link,"startup");
 	//startup_crosslinks_exec();
@@ -457,7 +457,7 @@ void app_main(void)
         // }
         // vTaskDelay(pdMS_TO_TICKS(1000));
 
-		vTaskDelay(pdMS_TO_TICKS(10));
+		vTaskDelay(pdMS_TO_TICKS(1000));
 
 	}
 

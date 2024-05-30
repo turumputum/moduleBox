@@ -47,6 +47,10 @@
 #include <map>
 #include <random>
 
+#ifdef HAVE_LIBEV
+#  include <ev.h>
+#endif // HAVE_LIBEV
+
 #include "url-parser/url_parser.h"
 
 #include "template.h"
@@ -695,6 +699,17 @@ template <typename Clock, typename Rep> Rep clock_precision() {
   return duration.count();
 }
 
+#ifdef HAVE_LIBEV
+template <typename Duration = std::chrono::steady_clock::duration>
+Duration duration_from(ev_tstamp d) {
+  return std::chrono::duration_cast<Duration>(std::chrono::duration<double>(d));
+}
+
+template <typename Duration> ev_tstamp ev_tstamp_from(const Duration &d) {
+  return std::chrono::duration<double>(d).count();
+}
+#endif // HAVE_LIBEV
+
 int make_socket_closeonexec(int fd);
 int make_socket_nonblocking(int fd);
 int make_socket_nodelay(int fd);
@@ -942,9 +957,11 @@ StringRef rstrip(BlockAllocator &balloc, const StringRef &s);
 #ifdef ENABLE_HTTP3
 int msghdr_get_local_addr(Address &dest, msghdr *msg, int family);
 
-unsigned int msghdr_get_ecn(msghdr *msg, int family);
+uint8_t msghdr_get_ecn(msghdr *msg, int family);
 
-int fd_set_send_ecn(int fd, int family, unsigned int ecn);
+// msghdr_get_udp_gro returns UDP_GRO value from |msg|.  If UDP_GRO is
+// not found, or UDP_GRO is not supported, this function returns 0.
+size_t msghdr_get_udp_gro(msghdr *msg);
 #endif // ENABLE_HTTP3
 
 } // namespace util

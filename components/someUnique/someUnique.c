@@ -9,12 +9,13 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <driver/uart.h>
+#include "esp_vfs.h"
+#include "esp_vfs_fat.h"
 
 #include "executor.h"
 #include "reporter.h"
 #include "stateConfig.h"
-
-
 #include "me_slot_config.h"
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -125,4 +126,100 @@ void start_buttonMatrix4_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
     xTaskCreate(buttonMatrix4_task, "buttonMatrix4_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
     ESP_LOGD(TAG, "buttonMatrix4_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+
+//---------------------UART logger----------------
+static int uart_read(uint8_t UART_NUM, uint8_t *data, const int length)
+{
+    int len_read = 0;
+    while (len_read < length)
+    {
+        int bytes_available = uart_read_bytes(UART_NUM, data + len_read, length - len_read, 20 / portTICK_PERIOD_MS);
+        if (bytes_available <= 0)
+            break;
+        len_read += bytes_available;
+    }
+    return len_read;
+}
+
+void uartLogger_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    int uart_num = UART_NUM_1; // Начинаем с минимального порта
+    while (uart_is_driver_installed(uart_num)) {
+        uart_num++;
+        if (uart_num >= UART_NUM_MAX) {
+            ESP_LOGE(TAG, "slot num:%d ___ No free UART driver", slot_num);
+            vTaskDelete(NULL);
+        }
+    }
+
+    uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][1];
+
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    uart_param_config (uart_num, &uart_config);
+    gpio_reset_pin (tx_pin);
+    gpio_reset_pin (rx_pin);
+    uart_set_pin (uart_num, tx_pin, rx_pin, -1, -1);
+    uart_is_driver_installed (uart_num);
+    uart_driver_install (uart_num, 255, 255, 0, NULL, 0);
+    
+    #define BUF_SIZE 1024
+    //char data[BUF_SIZE];
+
+    // Открытие файла для записи
+    char file_name[32];
+    int file_index = 0;
+    FILE *file;
+    do {
+        snprintf(file_name, sizeof(file_name), "/sdcard/log_%d.txt", file_index);
+        file = fopen(file_name, "r");
+        if (file != NULL) {
+            fclose(file);
+            file_index++;
+        }
+    } while (file != NULL);
+
+    
+
+    uint8_t data[BUF_SIZE];
+    int len_read;
+
+    ESP_LOGD(TAG, "start logging to file: %s", file_name);
+
+    while (1) {
+        len_read = uart_read(uart_num, data, BUF_SIZE);
+        if (len_read > 0) {
+            file = fopen(file_name, "a");
+            if (file == NULL) {
+                ESP_LOGE("app_main", "Failed to open file for writing");
+                return;
+            }
+            fwrite(data, 1, len_read, file); // Запись данных в файл
+            //fflush(file);                    // Принудительная запись данных на диск
+            //fprintf(file, "%s", data);
+            fclose(file);
+            //ESP_LOGD(TAG, "write to file: %s", data);
+        }
+    }
+}
+
+void start_uartLogger_task(int slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "uartLogger_task_%d", slot_num);
+	xTaskCreatePinnedToCore(uartLogger_task, tmpString, 1024*5, &t_slot_num,12, NULL, 1);
+
+	ESP_LOGD(TAG,"uartLogger_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

@@ -24,13 +24,13 @@
 
 cmake_minimum_required(VERSION 3.0)
 # XXX using 1.8.90 instead of 1.9.0-DEV
-project(nghttp2 VERSION 1.52.0)
+project(nghttp2 VERSION 1.58.0)
 
 # See versioning rule:
 #  https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-set(LT_CURRENT  38)
+set(LT_CURRENT  39)
 set(LT_REVISION 1)
-set(LT_AGE      24)
+set(LT_AGE      25)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 include(Version)
@@ -61,9 +61,9 @@ find_package(Libev 4.11)
 find_package(Libcares 1.7.5)
 find_package(ZLIB 1.2.3)
 find_package(Libngtcp2 0.0.0)
-find_package(Libngtcp2_crypto_openssl 0.0.0)
-if(LIBNGTCP2_CRYPTO_OPENSSL_FOUND)
-  set(HAVE_LIBNGTCP2_CRYPTO_OPENSSL 1)
+find_package(Libngtcp2_crypto_quictls 0.0.0)
+if(LIBNGTCP2_CRYPTO_QUICTLS_FOUND)
+  set(HAVE_LIBNGTCP2_CRYPTO_QUICTLS 1)
 endif()
 find_package(Libnghttp3 0.0.0)
 if(WITH_LIBBPF)
@@ -238,9 +238,9 @@ if(ENABLE_APP AND NOT (ZLIB_FOUND AND OPENSSL_FOUND AND LIBEV_FOUND))
   message(FATAL_ERROR "Applications were requested (ENABLE_APP=1) but dependencies are not met.")
 endif()
 
-# HTTP/3 requires quictls/openssl, libngtcp2, libngtcp2_crypto_openssl
+# HTTP/3 requires quictls/openssl, libngtcp2, libngtcp2_crypto_quictls
 # and libnghttp3.
-if(ENABLE_HTTP3 AND NOT (HAVE_SSL_IS_QUIC AND LIBNGTCP2_FOUND AND LIBNGTCP2_CRYPTO_OPENSSL_FOUND AND LIBNGHTTP3_FOUND))
+if(ENABLE_HTTP3 AND NOT (HAVE_SSL_IS_QUIC AND LIBNGTCP2_FOUND AND LIBNGTCP2_CRYPTO_QUICTLS_FOUND AND LIBNGHTTP3_FOUND))
   message(FATAL_ERROR "HTTP/3 was requested (ENABLE_HTTP3=1) but dependencies are not met.")
 endif()
 
@@ -273,9 +273,11 @@ check_include_file("inttypes.h"     HAVE_INTTYPES_H)
 check_include_file("limits.h"       HAVE_LIMITS_H)
 check_include_file("netdb.h"        HAVE_NETDB_H)
 check_include_file("netinet/in.h"   HAVE_NETINET_IN_H)
+check_include_file("netinet/ip.h"   HAVE_NETINET_IP_H)
 check_include_file("pwd.h"          HAVE_PWD_H)
 check_include_file("sys/socket.h"   HAVE_SYS_SOCKET_H)
 check_include_file("sys/time.h"     HAVE_SYS_TIME_H)
+check_include_file("sysinfoapi.h"   HAVE_SYSINFOAPI_H)
 check_include_file("syslog.h"       HAVE_SYSLOG_H)
 check_include_file("time.h"         HAVE_TIME_H)
 check_include_file("unistd.h"       HAVE_UNISTD_H)
@@ -316,7 +318,10 @@ check_type_size("time_t"  SIZEOF_TIME_T)
 include(CheckFunctionExists)
 check_function_exists(_Exit     HAVE__EXIT)
 check_function_exists(accept4   HAVE_ACCEPT4)
+check_function_exists(clock_gettime HAVE_CLOCK_GETTIME)
 check_function_exists(mkostemp  HAVE_MKOSTEMP)
+
+check_symbol_exists(GetTickCount64 sysinfoapi.h HAVE_GETTICKCOUNT64)
 
 include(CheckSymbolExists)
 # XXX does this correctly detect initgroups (un)availability on cygwin?
@@ -338,74 +343,12 @@ if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
   endif()
 else()
   if(ENABLE_WERROR)
-    extract_valid_c_flags(WARNCFLAGS    -Werror)
-    extract_valid_c_flags(WARNCXXFLAGS  -Werror)
+    set(WARNCFLAGS   "-Werror")
+    set(WARNCXXFLAGS "-Werror")
   endif()
 
-  # For C compiler
-  extract_valid_c_flags(WARNCFLAGS
-    -Wall
-    -Wextra
-    -Wmissing-prototypes
-    -Wstrict-prototypes
-    -Wmissing-declarations
-    -Wpointer-arith
-    -Wdeclaration-after-statement
-    -Wformat-security
-    -Wwrite-strings
-    -Wshadow
-    -Winline
-    -Wnested-externs
-    -Wfloat-equal
-    -Wundef
-    -Wendif-labels
-    -Wempty-body
-    -Wcast-align
-    -Wclobbered
-    -Wvla
-    -Wpragmas
-    -Wunreachable-code
-    -Waddress
-    -Wattributes
-    -Wdiv-by-zero
-    -Wshorten-64-to-32
-
-    -Wconversion
-    -Wextended-offsetof
-    -Wformat-nonliteral
-    -Wlanguage-extension-token
-    -Wmissing-field-initializers
-    -Wmissing-noreturn
-    -Wmissing-variable-declarations
-    # Not used because we cannot change public structs
-    # -Wpadded
-    -Wsign-conversion
-    # Not used because this basically disallows default case
-    # -Wswitch-enum
-    -Wunreachable-code-break
-    -Wunused-macros
-    -Wunused-parameter
-    -Wredundant-decls
-    # Only work with Clang for the moment
-    -Wheader-guard
-    # This is required because we pass format string as "const char*.
-    -Wno-format-nonliteral
-  )
-
-  extract_valid_cxx_flags(WARNCXXFLAGS
-    # For C++ compiler
-    -Wall
-    -Wformat-security
-  )
-endif()
-
-if(ENABLE_STATIC_CRT)
-  foreach(lang C CXX)
-    foreach(suffix "" _DEBUG _MINSIZEREL _RELEASE _RELWITHDEBINFO)
-      set(var "CMAKE_${lang}_FLAGS${suffix}")
-      string(REPLACE "/MD" "/MT" ${var} "${${var}}")
-    endforeach()
-  endforeach()
+  include(PickyWarningsC)
+  include(PickyWarningsCXX)
 endif()
 
 if(ENABLE_DEBUG)
@@ -501,6 +444,7 @@ message(STATUS "summary of build options:
       CXXFLAGS:       ${CMAKE_CXX_FLAGS_${_build_type}} ${CMAKE_CXX_FLAGS}
       WARNCFLAGS:     ${WARNCFLAGS}
       CXX1XCXXFLAGS:  ${CXX1XCXXFLAGS}
+      WARNCXXFLAGS:   ${WARNCXXFLAGS}
     Python:
       Python:          ${Python3_EXECUTABLE}
       Python3_VERSION: ${Python3_VERSION}
@@ -513,7 +457,7 @@ message(STATUS "summary of build options:
       Libev:          ${HAVE_LIBEV} (LIBS='${LIBEV_LIBRARIES}')
       Libc-ares:      ${HAVE_LIBCARES} (LIBS='${LIBCARES_LIBRARIES}')
       Libngtcp2:      ${HAVE_LIBNGTCP2} (LIBS='${LIBNGTCP2_LIBRARIES}')
-      Libngtcp2_crypto_openssl: ${HAVE_LIBNGTCP2_CRYPTO_OPENSSL} (LIBS='${LIBNGTCP2_CRYPTO_OPENSSL_LIBRARIES}')
+      Libngtcp2_crypto_quictls: ${HAVE_LIBNGTCP2_CRYPTO_QUICTLS} (LIBS='${LIBNGTCP2_CRYPTO_QUICTLS_LIBRARIES}')
       Libnghttp3:     ${HAVE_LIBNGHTTP3} (LIBS='${LIBNGHTTP3_LIBRARIES}')
       Libbpf:         ${HAVE_LIBBPF} (LIBS='${LIBBPF_LIBRARIES}')
       Libevent(SSL):  ${HAVE_LIBEVENT_OPENSSL} (LIBS='${LIBEVENT_OPENSSL_LIBRARIES}')

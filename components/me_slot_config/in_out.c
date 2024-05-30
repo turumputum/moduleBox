@@ -115,6 +115,14 @@ void in_task(void *arg){
 	report(str, slot_num);
 	prev_state=IN_state;
 
+	esp_timer_handle_t debounce_gap_timer;
+	const esp_timer_create_args_t delay_timer_args = {
+		.callback = &gpio_handler,
+		.arg = (void*)slot_num,
+		.name = "debounce_gap_timer"
+	};
+	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+
     for(;;) {
 		//vTaskDelay(pdMS_TO_TICKS(10));
 		uint8_t tmp;
@@ -129,7 +137,7 @@ void in_task(void *arg){
 
 			if(debounce_gap!=0){
 				if((xTaskGetTickCount()-tick)<debounce_gap){
-					ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
+					//ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
 					goto exit;
 				}
 			}
@@ -145,16 +153,9 @@ void in_task(void *arg){
 					vTaskDelay(pdMS_TO_TICKS(delay_ms));
 				}
 				report(str, slot_num);
-				ESP_LOGD(TAG,"String:%s", str);
+				//ESP_LOGD(TAG,"String:%s", str);
 				tick = xTaskGetTickCount();
 				if(debounce_gap!=0){
-					esp_timer_handle_t debounce_gap_timer;
-					const esp_timer_create_args_t delay_timer_args = {
-						.callback = &gpio_handler,
-						.arg = (void*)slot_num,
-						.name = "debounce_gap_timer"
-					};
-					esp_timer_create(&delay_timer_args, &debounce_gap_timer);
 					esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);
 				}
 

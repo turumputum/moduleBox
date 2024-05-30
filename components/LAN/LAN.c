@@ -177,11 +177,13 @@ void udp_recive_task(){
 			//ESP_LOGD(TAG, "UDP incoming fail(");
 		}else{
 			ESP_LOGD(TAG, "UDP incoming:%.*s",len, buff);
-			buff[len]='\0';
-			execute(buff);
-			if(strlen(me_config.udp_cross_link)>3){
-				crosslinks_process(me_config.udp_cross_link,buff);
-			}
+			//to-do add to queue
+
+			// buff[len]='\0';
+			// execute(buff);
+			// if(strlen(me_config.udp_cross_link)>3){
+			// 	crosslinks_process(me_config.udp_cross_link,buff);
+			// }
 		}
 		vTaskDelay(pdMS_TO_TICKS(20));
 	}

@@ -202,7 +202,12 @@ void timer_task(void *arg) {
 
     int state=0;
     esp_timer_handle_t virtual_timer;
-    
+    const esp_timer_create_args_t delay_timer_args = {
+        .callback = &timer_isr_handler,
+        .arg = (void*)slot_num,
+        .name = "virtual_timer"
+    };
+    esp_timer_create(&delay_timer_args, &virtual_timer);
 
     while(1){
 		vTaskDelay(pdMS_TO_TICKS(10));
@@ -220,7 +225,7 @@ void timer_task(void *arg) {
 			}else{
 				cmd_arg = strdup("0");
 			}
-			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "start", 5)){ 
                 //char *payload = strdup(cmd.str+strlen(me_state.action_topic_list[slot_num])+strlen()+1);
                 //ESP_LOGD(TAG, "slot_num:%d payload:%s",slot_num, payload);
@@ -229,22 +234,21 @@ void timer_task(void *arg) {
                 if(val==0){
                     val=time;
                 }
-                
-                const esp_timer_create_args_t delay_timer_args = {
-                    .callback = &timer_isr_handler,
-                    .arg = (void*)slot_num,
-                    .name = "virtual_timer"
-                };
-                esp_timer_create(&delay_timer_args, &virtual_timer);
+
+                if(esp_timer_is_active(virtual_timer)){
+                    esp_timer_stop(virtual_timer);
+                }
+
                 esp_timer_start_once(virtual_timer, val*1000);
 			}else if(!memcmp(command, "stop", 4)){
+                ESP_LOGD(TAG, "stop timeer slot:%d", slot_num);
                 esp_err_t ret = esp_timer_stop(virtual_timer);
                 if(ret!=ESP_OK){
-                    ESP_LOGD(TAG, "stop timer error:%s", esp_err_to_name(ret));
+                    ESP_LOGE(TAG, "stop timer error:%s", esp_err_to_name(ret));
                 }
                 ret = esp_timer_delete(virtual_timer);
                 if(ret!=ESP_OK){
-                    ESP_LOGD(TAG, "delete timer error:%s", esp_err_to_name(ret));
+                    ESP_LOGE(TAG, "delete timer error:%s", esp_err_to_name(ret));
                 }
             }
         }
@@ -293,7 +297,14 @@ void watchdog_task(void *arg) {
     xQueueSend(me_state.command_queue[slot_num], &tmpstr, NULL);
     
     esp_timer_handle_t virtual_timer=NULL;
-    
+    const esp_timer_create_args_t delay_timer_args = {
+        .callback = &watchdog_isr_handler,
+        .arg = (void*)slot_num,
+        .name = "watchdog_timer"
+    };
+    esp_timer_create(&delay_timer_args, &virtual_timer);
+
+
     while(1){
 		vTaskDelay(pdMS_TO_TICKS(10));
         uint8_t tmp;
@@ -315,16 +326,9 @@ void watchdog_task(void *arg) {
 			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "restart", 7)){ 
                 
-                if(virtual_timer!=NULL){
+                if(esp_timer_is_active(virtual_timer)){
                     esp_timer_stop(virtual_timer);
                 }
-
-                const esp_timer_create_args_t delay_timer_args = {
-                    .callback = &watchdog_isr_handler,
-                    .arg = (void*)slot_num,
-                    .name = "watchdog_timer"
-                };
-                esp_timer_create(&delay_timer_args, &virtual_timer);
                 esp_timer_start_once(virtual_timer, time*1000*1000);  
                 ESP_LOGD(TAG, "Start watchdog on time:%ld",time);
             }

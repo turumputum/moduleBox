@@ -127,11 +127,11 @@ To enable the experimental HTTP/3 support for h2load and nghttpx, the
 following libraries are required:
 
 * `OpenSSL with QUIC support
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1t+quic>`_; or
+  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  80a243e07ef77156af66efa7d22ac35aba44c1b3)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 0.13.0
-* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 0.7.0
+  6ca49385b168f47a50e7172d82a590b218f55e4d)
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.0.0
+* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.0.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
 h2load and nghttpx.
@@ -146,7 +146,7 @@ Use ``--with-libbpf`` configure option to build eBPF program.
 libelf-dev is needed to build libbpf.
 
 For Ubuntu 20.04, you can build libbpf from `the source code
-<https://github.com/libbpf/libbpf/releases/tag/v1.1.0>`_.  nghttpx
+<https://github.com/libbpf/libbpf/releases/tag/v1.2.2>`_.  nghttpx
 requires eBPF program for reloading its configuration and hot swapping
 its executable.
 
@@ -343,7 +343,7 @@ Build custom OpenSSL:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b OpenSSL_1_1_1t+quic https://github.com/quictls/openssl
+   $ git clone --depth 1 -b OpenSSL_1_1_1w+quic https://github.com/quictls/openssl
    $ cd openssl
    $ ./config --prefix=$PWD/build --openssldir=/etc/ssl
    $ make -j$(nproc)
@@ -354,7 +354,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.8.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v1.0.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
@@ -366,7 +366,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.13.1 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v1.0.1 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only \
@@ -380,7 +380,7 @@ from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.1.0 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v1.2.2 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..
@@ -1456,12 +1456,10 @@ released, or mitigation is worked out.
 
 In the future, we may setup a dedicated mail address for this purpose.
 
-Release schedule
-----------------
+Versioning
+----------
 
-In general, we follow `Semantic Versioning <http://semver.org/>`_.  We
-release MINOR version update every month, and usually we ship it
-around 25th day of every month.
+In general, we follow `Semantic Versioning <http://semver.org/>`_.
 
 We may release PATCH releases between the regular releases, mainly for
 severe security bug fixes.

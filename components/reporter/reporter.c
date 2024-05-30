@@ -57,10 +57,12 @@ void crosslinker(char* str){
 		char *crosslink = NULL;
 		char *croslink_rest = crosslinks;
 		uint8_t last_link = 0;
+		
+		
 		do{
 			if (strstr(croslink_rest, ",") != NULL){
 				crosslink = strtok_r(croslink_rest, ",", &croslink_rest);
-				//TO_DO verify cross link len
+				//to_do verify cross link len
 			}else{
 				crosslink = croslink_rest;
 				last_link = 1;
@@ -68,7 +70,8 @@ void crosslinker(char* str){
 			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s", crosslink, croslink_rest);
 			if (strstr(crosslink, "->") != NULL){
 				
-				char *event=strdup(str);
+				//char *event=strdup(str);
+				char *event = str;
 				if(strstr(event, me_config.device_name)!=NULL){
 					event = event + strlen(me_config.device_name) + 1;
 				}
@@ -77,8 +80,9 @@ void crosslinker(char* str){
 				char *action=NULL;
 				char *payload=NULL;
 
-				char *crosslinkCopy= NULL;
-				crosslinkCopy = strdup(crosslink);
+				// char crosslinkCopy[strlen(me_config.slot_cross_link[slot_num])+1];
+				// strcpy(crosslinkCopy,me_config.slot_cross_link[slot_num]);
+				char *crosslinkCopy = strdup(crosslink);
 
 				trigger = strtok_r(crosslinkCopy, "->", &action);
 				if(trigger[0]==' '){
@@ -106,6 +110,7 @@ void crosslinker(char* str){
 				if (strstr(event, trigger) != NULL){
 					//ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
 					//ESP_LOGD(TAG, "strlen(me_config.device_name):%d  strlen(action):%d", strlen(me_config.device_name), strlen(action));
+					
 					char output_action[strlen(me_config.device_name) + strlen(action) + 50];
 					if(payload!=NULL){
 						action = strtok(action, ":");
@@ -113,17 +118,22 @@ void crosslinker(char* str){
 					}else{
 						sprintf(output_action, "%s/%s", me_config.device_name, action);
 					}
+					
 					//ESP_LOGD(TAG, "output_action:%s", output_action);
 					execute(output_action);
 				}else{
 					//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
 				}
+				vPortFree(crosslinkCopy);
 			}
+			
+			
 			if (last_link == 1){
 				break;
 			}
-
 		} while (crosslink != NULL);
+		
+
 	}
 	//ESP_LOGD(TAG, "Crosslink calc time:%ld", xTaskGetTickCount() - startTick);
 }
@@ -223,7 +233,7 @@ void reporter_task(void){
 			}
 			
 			crosslinker(tmpStr);
-			
+			vPortFree(received_message.str);
 		}	
 	}
 }
@@ -245,11 +255,14 @@ void report(char *msg, int slot_num){
 	if(ret!= pdPASS){
 		ESP_LOGE(TAG, "QueueSend error:%d", ret);
 	}
+	
+
+	//free(send_message.str);
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 
 }
 
-
+/*
 void crosslinks_process(char *crosslinks_str, char *event){
 	char crosslinks[strlen(crosslinks_str)];
 	strcpy(crosslinks, crosslinks_str);
@@ -290,13 +303,22 @@ void crosslinks_process(char *crosslinks_str, char *event){
 			else{
 				//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
 			}
+			free(trigger);
+			free(action);
 		}
+
+		free(crosslink);
+		free(croslink_rest);
+		free(crosslinks);
 		if (last_link == 1){
 			break;
 		}
-
+		
 	} while (crosslink != NULL);
 }
+*/
+
+
 // void startup_crosslinks_exec(void){
 // 	char crosslinks[strlen(me_config.startup_cross_link)];
 // 	strcpy(crosslinks, me_config.startup_cross_link);
