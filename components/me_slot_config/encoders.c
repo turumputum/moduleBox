@@ -300,30 +300,17 @@ void encoder_inc_task(void *arg)
 		// Wait for incoming events on the event queue.
 		pos = info.state.position;
 
-		int str_len;
-		char *str;
+		char str[40];
 		if(pos!=prev_pos){
-			//ESP_LOGD(TAG, "Position %d %s",event.state.position, debugString);
-			//ESP_LOGD(TAG, "report pos:%d",  pos);
-			if(flag_custom_topic){
-				str_len=strlen(custom_topic)+4;
-				str = (char*)malloc(str_len * sizeof(char));
-				if(absolute){
-                    sprintf(str,"%s:%ld", custom_topic, pos);
-                }else{
-                    sprintf(str,"%s:%ld", custom_topic,  prev_pos - pos);
-                }
+
+			if(absolute){
+				sprintf(str,"%ld", pos);
 			}else{
-				str_len=strlen(me_config.device_name)+strlen("/encoder_")+8;
-				str = (char*)malloc(str_len * sizeof(char));
-				if(absolute){
-					sprintf(str,"%s/encoder_%d:%ld", me_config.device_name, 0, pos);
-				}else{
-					sprintf(str,"%s/encoder_%d:%ld", me_config.device_name, 0, prev_pos - pos);
-				}
+				sprintf(str,"%ld",prev_pos - pos);
 			}
+
 			report(str, slot_num);
-			free(str);
+			//vPortFree(str);
 			prev_pos = pos;
 		}
 		vTaskDelay(pdMS_TO_TICKS(20));
