@@ -70,8 +70,8 @@ void crosslinker(char* str){
 			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s", crosslink, croslink_rest);
 			if (strstr(crosslink, "->") != NULL){
 				
-				//char *event=strdup(str);
-				char *event = str;
+				char *event=strdup(str);
+				//char *event = str;
 				if(strstr(event, me_config.device_name)!=NULL){
 					event = event + strlen(me_config.device_name) + 1;
 				}
