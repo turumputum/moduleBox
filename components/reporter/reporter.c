@@ -93,14 +93,13 @@ void crosslinker(char* str){
 						trigger = strtok(trigger, ":");
 					}
 					//ESP_LOGD(TAG, "Any value trigger:%s ", trigger);
-				}else if(strstr(trigger, "&")!= NULL){
+				}else if(strstr(trigger, "@")!= NULL){
 					if(strstr(trigger, ":")!= NULL){
 						trigger = strtok(trigger, ":");
 					}
 					if(strstr(event, ":")!= NULL){
 						event = strtok_r(event, ":", &payload);
 					}
-					//todo!!!!!!!!!!!!!!!!!! event val to action
 					//ESP_LOGD(TAG, "Lets transfer event payload to action.  event:%s  payload:%s", event, payload);
 				}
 				action = action + 1;// cut ":" at begin

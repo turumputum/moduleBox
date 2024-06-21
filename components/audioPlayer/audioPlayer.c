@@ -219,10 +219,10 @@ void audio_task(void *arg) {
 			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "play", 4)){//------------------------------
 				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), currentTrack);
+				trackShift(cmd_arg, &currentTrack);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(currentTrack==atoi(cmd_arg))){
 					ESP_LOGD(TAG, "skip restart track");
 				}else{
-					trackShift(cmd_arg, &currentTrack);
 					vTaskDelay(pdMS_TO_TICKS(play_delay));
 					if(audioPlay(currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);

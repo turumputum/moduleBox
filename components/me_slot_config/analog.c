@@ -83,6 +83,12 @@ void analog_task(void *arg)
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d",dead_band, slot_num);
 	}
 
+	uint16_t periodic=0;
+    if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
+        periodic = get_option_int_val(slot_num, "periodic");
+		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d",periodic, slot_num);
+	}
+
     uint8_t flag_custom_topic = 0;
 	char *custom_topic=NULL;
 	if (strstr(me_config.slot_options[slot_num], "custom_topic")!=NULL){
@@ -110,7 +116,7 @@ void analog_task(void *arg)
         resault =resault*(1-k)+raw_val*k;
 
 
-        if(abs(resault - prev_resault)>dead_band){
+        if((abs(resault - prev_resault)>dead_band)||(periodic!=0)){
             prev_resault = resault;
             //ESP_LOGD(TAG, "analog val:%d , allow_delta:%d", resault, MAX_VAL-MIN_VAL);
 
@@ -128,24 +134,12 @@ void analog_task(void *arg)
 
 			memset(tmpString, 0, strlen(tmpString));
 
-			if(flag_custom_topic){
-
-				if(flag_float_output){
-                    //sprintf(str,"%s:%f", custom_topic, f_res);
-					sprintf(tmpString,"%s:%f", custom_topic, f_res);
-                }else{
-                    //sprintf(str,"%s:%d", custom_topic, resault);
-					sprintf(tmpString,"%s:%d", custom_topic, resault);
-                }
+            if(flag_float_output){
+				//sprintf(str,"%s/analog_%d:%f", me_config.device_name, slot_num, f_res);
+				sprintf(tmpString,"%f", f_res);
 			}else{
-
-                if(flag_float_output){
-				    //sprintf(str,"%s/analog_%d:%f", me_config.device_name, slot_num, f_res);
-					sprintf(tmpString,"%s/analog_%d:%f", me_config.device_name, slot_num, f_res);
-                }else{
-                    //sprintf(str,"%s/analog_%d:%d", me_config.device_name, slot_num, resault);
-					sprintf(tmpString,"%s/analog_%d:%d", me_config.device_name, slot_num, resault);
-                }
+				//sprintf(str,"%s/analog_%d:%d", me_config.device_name, slot_num, resault);
+				sprintf(tmpString,"%d", resault);
 			}
 
 			report(tmpString, slot_num);
@@ -153,7 +147,11 @@ void analog_task(void *arg)
 
         }
         //ESP_LOGD(TAG, "analog val:%d", resault);
-        vTaskDelay(pdMS_TO_TICKS(20));
+        if(periodic!=0){
+			vTaskDelay(pdMS_TO_TICKS(periodic));
+		}else{
+			vTaskDelay(pdMS_TO_TICKS(20));
+		}
     }
     
 }
