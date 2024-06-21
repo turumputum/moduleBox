@@ -10,7 +10,7 @@
 
 #define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.23";
+static const char* VERSION = "3.24";
 
 
 
@@ -86,7 +86,7 @@ typedef struct {
 	char *netMask;
 	char *gateWay;
 
-	char *device_name;
+	char *deviceName;
 	uint8_t USB_debug;
 
 	uint8_t FTP_enable;

@@ -38,8 +38,8 @@ void startup_task(void *arg) {
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "startup_report_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/startup")+3];
-		sprintf(t_str, "%s/startup",me_config.device_name);
+		char t_str[strlen(me_config.deviceName)+strlen("/startup")+3];
+		sprintf(t_str, "%s/startup",me_config.deviceName);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart startup_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
@@ -98,8 +98,8 @@ void counter_task(void *arg) {
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/counter_0")+3];
-		sprintf(t_str, "%s/counter_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/counter_0")+3];
+		sprintf(t_str, "%s/counter_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
         me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -193,8 +193,8 @@ void timer_task(void *arg) {
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/timer_0")+3];
-		sprintf(t_str, "%s/timer_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/timer_0")+3];
+		sprintf(t_str, "%s/timer_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
         me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -285,8 +285,8 @@ void watchdog_task(void *arg) {
 	}
     ESP_LOGD(TAG, "Set time :%ld for slot:%d", time, slot_num);
 
-    char t_str[strlen(me_config.device_name)+strlen("/watchdog_0")+3];
-    sprintf(t_str, "%s/watchdog_%d",me_config.device_name, slot_num);
+    char t_str[strlen(me_config.deviceName)+strlen("/watchdog_0")+3];
+    sprintf(t_str, "%s/watchdog_%d",me_config.deviceName, slot_num);
     me_state.trigger_topic_list[slot_num]=strdup(t_str);
     me_state.action_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart topic:%s", me_state.trigger_topic_list[slot_num]);

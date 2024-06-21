@@ -67,8 +67,8 @@ void buttonMatrix4_task(void* arg) {
         ESP_LOGD(TAG, "Set input pin: %d", pin_col[i]);
     }
 
-    char t_str[strlen(me_config.device_name)+strlen("/buttonMatrix_0")+3];
-    sprintf(t_str, "%s/buttonMatrix_%d",me_config.device_name, slot_num);
+    char t_str[strlen(me_config.deviceName)+strlen("/buttonMatrix_0")+3];
+    sprintf(t_str, "%s/buttonMatrix_%d",me_config.deviceName, slot_num);
     me_state.trigger_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 
@@ -222,4 +222,141 @@ void start_uartLogger_task(int slot_num){
 	xTaskCreatePinnedToCore(uartLogger_task, tmpString, 1024*5, &t_slot_num,12, NULL, 1);
 
 	ESP_LOGD(TAG,"uartLogger_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+
+//-------------------dialer_task----------------
+static void IRAM_ATTR gpio_isr_handler(void* arg){
+    int slot_num = (int) arg;
+	uint8_t tmp=1;
+    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+}
+
+
+void dialer_task(void* arg) {
+    int slot_num = *(int*)arg;
+    uint8_t ena_pin = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t pulse_pin = SLOTS_PIN_MAP[slot_num][1];
+
+	me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
+
+	gpio_reset_pin(pulse_pin);
+	esp_rom_gpio_pad_select_gpio(pulse_pin);
+    gpio_config_t in_conf = {};
+    in_conf.pull_up_en = 0;
+    in_conf.pull_down_en =1;
+   	in_conf.intr_type = GPIO_INTR_NEGEDGE;
+    in_conf.pin_bit_mask = (1ULL<<pulse_pin);
+    in_conf.mode = GPIO_MODE_INPUT;
+    gpio_config(&in_conf);
+	gpio_set_intr_type(pulse_pin, GPIO_INTR_ANYEDGE);
+    gpio_install_isr_service(0);
+	gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)slot_num);
+
+
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = 1ULL<<ena_pin;
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 0;
+    esp_err_t ret = gpio_config(&io_conf);
+
+    uint16_t waitingTime = 3000;//ms
+    if (strstr(me_config.slot_options[slot_num], "waitingTime") != NULL) {
+		waitingTime = get_option_int_val(slot_num, "waitingTime");
+		ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", waitingTime, slot_num);
+	}
+
+    uint8_t numberMaxLenght = 7;
+    if (strstr(me_config.slot_options[slot_num], "numberMaxLenght") != NULL) {
+		numberMaxLenght = get_option_int_val(slot_num, "numberMaxLenght");
+		ESP_LOGD(TAG, "Set numberMaxLenght:%d for slot:%d", numberMaxLenght, slot_num);
+	}
+    int debounceGap = 50;
+	if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
+		debounceGap = get_option_int_val(slot_num, "debounceGap");
+		ESP_LOGD(TAG, "Set debounceGap:%d for slot:%d",debounceGap, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/dialer_0")+3];
+		sprintf(t_str, "%s/dialer_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+
+    uint8_t counter=0;
+    char number_str[numberMaxLenght];
+    uint string_lenght=0;
+    number_str[0]='\0';
+    uint8_t prev_ena_state = 0;
+    uint32_t dial_start_time = 0;
+    uint8_t state_flag = 0;
+
+    uint32_t tick=xTaskGetTickCount();
+
+    while(1){
+        vTaskDelay(pdMS_TO_TICKS(10));      
+        
+        uint8_t ena_state = gpio_get_level(ena_pin);
+        if(ena_state!= prev_ena_state){
+            prev_ena_state = ena_state;
+            dial_start_time =pdTICKS_TO_MS(xTaskGetTickCount());
+            if((ena_state == 1)&&(state_flag == 0)){
+                state_flag = 1;
+                ESP_LOGD(TAG, "Lets input number: %s strlen:%d dial_start_time:%ld", number_str, strlen(number_str), dial_start_time);
+            }else if(ena_state == 0){
+                if(counter>=10)counter=0;
+                number_str[string_lenght]=(char)counter+48;
+                string_lenght++;
+                number_str[string_lenght]='\0';
+                ESP_LOGD(TAG, "update number_str: %s counter:%d strlen:%d", number_str, counter, strlen(number_str));
+                counter = 0;
+            }
+        }
+
+        if(state_flag == 1){
+            if(((pdTICKS_TO_MS(xTaskGetTickCount())-dial_start_time)>=waitingTime)||(string_lenght>=numberMaxLenght)){
+                if(ena_state == 0){
+                    ESP_LOGD(TAG, "Input end, report number: %s", number_str);
+                    report(number_str, slot_num);
+                    memset(number_str, 0, numberMaxLenght);
+                    state_flag = 0;
+                    string_lenght = 0;
+                }
+            }
+        }
+
+        uint8_t tmp;
+		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
+            
+            if(gpio_get_level(pulse_pin) == 0){
+                if(debounceGap!=0){
+                    if((xTaskGetTickCount()-tick)<debounceGap){
+                        ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
+                        goto exit;
+                    }
+                }
+
+                tick = xTaskGetTickCount();
+                counter++;
+            }
+        }
+        exit:
+    }
+
+}
+
+void start_dialer_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    xTaskCreate(dialer_task, "dialer_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
+    ESP_LOGD(TAG, "dialer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

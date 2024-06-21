@@ -443,7 +443,7 @@ void app_main(void)
 		// if (xQueueReceive(exec_mailbox, &exec_message, (25 / portTICK_PERIOD_MS)) == pdPASS)
 		// {
 		// 	ESP_LOGD(TAG, "Exec mail incoming:%s", exec_message.str);
-		// 	// char *event = exec_message.str + strlen(me_config.device_name) + 1;
+		// 	// char *event = exec_message.str + strlen(me_config.deviceName) + 1;
 		// 	//execute(exec_message.str);
 		// }
 		// #define STATS_TICKS         pdMS_TO_TICKS(1000)

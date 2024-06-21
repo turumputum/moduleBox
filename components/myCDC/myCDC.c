@@ -89,7 +89,7 @@ static void execCommand(char *cmd, int len) {
 	} else if (!memcmp(cmd, "Who are you?", 12)) {
 		ESP_LOGD(TAG, "usbReport who i am.");
 		char tmpStr[64];
-		sprintf(tmpStr, "moduleBox:%s\n", me_config.device_name);
+		sprintf(tmpStr, "moduleBox:%s\n", me_config.deviceName);
 		usbprint(tmpStr);
 	} else if (!memcmp(cmd, "Get topic list.", 15)) {
 		ESP_LOGD(TAG, "usbReport topiclist.");

@@ -52,8 +52,8 @@ void pn532Uart_task(void* arg) {
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "rfid_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/rfid_0")+3];
-		sprintf(t_str, "%s/rfid_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/rfid_0")+3];
+		sprintf(t_str, "%s/rfid_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart rfid_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}

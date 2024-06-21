@@ -54,7 +54,7 @@ void audioSetIndicator(uint8_t slot_num, uint32_t level){
 	gpio_set_level(led_pin, level);// module led light
 }
 
-void trackShift(char* cmd_arg, uint8_t *truckNum){
+void trackShift(char* cmd_arg, int16_t *truckNum){
 	//ESP_LOGD(TAG,"trackShift arg:%d", cmd_arg[0]);
 	if (cmd_arg[0] == 43) {
 		*truckNum += atoi(cmd_arg + 1);
@@ -64,8 +64,8 @@ void trackShift(char* cmd_arg, uint8_t *truckNum){
 		ESP_LOGD(TAG, "Shift track. Current track index increment: %d", *truckNum);
 	} else if (cmd_arg[0] == 45) {
 		*truckNum -= atoi(cmd_arg + 1);
-		if (*truckNum >= me_state.numOfTrack) {
-			*truckNum = 0;
+		if (*truckNum < 0) {
+			*truckNum = me_state.numOfTrack-1;
 		}
 		ESP_LOGD(TAG, "Shift track. Current track index decrement: %d", *truckNum);
 	} else if (cmd_arg[0] == 35) {
@@ -90,7 +90,7 @@ void audio_task(void *arg) {
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
 	//ESP_LOGD(TAG, "Start codec chip");
 
-	uint8_t currentTrack=0;
+	int16_t currentTrack=0;
 
 	uint8_t volume=70;
 	if (strstr(me_config.slot_options[0], "volume")!=NULL){
@@ -111,7 +111,13 @@ void audio_task(void *arg) {
 	uint16_t play_delay=0;
 	if (strstr(me_config.slot_options[0], "play_delay_ms")!=NULL){
 		play_delay = get_option_int_val(slot_num, "play_delay_ms");
-		ESP_LOGD(TAG, "Set play_delay:%d", me_config.play_delay);
+		ESP_LOGD(TAG, "Set play_delay:%d", play_delay);
+	}
+
+	uint8_t play_to_end=0;
+	if (strstr(me_config.slot_options[0], "play_to_end")!=NULL){
+		play_to_end = 1;
+		ESP_LOGD(TAG, "Set play_to_end:%d", play_to_end);
 	}
 
 	//---add action to topic list---
@@ -122,8 +128,8 @@ void audio_task(void *arg) {
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/player_")+3];
-		sprintf(t_str, "%s/player_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/player_")+3];
+		sprintf(t_str, "%s/player_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
@@ -220,7 +226,7 @@ void audio_task(void *arg) {
 			if(!memcmp(command, "play", 4)){//------------------------------
 				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), currentTrack);
 				trackShift(cmd_arg, &currentTrack);
-				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(currentTrack==atoi(cmd_arg))){
+				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(play_to_end==1)){
 					ESP_LOGD(TAG, "skip restart track");
 				}else{
 					vTaskDelay(pdMS_TO_TICKS(play_delay));
@@ -241,11 +247,13 @@ void audio_task(void *arg) {
 				}
 			}else if(!memcmp(command, "shift", 5)){//------------------------------
 				trackShift(cmd_arg, &currentTrack);
-				if(audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING){
-					if(audioPlay(currentTrack)==ESP_OK){
-						audioSetIndicator(slot_num, 1);
-					}else{
-						audioSetIndicator(slot_num, 0);
+				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)){
+					if(play_to_end==0){
+						if(audioPlay(currentTrack)==ESP_OK){
+							audioSetIndicator(slot_num, 1);
+						}else{
+							audioSetIndicator(slot_num, 0);
+						}
 					}
 				}
 			}else if(!memcmp(command, "setVolume", 9)){//------------------------------
@@ -378,8 +386,8 @@ void audioPause(void) {
 // 				audioStop();
 				
 // 				vTaskDelay(pdMS_TO_TICKS(10));
-// 				char tmpStr[strlen(me_config.device_name)+strlen("/play_end")+10];
-// 				sprintf(tmpStr,"%s/play_end:%d", me_config.device_name, me_state.currentTrack);
+// 				char tmpStr[strlen(me_config.deviceName)+strlen("/play_end")+10];
+// 				sprintf(tmpStr,"%s/play_end:%d", me_config.deviceName, me_state.currentTrack);
 // 				report(tmpStr, 0);
 				
 // 			}

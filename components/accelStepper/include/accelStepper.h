@@ -122,6 +122,8 @@ typedef struct
 
 	int8_t init_state;
 
+	gptimer_handle_t _timer;
+
 	char report_msg[100];
 
 } Stepper_t;

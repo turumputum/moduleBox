@@ -54,8 +54,8 @@ void init_led(int slot_num) {
 	ESP_ERROR_CHECK(gpio_set_level(pin_num, (uint32_t )def_state));
 
 	//---add action to topic list---
-	char *str = calloc(strlen(me_config.device_name) + 16, sizeof(char));
-	sprintf(str, "%s/led_%d", me_config.device_name, slot_num);
+	char *str = calloc(strlen(me_config.deviceName) + 16, sizeof(char));
+	sprintf(str, "%s/led_%d", me_config.deviceName, slot_num);
 	me_state.action_topic_list[slot_num] = str;
 
 	ESP_LOGD(TAG, "Led inited for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

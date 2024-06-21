@@ -66,7 +66,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			}	
 		}
 
-		sprintf(willTopic, "clients/%s/state", me_config.device_name);
+		sprintf(willTopic, "clients/%s/state", me_config.deviceName);
 		mqtt_pub(willTopic, "1");
 
 		//----------topic list generate-----------------
@@ -106,7 +106,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		strcat(topic_list, "\n]\n}");
 
 		char topicList_topic[255];
-		sprintf(topicList_topic, "clients/%s/topics", me_config.device_name);
+		sprintf(topicList_topic, "clients/%s/topics", me_config.deviceName);
 
 		ESP_LOGD(TAG, "Topic list:%s", topic_list);
 		mqtt_pub(topicList_topic, topic_list);
@@ -161,7 +161,7 @@ int mqtt_app_start(void)
     }
 
 	memset(willTopic, 0, sizeof(willTopic));
-	sprintf(willTopic, "clients/%s/state", me_config.device_name);
+	sprintf(willTopic, "clients/%s/state", me_config.deviceName);
 
 	if(strstr(me_config.mqttBrokerAdress, ".local")!=NULL){
 		char hostname[strlen(me_config.mqttBrokerAdress)-5];
@@ -186,7 +186,7 @@ int mqtt_app_start(void)
 	ESP_LOGD(TAG, "Set brokerUri:%s", brokerUri);
 	
     esp_mqtt_client_config_t mqtt_cfg = {
-    	.credentials.client_id = me_config.device_name,
+    	.credentials.client_id = me_config.deviceName,
 		.broker.address.uri = brokerUri,
         //.broker.address.uri = "mqtt://192.168.88.99:1883"
 		//.broker.address.hostname = me_config.mqttBrokerAdress,

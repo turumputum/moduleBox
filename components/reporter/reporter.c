@@ -70,10 +70,10 @@ void crosslinker(char* str){
 			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s", crosslink, croslink_rest);
 			if (strstr(crosslink, "->") != NULL){
 				
-				//char *event=strdup(str);
-				char *event = str;
-				if(strstr(event, me_config.device_name)!=NULL){
-					event = event + strlen(me_config.device_name) + 1;
+				char *event=strdup(str);
+				//char *event = str;
+				if(strstr(event, me_config.deviceName)!=NULL){
+					event = event + strlen(me_config.deviceName) + 1;
 				}
 
 				char *trigger=NULL;
@@ -108,14 +108,14 @@ void crosslinker(char* str){
 				
 				if (strstr(event, trigger) != NULL){
 					//ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
-					//ESP_LOGD(TAG, "strlen(me_config.device_name):%d  strlen(action):%d", strlen(me_config.device_name), strlen(action));
+					//ESP_LOGD(TAG, "strlen(me_config.deviceName):%d  strlen(action):%d", strlen(me_config.deviceName), strlen(action));
 					
-					char output_action[strlen(me_config.device_name) + strlen(action) + 50];
+					char output_action[strlen(me_config.deviceName) + strlen(action) + 50];
 					if(payload!=NULL){
 						action = strtok(action, ":");
-						sprintf(output_action, "%s/%s:%s", me_config.device_name, action, payload);
+						sprintf(output_action, "%s/%s:%s", me_config.deviceName, action, payload);
 					}else{
-						sprintf(output_action, "%s/%s", me_config.device_name, action);
+						sprintf(output_action, "%s/%s", me_config.deviceName, action);
 					}
 					
 					//ESP_LOGD(TAG, "output_action:%s", output_action);
@@ -295,8 +295,8 @@ void crosslinks_process(char *crosslinks_str, char *event){
 			//ESP_LOGD(TAG, "Compare trigger:%s in event:%s", trigger, event);
 			if (strstr(event, trigger) != NULL){
 				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
-				char output_action[strlen(me_config.device_name) + strlen(action) + 2];
-				sprintf(output_action, "%s/%s", me_config.device_name, action);
+				char output_action[strlen(me_config.deviceName) + strlen(action) + 2];
+				sprintf(output_action, "%s/%s", me_config.deviceName, action);
 				execute(output_action);
 			}
 			else{
@@ -348,8 +348,8 @@ void crosslinks_process(char *crosslinks_str, char *event){
 // 			if (strstr(trigger, "startup") != NULL)
 // 			{
 // 				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", "startup", trigger, action);
-// 				char output_action[strlen(me_config.device_name) + strlen(action) + 2];
-// 				sprintf(output_action, "%s/%s", me_config.device_name, action);
+// 				char output_action[strlen(me_config.deviceName) + strlen(action) + 2];
+// 				sprintf(output_action, "%s/%s", me_config.deviceName, action);
 // 				execute(output_action);
 // 			}
 // 			else

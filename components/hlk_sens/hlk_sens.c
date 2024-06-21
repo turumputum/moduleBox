@@ -98,8 +98,8 @@ void hlk2420_task(void* arg) {
     }
 
 
-    char t_str[strlen(me_config.device_name)+strlen("/hlk2420_0")+3];
-    sprintf(t_str, "%s/hlk2420_%d",me_config.device_name, slot_num);
+    char t_str[strlen(me_config.deviceName)+strlen("/hlk2420_0")+3];
+    sprintf(t_str, "%s/hlk2420_%d",me_config.deviceName, slot_num);
     me_state.trigger_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 
@@ -253,8 +253,8 @@ void hlk2410_task(void* arg) {
     }
 
 
-    char t_str[strlen(me_config.device_name)+strlen("/hlk2410_0")+3];
-    sprintf(t_str, "%s/hlk2410_%d",me_config.device_name, slot_num);
+    char t_str[strlen(me_config.deviceName)+strlen("/hlk2410_0")+3];
+    sprintf(t_str, "%s/hlk2410_%d",me_config.deviceName, slot_num);
     me_state.trigger_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 

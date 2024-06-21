@@ -98,8 +98,8 @@ void analog_task(void *arg)
 	}
 
     if(flag_custom_topic==0){
-		char *str = calloc(strlen(me_config.device_name)+strlen("/analog_")+4, sizeof(char));
-		sprintf(str, "%s/analog_%d",me_config.device_name, slot_num);
+		char *str = calloc(strlen(me_config.deviceName)+strlen("/analog_")+4, sizeof(char));
+		sprintf(str, "%s/analog_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=str;
 	}else{
 		me_state.trigger_topic_list[slot_num]=custom_topic;
@@ -120,7 +120,7 @@ void analog_task(void *arg)
             prev_resault = resault;
             //ESP_LOGD(TAG, "analog val:%d , allow_delta:%d", resault, MAX_VAL-MIN_VAL);
 
-			int str_len;//=strlen(me_config.device_name)+strlen("/tachometer_")+8;
+			int str_len;//=strlen(me_config.deviceName)+strlen("/tachometer_")+8;
 			char *str;// = (char*)malloc(str_len * sizeof(char));
 
             float f_res;
@@ -135,10 +135,10 @@ void analog_task(void *arg)
 			memset(tmpString, 0, strlen(tmpString));
 
             if(flag_float_output){
-				//sprintf(str,"%s/analog_%d:%f", me_config.device_name, slot_num, f_res);
+				//sprintf(str,"%s/analog_%d:%f", me_config.deviceName, slot_num, f_res);
 				sprintf(tmpString,"%f", f_res);
 			}else{
-				//sprintf(str,"%s/analog_%d:%d", me_config.device_name, slot_num, resault);
+				//sprintf(str,"%s/analog_%d:%d", me_config.deviceName, slot_num, resault);
 				sprintf(tmpString,"%d", resault);
 			}
 

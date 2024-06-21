@@ -14,7 +14,7 @@
 
 #include <math.h>
 #include "accelStepper.h"
-
+#include <string.h>
 #include <stdio.h>
 #include "esp_log.h"
 #include "esp_sleep.h"
@@ -36,7 +36,8 @@ static const char *TAG = "STEPPER";
 extern uint32_t testCount;
 //esp_timer_handle_t us_timer;
 gptimer_handle_t usTime;
-gptimer_handle_t us_timer;
+uint8_t usTimer_flag=0;
+
 
 
 void moveTo(Stepper_t* motor, long absolute)
@@ -49,16 +50,14 @@ void moveTo(Stepper_t* motor, long absolute)
     }
 }
 
-void move(Stepper_t* motor, long relative)
-{
+void move(Stepper_t* motor, long relative){
     moveTo(motor, motor->_currentPos + relative);
 }
 
 // Implements steps according to the current step interval
 // You must call this at least once per step
 // returns true if a step occurred
-uint8_t runSpeed(Stepper_t* motor)
-{
+uint8_t runSpeed(Stepper_t* motor){
     // Dont do anything unless we actually have a step interval
     if (!motor->_stepInterval) return 0; // false
 	
@@ -66,7 +65,7 @@ uint8_t runSpeed(Stepper_t* motor)
     //unsigned long time = esp_timer_get_time();
 	unsigned long time;
 	gptimer_get_raw_count(usTime, &time);
-	unsigned long nextStepTime = motor->_lastStepTime + motor->_stepInterval;
+	unsigned long nextStepTime = motor->_lastStepTime + (motor->_stepInterval/1000);
 
 	// Gymnastics to detect wrapping of either the nextStepTime and/or the current time
 	if (((nextStepTime >= motor->_lastStepTime) && ((time >= nextStepTime) || (time < motor->_lastStepTime)))
@@ -82,39 +81,33 @@ uint8_t runSpeed(Stepper_t* motor)
 		motor->_lastStepTime = time;
 		return 1; // true
     }
-    else
-    {
+    else{
     	return 0; // false
     }
 }
 
-long distanceToGo(Stepper_t* motor)
-{
+long distanceToGo(Stepper_t* motor){
     return (motor->_targetPos - motor->_currentPos);
 }
 
-long targetPosition(Stepper_t* motor)
-{
+long targetPosition(Stepper_t* motor){
     return motor->_targetPos;
 }
 
-long currentPosition(Stepper_t* motor)
-{
+long currentPosition(Stepper_t* motor){
     return motor->_currentPos;
 }
 
 // Useful during initialisations or after initial positioning
 // Sets speed to 0
-void setCurrentPosition(Stepper_t* motor, long position)
-{
+void setCurrentPosition(Stepper_t* motor, long position){
 	motor->_targetPos = motor->_currentPos = position;
 	motor->_n = 0;
 	motor->_stepInterval = 0;
 	motor->_speed = 0;
 }
 
-void computeNewSpeed(Stepper_t* motor)
-{
+void computeNewSpeed(Stepper_t* motor){
     long distanceTo = distanceToGo(motor); // +ve is clockwise from curent location
 
     long stepsToStop = (long)((motor->_speed * motor->_speed) / (2 * motor->_acceleration)); // Equation 16
@@ -164,13 +157,13 @@ void computeNewSpeed(Stepper_t* motor)
 		motor->_direction = (distanceTo > 0) ? DIRECTION_CW : DIRECTION_CCW;
 	}else{
 		// Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
-		motor->_cn = motor->_cn - ((2 * motor->_cn) / ((2 * motor->_n) + 1)); // Equation 13
+		motor->_cn = motor->_cn - ((2.0 * motor->_cn) / ((4.0 * motor->_n) + 1)); // Equation 13
 		motor->_cn = (motor->_cn > motor->_cmin) ? motor->_cn : motor->_cmin; //max(motor->_cn, motor->_cmin);
 	}
 
 	motor->_n++;
 	motor->_stepInterval = motor->_cn;
-	motor->_speed = 1000000/ motor->_cn;
+	motor->_speed = 1000000000/ motor->_cn;
 
 	if (motor->_direction == DIRECTION_CCW)
 		motor->_speed = -motor->_speed;
@@ -209,8 +202,7 @@ void check_sensors_queue(Stepper_t* motor){
 // You must call this at least once per step, preferably in your main loop
 // If the motor is in the desired position, the cost is very small
 // returns true if the motor is still running to the target position.
-uint8_t run(Stepper_t* motor)
-{
+uint8_t run(Stepper_t* motor){
 
 	if(motor->_stop_on_sensor){
 		if((motor->_pin_sensor_up>=0)||(motor->_pin_sensor_down>=0)){
@@ -234,12 +226,10 @@ static bool IRAM_ATTR timer_callback(gptimer_handle_t timer, const gptimer_alarm
 	if(motor->_pulse_up_flag){
 		GPIO.out_w1tc = ((uint32_t)1 << motor->_pin[0]);
 		motor->_pulse_up_flag = 0;
-	}else{
-		if(motor->_stop_on_sensor){
-			check_sensors_queue(motor);
-		}
-		run(motor);
 	}
+
+	run(motor);
+	
 	return pdTRUE;
 }
 
@@ -281,6 +271,8 @@ void InitStepper(Stepper_t* motor, uint8_t interface, uint16_t pin1, uint16_t pi
 
 	motor->init_state=-1;
 
+	memset(&motor->report_msg, 0, sizeof(motor->report_msg));
+
     int i;
     for (i = 0; i < 2; i++)
     	motor->_pinInverted[i] = 0;
@@ -290,34 +282,37 @@ void InitStepper(Stepper_t* motor, uint8_t interface, uint16_t pin1, uint16_t pi
     gptimer_config_t timer_config = {
         .clk_src = GPTIMER_CLK_SRC_DEFAULT,
         .direction = GPTIMER_COUNT_UP,
-        .resolution_hz = 1000000, // 1MHz, 1 tick=1us
+        .resolution_hz = 250000, // 100kHz
     };
-    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &us_timer));
+
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &motor->_timer));
 
     gptimer_event_callbacks_t cbs = {
         .on_alarm = timer_callback,
     };
-    ESP_ERROR_CHECK(gptimer_register_event_callbacks(us_timer, &cbs, motor));
-    ESP_ERROR_CHECK(gptimer_enable(us_timer));
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(motor->_timer, &cbs, motor));
+    ESP_ERROR_CHECK(gptimer_enable(motor->_timer));
 
     gptimer_alarm_config_t run_timer_config = {
         .reload_count = 0,
-        .alarm_count = 10, // period = 10us
+        .alarm_count = 5, // period = 10us
         .flags.auto_reload_on_alarm = true,
     };
-    
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(us_timer, &run_timer_config));
-    ESP_ERROR_CHECK(gptimer_start(us_timer));
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(motor->_timer, &run_timer_config));
+    ESP_ERROR_CHECK(gptimer_start(motor->_timer));
 
 	// us time
-	gptimer_config_t time_config = {
-        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-        .direction = GPTIMER_COUNT_UP,
-        .resolution_hz = 1000000, // 1MHz, 1 tick=1us
-    };
-    ESP_ERROR_CHECK(gptimer_new_timer(&time_config, &usTime));
-	ESP_ERROR_CHECK(gptimer_enable(usTime));
-	ESP_ERROR_CHECK(gptimer_start(usTime));
+	if(usTimer_flag==0){
+		gptimer_config_t time_config = {
+			.clk_src = GPTIMER_CLK_SRC_DEFAULT,
+			.direction = GPTIMER_COUNT_UP,
+			.resolution_hz = 1000000, // 1MHz, 1 tick=1us
+		};
+		ESP_ERROR_CHECK(gptimer_new_timer(&time_config, &usTime));
+		ESP_ERROR_CHECK(gptimer_enable(usTime));
+		ESP_ERROR_CHECK(gptimer_start(usTime));
+		usTimer_flag=1;
+	}
 	
     // Some reasonable default
     setAcceleration(motor, 1);
@@ -373,7 +368,7 @@ void setMaxSpeed(Stepper_t* motor, int32_t speed)
     if (motor->_maxSpeed != speed)
     {
     	motor->_maxSpeed = speed;
-    	motor->_cmin = 1000000.0 / speed;
+    	motor->_cmin = 1000000000.0 / speed;
 		// Recompute _n from current speed and adjust speed if accelerating or cruising
 		if (motor->_n > 0)
 		{
@@ -397,7 +392,7 @@ void setAcceleration(Stepper_t* motor, int32_t acceleration)
 	    // Recompute _n per Equation 17
     	motor->_n = motor->_n * (motor->_acceleration / acceleration);
 		// New c0 per Equation 7, with correction per Equation 15
-    	motor->_c0 = 0.676 * sqrt(2.0 / acceleration) * 1000000.0;// Equation 15
+    	motor->_c0 = 0.676 * sqrt(2.0 / acceleration) * 1000000000.0;// Equation 15
     	motor->_acceleration = acceleration;
 		computeNewSpeed(motor);
     }
@@ -417,13 +412,11 @@ void setSpeed(Stepper_t* motor, int32_t speed)
 
     speed = constrain(speed, -motor->_maxSpeed, motor->_maxSpeed);
 
-    if (speed == 0.0)
-    {
+    if (speed == 0.0) {
     	motor->_stepInterval = 0;
     }
-    else
-    {
-    	motor->_stepInterval = fabs(1000000.0 / speed);
+    else  {
+    	motor->_stepInterval = fabs(1000000000.0 / speed);
     	motor->_direction = (speed > 0.0) ? DIRECTION_CW : DIRECTION_CCW;
     }
 

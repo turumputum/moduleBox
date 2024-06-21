@@ -132,6 +132,8 @@ int init_slots(void){
 			start_hlk2420_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
 			start_hlk2410_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "dialer", 7)){
+			start_dialer_task(i);
 		}
 	}
 

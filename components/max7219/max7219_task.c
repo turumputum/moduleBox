@@ -61,8 +61,8 @@ void max7219_task(void *arg) {
     max7219_set_brightness(&dev, MAX7219_MAX_BRIGHTNESS);
     //max7219_set_decode_mode(&dev, true);
 
-    char t_str[strlen(me_config.device_name)+strlen("/disp_0")+3];
-    sprintf(t_str, "%s/disp_%d",me_config.device_name, slot_num);
+    char t_str[strlen(me_config.deviceName)+strlen("/disp_0")+3];
+    sprintf(t_str, "%s/disp_%d",me_config.deviceName, slot_num);
     me_state.action_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 

@@ -270,8 +270,8 @@ void smartLed_task(void *arg){
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/smartLed_0")+3];
-		sprintf(t_str, "%s/smartLed_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/smartLed_0")+3];
+		sprintf(t_str, "%s/smartLed_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
@@ -679,8 +679,8 @@ void ledRing_task(void *arg){
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/ledRing_0")+3];
-		sprintf(t_str, "%s/ledRing_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/ledRing_0")+3];
+		sprintf(t_str, "%s/ledRing_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 

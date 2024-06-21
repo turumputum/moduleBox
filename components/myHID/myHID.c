@@ -61,8 +61,8 @@ void HID_task(void *arg) {
     command_message_t msg;
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
-    char t_str[strlen(me_config.device_name)+strlen("/HID_0")+3];
-    sprintf(t_str, "%s/HID_%d",me_config.device_name, slot_num);
+    char t_str[strlen(me_config.deviceName)+strlen("/HID_0")+3];
+    sprintf(t_str, "%s/HID_%d",me_config.deviceName, slot_num);
     me_state.action_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
     ESP_LOGD(TAG, "HID task init ok. Slot_num:%d", slot_num);

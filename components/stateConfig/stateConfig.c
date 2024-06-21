@@ -48,8 +48,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		}
 	}
 
-	if (MATCH("SYSTEM", "device_name")) {
-		pconfig->device_name = strdup(value);
+	if (MATCH("SYSTEM", "deviceName")) {
+		pconfig->deviceName = strdup(value);
 	} else if (MATCH("SYSTEM", "USB_debug")) {
 		pconfig->USB_debug = atoi(value);
 	}  else if (MATCH("LAN", "LAN_enable")) {
@@ -118,7 +118,7 @@ void load_Default_Config(void) {
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
-	me_config.device_name = strdup("module_box");
+	me_config.deviceName = strdup("moduleBox");
 	me_config.USB_debug = 0;
 
 	me_config.LAN_enable = 0;
@@ -226,7 +226,7 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
-	sprintf(tmp, "device_name = %s \r\n", me_config.device_name);
+	sprintf(tmp, "deviceName = %s \r\n", me_config.deviceName);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 

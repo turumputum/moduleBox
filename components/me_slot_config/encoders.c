@@ -137,8 +137,8 @@ void encoderPWM_task(void *arg)
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/encoder_0")+3];
-		sprintf(t_str, "%s/encoder_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0")+3];
+		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
@@ -225,7 +225,7 @@ void encoderPWM_task(void *arg)
 						sprintf(str, "-%d", delta);
 					}
 				}
-				//sprintf(str, "%s/encoder_%d:%s", me_config.device_name, slot_num, dir);
+				//sprintf(str, "%s/encoder_%d:%s", me_config.deviceName, slot_num, dir);
 			}
 			report(str, slot_num);
 			prev_pos = current_pos;
@@ -281,8 +281,8 @@ void encoder_inc_task(void *arg)
 	}
 
     if(flag_custom_topic==0){
-		char *str = calloc(strlen(me_config.device_name)+strlen("/encoder_")+4, sizeof(char));
-		sprintf(str, "%s/encoder_%d",me_config.device_name, slot_num);
+		char *str = calloc(strlen(me_config.deviceName)+strlen("/encoder_")+4, sizeof(char));
+		sprintf(str, "%s/encoder_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=str;
 	}else{
 		me_state.trigger_topic_list[slot_num]=custom_topic;

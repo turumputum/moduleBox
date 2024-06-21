@@ -94,8 +94,8 @@ void tachometer_task(void *arg)
 
 	
 	// if(flag_custom_topic==0){
-	// 	char *str = calloc(strlen(me_config.device_name)+strlen("/tachometer_")+4, sizeof(char));
-	// 	sprintf(str, "%s/tachometer_%d",me_config.device_name, slot_num);
+	// 	char *str = calloc(strlen(me_config.deviceName)+strlen("/tachometer_")+4, sizeof(char));
+	// 	sprintf(str, "%s/tachometer_%d",me_config.deviceName, slot_num);
 	// 	me_state.trigger_topic_list[slot_num]=str;
 	// }else{
 	// 	me_state.trigger_topic_list[slot_num]=custom_topic;
@@ -107,8 +107,8 @@ void tachometer_task(void *arg)
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/tachometer_0")+3];
-		sprintf(t_str, "%s/tachometer_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/tachometer_0")+3];
+		sprintf(t_str, "%s/tachometer_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
@@ -198,9 +198,9 @@ void tachometer_task(void *arg)
 			// 	str = (char*)malloc(str_len * sizeof(char));
 			// 	sprintf(str,"%s:%d", custom_topic, resault);
 			// }else{
-			// 	str_len=strlen(me_config.device_name)+strlen("/tachometer_")+8;
+			// 	str_len=strlen(me_config.deviceName)+strlen("/tachometer_")+8;
 			// 	str = (char*)malloc(str_len * sizeof(char));
-			// 	sprintf(str,"%s/tachometer_%d:%d", me_config.device_name, slot_num, resault);
+			// 	sprintf(str,"%s/tachometer_%d:%d", me_config.deviceName, slot_num, resault);
 			// }
 			memset(str, 0, strlen(str));
 			sprintf(str, "%d", resault);

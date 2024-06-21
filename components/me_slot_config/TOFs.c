@@ -109,8 +109,8 @@ void benewakeTOF_task(void* arg) {
         flag_custom_topic = 1;
     }
     if (flag_custom_topic == 0) {
-        char* str = calloc(strlen(me_config.device_name) + strlen("/distance_") + 4, sizeof(char));
-        sprintf(str, "%s/distance_%d", me_config.device_name, slot_num);
+        char* str = calloc(strlen(me_config.deviceName) + strlen("/distance_") + 4, sizeof(char));
+        sprintf(str, "%s/distance_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = str;
     }
     else {
@@ -223,9 +223,9 @@ void benewakeTOF_task(void* arg) {
             }else {
 
                 if (flag_float_output) {
-                    sprintf(str, "%s/distance_%d:%f", me_config.device_name, slot_num, f_res);
+                    sprintf(str, "%s/distance_%d:%f", me_config.deviceName, slot_num, f_res);
                 }else {
-                    sprintf(str, "%s/distance_%d:%d", me_config.device_name, slot_num, resault);
+                    sprintf(str, "%s/distance_%d:%d", me_config.deviceName, slot_num, resault);
                 }
             }
             report(str, slot_num);

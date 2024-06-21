@@ -72,31 +72,31 @@ void in_task(void *arg){
 	char str[255];
 
 	int IN_inverse=0;
-	if (strstr(me_config.slot_options[slot_num], "in_inverse")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "inInverse")!=NULL){
 		IN_inverse=1;
 	}
 
 	//---set delay---
 	uint16_t delay_ms = 0;
-	if (strstr(me_config.slot_options[slot_num], "in_report_delay") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "in_report_delay");
+	if (strstr(me_config.slot_options[slot_num], "inReportDelay") != NULL) {
+		delay_ms = get_option_int_val(slot_num, "inReportDelay");
 		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, slot_num);
 	}
 
-	int debounce_gap = 0;
-	if (strstr(me_config.slot_options[slot_num], "in_debounce_gap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "in_debounce_gap");
+	int debounce_gap = 10;
+	if (strstr(me_config.slot_options[slot_num], "inDebounceGap") != NULL) {
+		debounce_gap = get_option_int_val(slot_num, "inDebounceGap");
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
     
-    if (strstr(me_config.slot_options[slot_num], "in_topic") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "inTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "in_topic");
+    	custom_topic = get_option_string_val(slot_num, "inTopic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/in_0")+3];
-		sprintf(t_str, "%s/in_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/in_0")+3];
+		sprintf(t_str, "%s/in_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
@@ -192,13 +192,13 @@ void out_task(void *arg) {
 
     //---set inverse---
 	int out_inverse = 0;
-	if (strstr(me_config.slot_options[slot_num], "out_inverse") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "outInverse") != NULL) {
 		out_inverse = 1;
 		ESP_LOGD(TAG, "Set out_inverse:%d for slot:%d",out_inverse, slot_num);
 	}
 	//---set default state---
 	uint8_t def_state = out_inverse;
-	if (strstr(me_config.slot_options[slot_num], "out_default_high") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "outDefaultHigh") != NULL) {
 		def_state = !def_state;
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",def_state, slot_num);
 	}
@@ -206,27 +206,27 @@ void out_task(void *arg) {
 
 	//---set delay---
 	uint16_t delay_ms = 0;
-	if (strstr(me_config.slot_options[slot_num], "out_delay_ms") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "out_delay_ms");
+	if (strstr(me_config.slot_options[slot_num], "outDelay") != NULL) {
+		delay_ms = get_option_int_val(slot_num, "outDelay");
 		ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d",delay_ms, slot_num);
 	}
 
 	//---set impulse---
 	uint16_t impulse_ms = 0;
-	if (strstr(me_config.slot_options[slot_num], "out_impulse_ms") != NULL) {
-		impulse_ms = get_option_int_val(slot_num, "out_impulse_ms");
+	if (strstr(me_config.slot_options[slot_num], "outImpulse") != NULL) {
+		impulse_ms = get_option_int_val(slot_num, "outImpulse");
 		ESP_LOGD(TAG, "Set impulse_ms:%d for slot:%d",impulse_ms, slot_num);
 	}
 
 	//---add action to topic list---
-	if (strstr(me_config.slot_options[slot_num], "out_topic") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "outTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "out_topic");
+    	custom_topic = get_option_string_val(slot_num, "outTopic");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.device_name)+strlen("/out_0")+3];
-		sprintf(t_str, "%s/out_%d",me_config.device_name, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/out_0")+3];
+		sprintf(t_str, "%s/out_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
