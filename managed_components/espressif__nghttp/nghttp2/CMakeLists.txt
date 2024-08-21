@@ -22,15 +22,15 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.14)
 # XXX using 1.8.90 instead of 1.9.0-DEV
-project(nghttp2 VERSION 1.58.0)
+project(nghttp2 VERSION 1.62.1)
 
 # See versioning rule:
 #  https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-set(LT_CURRENT  39)
+set(LT_CURRENT  42)
 set(LT_REVISION 1)
-set(LT_AGE      25)
+set(LT_AGE      28)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 include(Version)
@@ -51,23 +51,29 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 include(GNUInstallDirs)
+include(CMakeDependentOption)
 
 # For documentation
 find_package(Python3 COMPONENTS Interpreter)
 
 # Auto-detection of features that can be toggled
-find_package(OpenSSL 1.0.1)
-find_package(Libev 4.11)
-find_package(Libcares 1.7.5)
-find_package(ZLIB 1.2.3)
-find_package(Libngtcp2 0.0.0)
-find_package(Libngtcp2_crypto_quictls 0.0.0)
+if(NOT ENABLE_LIB_ONLY)
+  find_package(Libev 4.11)
+  find_package(Libcares 1.7.5)
+  find_package(ZLIB 1.2.3)
+  find_package(Libbrotlienc 1.0.9)
+  find_package(Libbrotlidec 1.0.9)
+endif()
+
+find_package(OpenSSL 1.1.1)
+find_package(Libngtcp2 1.0.0)
+find_package(Libngtcp2_crypto_quictls 1.0.0)
 if(LIBNGTCP2_CRYPTO_QUICTLS_FOUND)
   set(HAVE_LIBNGTCP2_CRYPTO_QUICTLS 1)
 endif()
-find_package(Libnghttp3 0.0.0)
+find_package(Libnghttp3 1.1.0)
 if(WITH_LIBBPF)
-  find_package(Libbpf 0.4.0)
+  find_package(Libbpf 0.7.0)
   if(NOT LIBBPF_FOUND)
     message(FATAL_ERROR "libbpf was requested (WITH_LIBBPF=1) but not found.")
   endif()
@@ -118,7 +124,7 @@ else()
 endif()
 
 include(ExtractValidFlags)
-foreach(_cxx1x_flag -std=c++14)
+foreach(_cxx1x_flag -std=c++20)
   extract_valid_cxx_flags(_cxx1x_flag_supported ${_cxx1x_flag})
   if(_cxx1x_flag_supported)
     set(CXX1XCXXFLAGS ${_cxx1x_flag})
@@ -162,12 +168,8 @@ endif()
 # XXX shouldn't ${CMAKE_DL_LIBS} be appended to OPENSSL_LIBRARIES instead of
 # APP_LIBRARIES if it is really specific to OpenSSL?
 
-find_package(CUnit 2.1)
 enable_testing()
-set(HAVE_CUNIT      ${CUNIT_FOUND})
-if(HAVE_CUNIT)
-  add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
-endif()
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 # openssl (for src)
 include(CheckSymbolExists)
@@ -180,9 +182,11 @@ if(OPENSSL_FOUND)
   if(WIN32)
     set(CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}" "ws2_32" "bcrypt")
   endif()
-  check_symbol_exists(SSL_is_quic "openssl/ssl.h" HAVE_SSL_IS_QUIC)
-  if(NOT HAVE_SSL_IS_QUIC)
-    message(WARNING "OpenSSL in ${OPENSSL_LIBRARIES} does not have SSL_is_quic.  HTTP/3 support cannot be enabled")
+  if(ENABLE_HTTP3)
+    check_symbol_exists(SSL_provide_quic_data "openssl/ssl.h" HAVE_SSL_PROVIDE_QUIC_DATA)
+    if(NOT HAVE_SSL_PROVIDE_QUIC_DATA)
+        message(WARNING "OpenSSL in ${OPENSSL_LIBRARIES} does not have SSL_provide_quic_data.  HTTP/3 support cannot be enabled")
+    endif()
   endif()
   cmake_pop_check_state()
 else()
@@ -219,6 +223,13 @@ endif()
 # jemalloc
 set(HAVE_JEMALLOC   ${JEMALLOC_FOUND})
 
+# libbrotli (for src)
+set(HAVE_LIBBROTLIENC ${LIBBROTLIENC_FOUND})
+set(HAVE_LIBBROTLIDEC ${LIBBROTLIDEC_FOUND})
+if(LIBBROTLIENC_FOUND AND LIBBROTLIDEC_FOUND)
+  set(HAVE_LIBBROTLI 1)
+endif()
+
 # libbpf (for bpf)
 set(HAVE_LIBBPF ${LIBBPF_FOUND})
 if(LIBBPF_FOUND)
@@ -240,7 +251,7 @@ endif()
 
 # HTTP/3 requires quictls/openssl, libngtcp2, libngtcp2_crypto_quictls
 # and libnghttp3.
-if(ENABLE_HTTP3 AND NOT (HAVE_SSL_IS_QUIC AND LIBNGTCP2_FOUND AND LIBNGTCP2_CRYPTO_QUICTLS_FOUND AND LIBNGHTTP3_FOUND))
+if(ENABLE_HTTP3 AND NOT (HAVE_SSL_PROVIDE_QUIC_DATA AND LIBNGTCP2_FOUND AND LIBNGTCP2_CRYPTO_QUICTLS_FOUND AND LIBNGHTTP3_FOUND))
   message(FATAL_ERROR "HTTP/3 was requested (ENABLE_HTTP3=1) but dependencies are not met.")
 endif()
 
@@ -277,10 +288,9 @@ check_include_file("netinet/ip.h"   HAVE_NETINET_IP_H)
 check_include_file("pwd.h"          HAVE_PWD_H)
 check_include_file("sys/socket.h"   HAVE_SYS_SOCKET_H)
 check_include_file("sys/time.h"     HAVE_SYS_TIME_H)
-check_include_file("sysinfoapi.h"   HAVE_SYSINFOAPI_H)
 check_include_file("syslog.h"       HAVE_SYSLOG_H)
-check_include_file("time.h"         HAVE_TIME_H)
 check_include_file("unistd.h"       HAVE_UNISTD_H)
+check_include_file("windows.h"      HAVE_WINDOWS_H)
 
 include(CheckTypeSize)
 # Checks for typedefs, structures, and compiler characteristics.
@@ -310,10 +320,6 @@ endif()
 include(CheckStructHasMember)
 check_struct_has_member("struct tm" tm_gmtoff time.h HAVE_STRUCT_TM_TM_GMTOFF)
 
-# Check size of pointer to decide we need 8 bytes alignment adjustment.
-check_type_size("int *"   SIZEOF_INT_P)
-check_type_size("time_t"  SIZEOF_TIME_T)
-
 # Checks for library functions.
 include(CheckFunctionExists)
 check_function_exists(_Exit     HAVE__EXIT)
@@ -334,6 +340,8 @@ if(NOT HAVE_DECL_INITGROUPS AND HAVE_UNISTD_H)
   endif()
 endif()
 
+check_symbol_exists(CLOCK_MONOTONIC "time.h" HAVE_DECL_CLOCK_MONOTONIC)
+
 set(WARNCFLAGS)
 set(WARNCXXFLAGS)
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
@@ -349,6 +357,15 @@ else()
 
   include(PickyWarningsC)
   include(PickyWarningsCXX)
+endif()
+
+if(ENABLE_STATIC_CRT)
+  foreach(lang C CXX)
+    foreach(suffix "" _DEBUG _MINSIZEREL _RELEASE _RELWITHDEBINFO)
+      set(var "CMAKE_${lang}_FLAGS${suffix}")
+      string(REPLACE "/MD" "/MT" ${var} "${${var}}")
+    endforeach()
+  endforeach()
 endif()
 
 if(ENABLE_DEBUG)
@@ -418,9 +435,11 @@ add_subdirectory(lib)
 add_subdirectory(third-party)
 add_subdirectory(src)
 add_subdirectory(examples)
-add_subdirectory(tests)
-#add_subdirectory(tests/testdata)
-add_subdirectory(integration-tests)
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
+  add_subdirectory(tests)
+  #add_subdirectory(tests/testdata)
+  add_subdirectory(integration-tests)
+endif()
 if(ENABLE_DOC)
   add_subdirectory(doc)
 endif()
@@ -449,8 +468,8 @@ message(STATUS "summary of build options:
       Python:          ${Python3_EXECUTABLE}
       Python3_VERSION: ${Python3_VERSION}
     Test:
-      CUnit:          ${HAVE_CUNIT} (LIBS='${CUNIT_LIBRARIES}')
       Failmalloc:     ${ENABLE_FAILMALLOC}
+      Build Test:     ${BUILD_TESTING}
     Libs:
       OpenSSL:        ${HAVE_OPENSSL} (LIBS='${OPENSSL_LIBRARIES}')
       Libxml2:        ${HAVE_LIBXML2} (LIBS='${LIBXML2_LIBRARIES}')
@@ -465,6 +484,8 @@ message(STATUS "summary of build options:
       Jemalloc:       ${HAVE_JEMALLOC} (LIBS='${JEMALLOC_LIBRARIES}')
       Zlib:           ${HAVE_ZLIB} (LIBS='${ZLIB_LIBRARIES}')
       Systemd:        ${HAVE_SYSTEMD} (LIBS='${SYSTEMD_LIBRARIES}')
+      Libbrotlienc:   ${HAVE_LIBBROTLIENC} (LIBS='${LIBBROTLIENC_LIBRARIES}')
+      Libbrotlidec:   ${HAVE_LIBBROTLIDEC} (LIBS='${LIBBROTLIDEC_LIBRARIES}')
     Third-party:
       http-parser:    ${ENABLE_THIRD_PARTY}
       MRuby:          ${HAVE_MRUBY}

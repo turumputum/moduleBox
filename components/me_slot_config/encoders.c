@@ -248,8 +248,7 @@ void start_encoderPWM_task(int slot_num)
 }
 
 //-------------------incremental encoder secttion--------------------------
-void encoder_inc_task(void *arg)
-{
+void encoder_inc_task(void *arg){
 	int slot_num = *(int *)arg;
 	uint8_t a_pin_num = SLOTS_PIN_MAP[slot_num][0];
 	uint8_t b_pin_num = SLOTS_PIN_MAP[slot_num][1];

@@ -37,6 +37,9 @@
 #include "hlk_sens.h"
 #include "dwin_uart.h"
 
+#include "distanceSens.h"
+#include "mb_oneWire.h"
+
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
 
@@ -90,6 +93,8 @@ int init_slots(void){
 			start_encoder_inc_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "benewake_TOF", 12)){
 			start_benewakeTOF_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "VL53TOF", 7)){
+			start_VL53TOF_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
@@ -134,6 +139,10 @@ int init_slots(void){
 			start_hlk2410_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dialer", 7)){
 			start_dialer_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "whitelist", 9)){
+			start_whitelist_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
+			start_ds18b20_task(i);
 		}
 	}
 

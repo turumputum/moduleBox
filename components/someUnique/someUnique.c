@@ -12,6 +12,7 @@
 #include <driver/uart.h>
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
+#include "esp_intr_alloc.h"
 
 #include "executor.h"
 #include "reporter.h"
@@ -250,16 +251,15 @@ void dialer_task(void* arg) {
     in_conf.pin_bit_mask = (1ULL<<pulse_pin);
     in_conf.mode = GPIO_MODE_INPUT;
     gpio_config(&in_conf);
-	gpio_set_intr_type(pulse_pin, GPIO_INTR_ANYEDGE);
-    gpio_install_isr_service(0);
+	gpio_set_intr_type(pulse_pin, GPIO_INTR_NEGEDGE);
+    //gpio_install_isr_service(ESP_INTR_FLAG_LOWMED);
 	gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)slot_num);
-
 
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = 1ULL<<ena_pin;
-    io_conf.pull_down_en = 0;
+    io_conf.pull_down_en = 1;
     io_conf.pull_up_en = 0;
     esp_err_t ret = gpio_config(&io_conf);
 
@@ -269,12 +269,18 @@ void dialer_task(void* arg) {
 		ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", waitingTime, slot_num);
 	}
 
+    uint8_t enaInverse = 0;
+    if (strstr(me_config.slot_options[slot_num], "enaInverse") != NULL) {
+		enaInverse = get_option_int_val(slot_num, "enaInverse");
+		ESP_LOGD(TAG, "Set enaInverse:%d for slot:%d", enaInverse, slot_num);
+	}
+
     uint8_t numberMaxLenght = 7;
     if (strstr(me_config.slot_options[slot_num], "numberMaxLenght") != NULL) {
 		numberMaxLenght = get_option_int_val(slot_num, "numberMaxLenght");
 		ESP_LOGD(TAG, "Set numberMaxLenght:%d for slot:%d", numberMaxLenght, slot_num);
 	}
-    int debounceGap = 50;
+    int debounceGap = 20;
 	if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
 		debounceGap = get_option_int_val(slot_num, "debounceGap");
 		ESP_LOGD(TAG, "Set debounceGap:%d for slot:%d",debounceGap, slot_num);
@@ -304,21 +310,22 @@ void dialer_task(void* arg) {
     uint32_t tick=xTaskGetTickCount();
 
     while(1){
-        vTaskDelay(pdMS_TO_TICKS(10));      
+        vTaskDelay(pdMS_TO_TICKS(30));      
         
-        uint8_t ena_state = gpio_get_level(ena_pin);
+        uint8_t ena_state = gpio_get_level(ena_pin)?!enaInverse:enaInverse;
         if(ena_state!= prev_ena_state){
             prev_ena_state = ena_state;
             dial_start_time =pdTICKS_TO_MS(xTaskGetTickCount());
             if((ena_state == 1)&&(state_flag == 0)){
                 state_flag = 1;
-                ESP_LOGD(TAG, "Lets input number: %s strlen:%d dial_start_time:%ld", number_str, strlen(number_str), dial_start_time);
+                counter = 0;
+                //ESP_LOGD(TAG, "Lets input number: %s strlen:%d dial_start_time:%ld", number_str, strlen(number_str), dial_start_time);
             }else if(ena_state == 0){
                 if(counter>=10)counter=0;
                 number_str[string_lenght]=(char)counter+48;
                 string_lenght++;
                 number_str[string_lenght]='\0';
-                ESP_LOGD(TAG, "update number_str: %s counter:%d strlen:%d", number_str, counter, strlen(number_str));
+                //ESP_LOGD(TAG, "update number_str: %s counter:%d strlen:%d", number_str, counter, strlen(number_str));
                 counter = 0;
             }
         }
@@ -326,7 +333,7 @@ void dialer_task(void* arg) {
         if(state_flag == 1){
             if(((pdTICKS_TO_MS(xTaskGetTickCount())-dial_start_time)>=waitingTime)||(string_lenght>=numberMaxLenght)){
                 if(ena_state == 0){
-                    ESP_LOGD(TAG, "Input end, report number: %s", number_str);
+                    //ESP_LOGD(TAG, "Input end, report number: %s", number_str);
                     report(number_str, slot_num);
                     memset(number_str, 0, numberMaxLenght);
                     state_flag = 0;
@@ -337,26 +344,26 @@ void dialer_task(void* arg) {
 
         uint8_t tmp;
 		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
-            
+            vTaskDelay(debounceGap);
             if(gpio_get_level(pulse_pin) == 0){
-                if(debounceGap!=0){
-                    if((xTaskGetTickCount()-tick)<debounceGap){
-                        ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
-                        goto exit;
-                    }
-                }
+                // if(debounceGap!=0){
+                //     if((xTaskGetTickCount()-tick)<debounceGap){
+                //         //ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
+                //         goto exit;
+                //     }
+                // }
 
                 tick = xTaskGetTickCount();
                 counter++;
             }
         }
-        exit:
+        // exit:
     }
 
 }
 
 void start_dialer_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(dialer_task, "dialer_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
+    xTaskCreate(dialer_task, "dialer_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
     ESP_LOGD(TAG, "dialer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

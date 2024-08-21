@@ -2,6 +2,7 @@
 dependencies:
   espressif/mdns: "^1.2.2"
   espressif/jsmn: "^1.1.0"
+  ds18b20: "^0.1.0"
   ## Required IDF version
   idf:
     version: ">=5.1.0"

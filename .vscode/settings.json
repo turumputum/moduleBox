@@ -4,7 +4,7 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.portWin": "COM175",
+    "idf.portWin": "COM168",
     "files.associations": {
         "esp_eth_mac.h": "c",
         "esp_efuse.h": "c",
@@ -85,7 +85,11 @@
         "esp_vfs.h": "c",
         "disp_hd44780.h": "c",
         "typeinfo": "c",
-        "future": "c"
+        "future": "c",
+        "esp_peripherals.h": "c",
+        "audio_pipeline.h": "c",
+        "esp_system.h": "c",
+        "stdint.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

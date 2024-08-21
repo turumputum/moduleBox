@@ -54,31 +54,31 @@ void audioSetIndicator(uint8_t slot_num, uint32_t level){
 	gpio_set_level(led_pin, level);// module led light
 }
 
-void trackShift(char* cmd_arg, int16_t *truckNum){
+void trackShift(char* cmd_arg){
 	//ESP_LOGD(TAG,"trackShift arg:%d", cmd_arg[0]);
 	if (cmd_arg[0] == 43) {
-		*truckNum += atoi(cmd_arg + 1);
-		if (*truckNum >= me_state.numOfTrack) {
-			*truckNum = 0;
+		me_state.currentTrack += atoi(cmd_arg + 1);
+		if (me_state.currentTrack >= me_state.numOfTrack) {
+			me_state.currentTrack = 0;
 		}
-		ESP_LOGD(TAG, "Shift track. Current track index increment: %d", *truckNum);
+		ESP_LOGD(TAG, "Shift track+. Current track index: %d", me_state.currentTrack);
 	} else if (cmd_arg[0] == 45) {
-		*truckNum -= atoi(cmd_arg + 1);
-		if (*truckNum < 0) {
-			*truckNum = me_state.numOfTrack-1;
+		me_state.currentTrack -= atoi(cmd_arg + 1);
+		if (me_state.currentTrack < 0) {
+			me_state.currentTrack = me_state.numOfTrack-1;
 		}
-		ESP_LOGD(TAG, "Shift track. Current track index decrement: %d", *truckNum);
+		ESP_LOGD(TAG, "Shift track-. Current track index: %d", me_state.currentTrack);
 	} else if (cmd_arg[0] == 35) {
 		ESP_LOGD(TAG, "noShift track. Current track index: %d", me_state.currentTrack);
 	}else if (strstr(cmd_arg, "random")!=NULL) {
-		*truckNum = rand() % me_state.numOfTrack;
-		ESP_LOGD(TAG, "Shift track. Set random track index: %d", *truckNum);
+		me_state.currentTrack = rand() % me_state.numOfTrack;
+		ESP_LOGD(TAG, "Shift track. Set random track index: %d", me_state.currentTrack);
 	}else {
-		*truckNum = atoi(cmd_arg);
-		if (*truckNum >= me_state.numOfTrack) {
-			*truckNum = 0;
+		me_state.currentTrack = atoi(cmd_arg);
+		if (me_state.currentTrack >= me_state.numOfTrack) {
+			me_state.currentTrack = 0;
 		}
-		ESP_LOGD(TAG, "Shift track. Current track index: %d of: %d ", *truckNum, me_state.numOfTrack);
+		ESP_LOGD(TAG, "Shift track. Current track index: %d of: %d ", me_state.currentTrack, me_state.numOfTrack);
 	}
 }
 
@@ -161,15 +161,18 @@ void audio_task(void *arg) {
 
 	fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
 	fatfs_cfg.type = AUDIO_STREAM_READER;
+	fatfs_cfg.task_prio = 22; //22
 	fatfs_stream_reader = fatfs_stream_init(&fatfs_cfg);
 
 	//ESP_LOGD(TAG, "Create mp3 decoder to decode mp3 file");
 	mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
+	mp3_cfg.task_prio = 22; //22
 	//mp3_cfg.out_rb_size = 3 * 1024;
 	mp3_decoder = mp3_decoder_init(&mp3_cfg);
 
 	//ESP_LOGD(TAG, "Create resample filter");
 	rsp_filter_cfg_t rsp_cfg = DEFAULT_RESAMPLE_FILTER_CONFIG();
+	rsp_cfg.task_prio = 22; //22
 	rsp_cfg.prefer_flag = 1;
 	rsp_handle = rsp_filter_init(&rsp_cfg);
 
@@ -222,15 +225,17 @@ void audio_task(void *arg) {
 			}else{
 				cmd_arg = strdup("0");
 			}
-			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "play", 4)){//------------------------------
 				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), currentTrack);
-				trackShift(cmd_arg, &currentTrack);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(play_to_end==1)){
 					ESP_LOGD(TAG, "skip restart track");
 				}else{
+					ESP_LOGD(TAG, "before shift:%d", me_state.currentTrack);
+					trackShift(cmd_arg);
+					ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
 					vTaskDelay(pdMS_TO_TICKS(play_delay));
-					if(audioPlay(currentTrack)==ESP_OK){
+					if(audioPlay(me_state.currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);
 					}else{
 						audioSetIndicator(slot_num, 0);
@@ -246,10 +251,10 @@ void audio_task(void *arg) {
 					audioSetIndicator(slot_num, 0);
 				}
 			}else if(!memcmp(command, "shift", 5)){//------------------------------
-				trackShift(cmd_arg, &currentTrack);
+				trackShift(cmd_arg);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)){
 					if(play_to_end==0){
-						if(audioPlay(currentTrack)==ESP_OK){
+						if(audioPlay(me_state.currentTrack)==ESP_OK){
 							audioSetIndicator(slot_num, 1);
 						}else{
 							audioSetIndicator(slot_num, 0);
@@ -305,7 +310,7 @@ void audioInit(uint8_t slot_num){
 	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_player_%d", slot_num);
-	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
+	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-3, NULL, 1);
 }
 
 void audioDeinit(void) {
@@ -346,13 +351,13 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	//audio_element_getdata(mp3_decoder);
 	// music_info.byte_pos=music_info.total_bytes/2;
 	// audio_element_set_byte_pos(mp3_decoder, music_info.byte_pos);
-	ESP_LOGD(TAG, "Received music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d byte_pos:%lld total_bytes:%lld", music_info.sample_rates, music_info.bits, music_info.channels, music_info.byte_pos, music_info.total_bytes);
+	ESP_LOGD(TAG, "Received music info from mp3 decoder, file:%s sample_rates=%d, bits=%d, ch=%d byte_pos:%lld total_bytes:%lld", me_config.soundTracks[truckNum], music_info.sample_rates, music_info.bits, music_info.channels, music_info.byte_pos, music_info.total_bytes);
 	audio_element_setinfo(i2s_stream_writer, &music_info);
 	rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
 
 	return audio_pipeline_run(pipeline);
 
-	ESP_LOGD(TAG, "Start playing file:%s Heap usage:%lu, Free heap:%u", me_config.soundTracks[me_state.currentTrack], heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	ESP_LOGD(TAG, "Start playing file:%s Heap usage:%lu, Free heap:%u", me_config.soundTracks[truckNum], heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 void audioStop(void) {

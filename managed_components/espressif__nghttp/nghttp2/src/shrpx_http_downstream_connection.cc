@@ -425,8 +425,8 @@ int HttpDownstreamConnection::initiate_connection() {
 
       auto sni_name =
           addr_->sni.empty() ? StringRef{addr_->host} : StringRef{addr_->sni};
-      if (!util::numeric_host(sni_name.c_str())) {
-        SSL_set_tlsext_host_name(conn_.tls.ssl, sni_name.c_str());
+      if (!util::numeric_host(sni_name.data())) {
+        SSL_set_tlsext_host_name(conn_.tls.ssl, sni_name.data());
       }
 
       auto session = tls::reuse_tls_session(addr_->tls_session_cache);
@@ -564,9 +564,10 @@ int HttpDownstreamConnection::push_request_headers() {
         return -1;
       }
       auto iov = make_byte_ref(balloc, base64::encode_length(nonce.size()) + 1);
-      auto p = base64::encode(std::begin(nonce), std::end(nonce), iov.base);
+      auto p =
+          base64::encode(std::begin(nonce), std::end(nonce), std::begin(iov));
       *p = '\0';
-      auto key = StringRef{iov.base, p};
+      auto key = StringRef{std::span{std::begin(iov), p}};
       downstream_->set_ws_key(key);
 
       buf->append("Sec-Websocket-Key: ");
@@ -596,13 +597,13 @@ int HttpDownstreamConnection::push_request_headers() {
   auto upstream = downstream_->get_upstream();
   auto handler = upstream->get_client_handler();
 
-#if OPENSSL_1_1_1_API
+#if defined(NGHTTP2_GENUINE_OPENSSL) || defined(NGHTTP2_OPENSSL_IS_BORINGSSL)
   auto conn = handler->get_connection();
 
   if (conn->tls.ssl && !SSL_is_init_finished(conn->tls.ssl)) {
     buf->append("Early-Data: 1\r\n");
   }
-#endif // OPENSSL_1_1_1_API
+#endif // NGHTTP2_GENUINE_OPENSSL || NGHTTP2_OPENSSL_IS_BORINGSSL
 
   auto fwd =
       fwdconf.strip_incoming ? nullptr : req.fs.header(http2::HD_FORWARDED);

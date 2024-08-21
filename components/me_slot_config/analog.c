@@ -35,34 +35,54 @@ void analog_task(void *arg)
 
     int slot_num = *(int *)arg;
 	uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
-    if(sens_pin_num>10){
-        ESP_LOGE(TAG, "Wrong analog pin, chose another slot, task exit");
-        vTaskDelete(NULL);
-    }
+    // if(sens_pin_num>10){
+    //     ESP_LOGE(TAG, "Wrong analog pin, chose another slot, task exit");
+    //     vTaskDelete(NULL);
+    // }
 
 	static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
 	static const adc_atten_t atten = ADC_ATTEN_DB_11; // ADC_ATTEN_DB_11
 
 	gpio_reset_pin(sens_pin_num);
 	gpio_set_direction(sens_pin_num, GPIO_MODE_INPUT);
-    adc_channel_t ADC_chan= sens_pin_num -1;
+    adc_channel_t ADC_chan = slot_num;
 
-    adc1_config_width(width);
-    adc1_config_channel_atten(ADC_chan, atten);
+	if(slot_num==2){
+		ADC_chan = ADC2_CHANNEL_6;
+		//adc2_pad_get_io_num(ADC_chan, &sens_pin_num);
+		adc2_config_channel_atten( ADC_chan, atten );
+	}else{
+		switch (slot_num){
+		case 0:
+			ADC_chan = ADC1_CHANNEL_3;
+			break;
+		case 3:
+			ADC_chan = ADC1_CHANNEL_2;
+			break;
+		case 4:
+			ADC_chan = ADC1_CHANNEL_1;
+			break;
+		case 5:
+			ADC_chan = ADC1_CHANNEL_6;
+			break;
+		}
+		adc1_config_width(width);
+    	adc1_config_channel_atten(ADC_chan, atten);
+	}
 
     uint16_t MIN_VAL = 0;
     uint16_t MAX_VAL = 4095;
     uint8_t flag_float_output=0;
-    if (strstr(me_config.slot_options[slot_num], "float_output")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
 		flag_float_output = 1;
 		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
 	}
-	if (strstr(me_config.slot_options[slot_num], "max_val")!=NULL){
-		MAX_VAL = get_option_int_val(slot_num, "max_val");
+	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
+		MAX_VAL = get_option_int_val(slot_num, "maxVal");
 		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", MAX_VAL, slot_num);
 	}
-    if (strstr(me_config.slot_options[slot_num], "min_val")!=NULL){
-		MIN_VAL = get_option_int_val(slot_num, "min_val");
+    if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
+		MIN_VAL = get_option_int_val(slot_num, "minVal");
 		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", MIN_VAL, slot_num);
 	}
 
@@ -72,14 +92,14 @@ void analog_task(void *arg)
 	}
 
     float k=1;
-    if (strstr(me_config.slot_options[slot_num], "filter_k")!=NULL){
-        k = get_option_float_val(slot_num, "filter_k");
+    if (strstr(me_config.slot_options[slot_num], "filterK")!=NULL){
+        k = get_option_float_val(slot_num, "filterK");
 		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", k, slot_num);
 	}
     
     uint16_t dead_band=10;
-    if (strstr(me_config.slot_options[slot_num], "dead_band")!=NULL){
-        dead_band = get_option_int_val(slot_num, "dead_band");
+    if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
+        dead_band = get_option_int_val(slot_num, "deadBand");
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d",dead_band, slot_num);
 	}
 
@@ -91,8 +111,8 @@ void analog_task(void *arg)
 
     uint8_t flag_custom_topic = 0;
 	char *custom_topic=NULL;
-	if (strstr(me_config.slot_options[slot_num], "custom_topic")!=NULL){
-		custom_topic = get_option_string_val(slot_num,"custom_topic");
+	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
+		custom_topic = get_option_string_val(slot_num,"topic");
 		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
 		flag_custom_topic=1;
 	}
@@ -105,13 +125,20 @@ void analog_task(void *arg)
 		me_state.trigger_topic_list[slot_num]=custom_topic;
 	}
 
-
-
     while (1) {
         if(inverse){
-            raw_val = 4096-adc1_get_raw(ADC_chan);
+            if(slot_num==2){
+				adc2_get_raw(ADC_chan, width, &raw_val);
+				raw_val = 4096-raw_val;
+            }else{
+				raw_val = 4096-adc1_get_raw(ADC_chan);
+			}
         }else{
-			raw_val = adc1_get_raw(ADC_chan);
+			if(slot_num==2){
+				adc2_get_raw(ADC_chan, width, &raw_val);
+			}else{
+				raw_val = adc1_get_raw(ADC_chan);
+			}
         }
         resault =resault*(1-k)+raw_val*k;
 

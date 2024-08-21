@@ -27,7 +27,7 @@
 #include "board.h"
 
 #include "hlk_sens.h"
-
+#include "rtp_play.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -82,6 +82,9 @@
 #include "smartLed.h"
 #include "someUnique.h"
 #include "disp_hd44780.h"
+#include "TOFs.h"
+
+
 
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -229,7 +232,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("3n_MOSFET", level);
 	esp_log_level_set("RFID", level);
 	esp_log_level_set("ENCODERS", level);
-	esp_log_level_set("TOFs", level);
+	esp_log_level_set("DISTANCE_SENS", level);
 	esp_log_level_set("rotary_encoder", level);
 	esp_log_level_set("P9813", level);
 	esp_log_level_set("TACHOMETER", level);
@@ -252,6 +255,9 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("SOME_UNIQUE", level);
 	esp_log_level_set("DISP_HD44780", level);
 	esp_log_level_set("HLK_SENS", level);
+	esp_log_level_set("AUDIO_LAN", level);
+	esp_log_level_set("RTP_STREAM", level);
+	esp_log_level_set("ONE_WIRE", level);
 	}
 
 
@@ -379,7 +385,7 @@ void app_main(void)
 		ESP_LOGE(TAG, "sdcard_init FAIL");
 		const char *base_path = "/sdcard";
 		const esp_vfs_fat_mount_config_t mount_config = {
-				.max_files = 2,
+				.max_files = 3,
 				.format_if_mount_failed = true,
 				.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
 		};
@@ -407,6 +413,9 @@ void app_main(void)
 	set_usb_debug();
 
 	me_state.slot_init_res = init_slots();
+	//start_ds18b20_task(0);
+	//start_TOF050F_task(0);
+	//start_audioLAN_task(0);
 	//start_hlk2420_task(2);
 	//start_buttonMatrix4_task(0);
 	//start_disp_hd44780_task(2);
@@ -433,9 +442,7 @@ void app_main(void)
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
-	//testStepper();"startup"
-	//crosslinks_process(me_config.startup_cross_link,"startup");
-	//startup_crosslinks_exec();
+
 	
 	while (1)
 	{

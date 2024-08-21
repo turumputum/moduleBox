@@ -72,13 +72,8 @@ void crosslinker(char* str){
 				
 				char *event=strdup(str);
 				//char *event = str;
-<<<<<<< HEAD
 				if(strstr(event, me_config.deviceName)!=NULL){
 					event = event + strlen(me_config.deviceName) + 1;
-=======
-				if(strstr(event, me_config.device_name)!=NULL){
-					event = event + strlen(me_config.device_name) + 1;
->>>>>>> 858ca79a63ce2c0608da47a07de3c8cd9f364990
 				}
 
 				char *trigger=NULL;

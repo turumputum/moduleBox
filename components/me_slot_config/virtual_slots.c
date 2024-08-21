@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include "driver/gpio.h"
 #include "esp_timer.h"
@@ -113,44 +114,44 @@ void counter_task(void *arg) {
 		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
 			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
 			if(strstr(command, ":")==NULL){
-                break;
-            }
-            char *cmd_arg = strstr(command, ":")+1;
-			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
-			if(!memcmp(command, "set", 3)){//------------------------------
-				if(cmd_arg[0]=='+'){
-					counter+= atoi(cmd_arg+1);
-				}else if(cmd_arg[0]=='-'){
-					counter-= atoi(cmd_arg+1);
-				}else{
-					counter=atoi(cmd_arg);
-				}
-
-                if(counter<minVal){
-                    counter=minVal;
-                }else if(counter>maxVal){
-                    counter=maxVal;
-                }
-
-                if(threshold>0){
-                    if(counter>=threshold){
-                        state=1;
-                    }else {
-                        state=0;
+                ESP_LOGD(TAG, "No arguments found. EXIT"); 
+            }else{
+                char *cmd_arg = strstr(command, ":")+1;
+                ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+                if(!memcmp(command, "set", 3)){//------------------------------
+                    if(cmd_arg[0]=='+'){
+                        counter+= atoi(cmd_arg+1);
+                    }else if(cmd_arg[0]=='-'){
+                        counter-= atoi(cmd_arg+1);
+                    }else{
+                        counter=atoi(cmd_arg);
                     }
-                }else{
-                    state=counter;
-                }
 
-                if(state!=prevState){
-                    prevState=state;
+                    if(counter<minVal){
+                        counter=minVal;
+                    }else if(counter>maxVal){
+                        counter=maxVal;
+                    }
 
-                    char tmpString[60];
-                    sprintf(tmpString, "%d", state);
-                    report(tmpString, slot_num);
+                    if(threshold>0){
+                        if(counter>=threshold){
+                            state=1;
+                        }else {
+                            state=0;
+                        }
+                    }else{
+                        state=counter;
+                    }
+
+                    if(state!=prevState){
+                        prevState=state;
+
+                        char tmpString[60];
+                        sprintf(tmpString, "%d", state);
+                        report(tmpString, slot_num);
+                    }
                 }
-          
-			}
+            }
         }
     }
 
@@ -344,4 +345,112 @@ void start_watchdog_task(int slot_num) {
 	sprintf(tmpString, "watchdog_task_%d", slot_num);
 	xTaskCreatePinnedToCore(watchdog_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "watchdog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+//---------------------------------WHITELIST---------------------------------
+void whitelist_task(void *arg) {
+    #define MAX_LINE_LENGTH 256
+
+    int slot_num = *(int*) arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+
+    char filename[MAX_LINE_LENGTH]; // 
+    strcpy(filename, "/sdcard/");
+    if (strstr(me_config.slot_options[slot_num], "filename") != NULL) {
+		strcat(filename,get_option_string_val(slot_num, "filename"));
+	}else{
+        strcat(filename,"whitelist.txt");
+    }
+    if (access(filename, F_OK) != 0) {
+        char errorString[300];
+        sprintf(errorString, "whitelist file: %s, does not exist", filename);
+        ESP_LOGE(TAG, "%s", errorString);
+        writeErrorTxt(errorString);
+        vTaskDelay(200);
+        vTaskDelete(NULL);
+    }
+    ESP_LOGD(TAG, "Set filename :%s for slot:%d", filename, slot_num);
+
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/whitelist_0")+3];
+		sprintf(t_str, "%s/whitelist_%d",me_config.deviceName, slot_num);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
+	}
+
+
+    
+    while(1){
+        command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, portMAX_DELAY) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload = NULL;
+            char* cmd = msg.str;
+            uint16_t count=0;
+            if(strstr(cmd, ":")!=NULL){
+                cmd = strtok_r(msg.str, ":", &payload);
+                //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            }else{
+                //ESP_LOGD(TAG, "Input command %s", cmd);
+            }
+            if(payload!=NULL){
+                FILE* file = fopen(filename, "r");
+                if (file == NULL) {
+                    //ESP_LOGE(TAG, "Failed to open file");
+                    goto end;
+                }
+                char line[MAX_LINE_LENGTH];
+                while (fgets(line, sizeof(line), file)) {
+                    // Удалить символ новой строки
+                    line[strcspn(line, "\n")] = '\0';
+                    //ESP_LOGD(TAG, "Read line:%s", line);
+                    // Разделить строку на части до и после "->"                  
+                    char* validValue=NULL;
+                    char* command=NULL;
+                    if(strstr(line, "->")!=NULL){
+                        validValue = strtok_r(line, "->", &command);
+                        command++;
+                        //ESP_LOGD(TAG, "whitelist val:%s action:%s", validValue, command);
+                    }else{
+                        ESP_LOGW(TAG, "whitelist wrong format");
+                        goto end;
+                    }
+                    if (strcmp(validValue, payload) == 0) {
+                        char output_action[strlen(me_config.deviceName) + strlen(command) + 2];
+                        sprintf(output_action, "%s/%s", me_config.deviceName, command);
+                        //ESP_LOGD(TAG, "valid payload, execute:%s", output_action);
+                        execute(output_action);
+                        count++;
+                    }
+                }
+                end:
+                fclose(file);
+                //ESP_LOGD(TAG, "File closed");
+                if(count==0){
+                    //char output_str = "/noMatches";
+                    report("/noMatches", slot_num);
+                }
+
+            }
+        }
+    }
+}
+
+void start_whitelist_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "whitelist_task_%d", slot_num);
+	xTaskCreatePinnedToCore(whitelist_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 20, NULL, 0);
+    ESP_LOGD(TAG, "whitelist_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

@@ -28,44 +28,39 @@
 #include "nghttp2_config.h"
 
 #include <cinttypes>
+#include <string_view>
 
 #include <openssl/ssl.h>
 
 #include "ssl_compat.h"
 
+using namespace std::literals;
+
 namespace nghttp2 {
 
 namespace tls {
-
-// Acquire OpenSSL global lock to share SSL_CTX across multiple
-// threads. The constructor acquires lock and destructor unlocks.
-class LibsslGlobalLock {
-public:
-  LibsslGlobalLock();
-  LibsslGlobalLock(const LibsslGlobalLock &) = delete;
-  LibsslGlobalLock &operator=(const LibsslGlobalLock &) = delete;
-};
 
 // Recommended general purpose "Intermediate compatibility" cipher
 // suites for TLSv1.2 by mozilla.
 //
 // https://wiki.mozilla.org/Security/Server_Side_TLS
-constexpr char DEFAULT_CIPHER_LIST[] =
+constexpr auto DEFAULT_CIPHER_LIST =
     "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-"
     "AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-"
     "POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-"
-    "AES256-GCM-SHA384";
+    "AES256-GCM-SHA384"sv;
 
 // Recommended general purpose "Modern compatibility" cipher suites
 // for TLSv1.3 by mozilla.
 //
 // https://wiki.mozilla.org/Security/Server_Side_TLS
-constexpr char DEFAULT_TLS13_CIPHER_LIST[] =
-#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
-    "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256"
-#else
+constexpr auto DEFAULT_TLS13_CIPHER_LIST =
+#if defined(NGHTTP2_GENUINE_OPENSSL) || defined(NGHTTP2_OPENSSL_IS_LIBRESSL)
+    "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:"
+    "TLS_CHACHA20_POLY1305_SHA256"sv
+#else  // !NGHTTP2_GENUINE_OPENSSL && !NGHTTP2_OPENSSL_IS_LIBRESSL
     ""
-#endif
+#endif // !NGHTTP2_GENUINE_OPENSSL && !NGHTTP2_OPENSSL_IS_LIBRESSL
     ;
 
 constexpr auto NGHTTP2_TLS_MIN_VERSION = TLS1_VERSION;
@@ -102,12 +97,21 @@ bool check_http2_cipher_block_list(SSL *ssl);
 //    described in RFC 7540.
 bool check_http2_requirement(SSL *ssl);
 
-// Initializes OpenSSL library
-void libssl_init();
-
 // Sets TLS min and max versions to |ssl_ctx|.  This function returns
 // 0 if it succeeds, or -1.
 int ssl_ctx_set_proto_versions(SSL_CTX *ssl_ctx, int min, int max);
+
+constexpr uint16_t CERTIFICATE_COMPRESSION_ALGO_BROTLI = 2;
+
+#if defined(NGHTTP2_OPENSSL_IS_BORINGSSL) && defined(HAVE_LIBBROTLI)
+int cert_compress(SSL *ssl, CBB *out, const uint8_t *in, size_t in_len);
+
+int cert_decompress(SSL *ssl, CRYPTO_BUFFER **out, size_t uncompressed_len,
+                    const uint8_t *in, size_t in_len);
+#endif // NGHTTP2_OPENSSL_IS_BORINGSSL && HAVE_LIBBROTLI
+
+// Setup keylog callback.  It returns 0 if it succeeds, or -1.
+int setup_keylog_callback(SSL_CTX *ssl_ctx);
 
 } // namespace tls
 

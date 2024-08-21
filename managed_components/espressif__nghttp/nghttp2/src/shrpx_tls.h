@@ -72,7 +72,11 @@ struct TLSContextData {
   std::mutex mu;
 #endif // !HAVE_ATOMIC_STD_SHARED_PTR
   // OCSP response
+#ifdef HAVE_ATOMIC_STD_SHARED_PTR
+  std::atomic<std::shared_ptr<std::vector<uint8_t>>> ocsp_data;
+#else  // !HAVE_ATOMIC_STD_SHARED_PTR
   std::shared_ptr<std::vector<uint8_t>> ocsp_data;
+#endif // !HAVE_ATOMIC_STD_SHARED_PTR
 
   // Path to certificate file
   const char *cert_file;
@@ -89,28 +93,12 @@ SSL_CTX *create_ssl_context(const char *private_key_file, const char *cert_file,
 );
 
 // Create client side SSL_CTX.  This does not configure ALPN settings.
-// |next_proto_select_cb| is for NPN.
 SSL_CTX *create_ssl_client_context(
 #ifdef HAVE_NEVERBLEED
     neverbleed_t *nb,
 #endif // HAVE_NEVERBLEED
     const StringRef &cacert, const StringRef &cert_file,
-    const StringRef &private_key_file,
-    int (*next_proto_select_cb)(SSL *s, unsigned char **out,
-                                unsigned char *outlen, const unsigned char *in,
-                                unsigned int inlen, void *arg));
-
-#ifdef ENABLE_HTTP3
-SSL_CTX *create_quic_ssl_client_context(
-#  ifdef HAVE_NEVERBLEED
-    neverbleed_t *nb,
-#  endif // HAVE_NEVERBLEED
-    const StringRef &cacert, const StringRef &cert_file,
-    const StringRef &private_key_file,
-    int (*next_proto_select_cb)(SSL *s, unsigned char **out,
-                                unsigned char *outlen, const unsigned char *in,
-                                unsigned int inlen, void *arg));
-#endif // ENABLE_HTTP3
+    const StringRef &private_key_file);
 
 ClientHandler *accept_connection(Worker *worker, int fd, sockaddr *addr,
                                  int addrlen, const UpstreamAddr *faddr);

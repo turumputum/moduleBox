@@ -253,10 +253,22 @@ void hlk2410_task(void* arg) {
     }
 
 
-    char t_str[strlen(me_config.deviceName)+strlen("/hlk2410_0")+3];
-    sprintf(t_str, "%s/hlk2410_%d",me_config.deviceName, slot_num);
-    me_state.trigger_topic_list[slot_num]=strdup(t_str);
-    ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "tempTopic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/hlk2410_0")+3];
+		sprintf(t_str, "%s/hlk2410_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart tempTopic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+    // char t_str[strlen(me_config.deviceName)+strlen("/hlk2410_0")+3];
+    // sprintf(t_str, "%s/hlk2410_%d",me_config.deviceName, slot_num);
+    // me_state.trigger_topic_list[slot_num]=strdup(t_str);
+    // ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 
     #define BUF_SIZE 256
     char data[BUF_SIZE];
@@ -343,11 +355,16 @@ void hlk2410_task(void* arg) {
             }
         }
 
-        if(dist != _dist) {
+        if(abs(dist -_dist)>deadBand) {
             _dist=dist;
             char str[50];
             memset(str, 0, strlen(str));
-            sprintf(str, "/distance:%d", dist);
+            if(flag_float_output){
+                float f_res =  (float)(dist-MIN_VAL) / (MAX_VAL - MIN_VAL);
+                sprintf(str, "%f", f_res);
+            }else{
+                sprintf(str, "/distance:%d", dist);
+            }
             report(str, slot_num);
         }
     }
