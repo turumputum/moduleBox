@@ -23,6 +23,7 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char* TAG = "VIRTUAL_SLOTS";
 
+//-----------------------------------------startUp--------------------------------
 void startup_task(void *arg) {
     int slot_num = *(int*) arg;
 
@@ -66,7 +67,7 @@ void start_startup_task(int slot_num) {
 	xTaskCreatePinnedToCore(startup_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "startup_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
-
+//---------------------------------COUNTER---------------------------------
 void counter_task(void *arg) {
     int slot_num = *(int*) arg;
 

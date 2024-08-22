@@ -158,6 +158,8 @@ void load_Default_Config(void) {
 	me_state.udp_socket = -1;
 	me_state.osc_socket = -1;
 
+	me_state.ledc_chennelCounter = 0;
+
 	for (int i = 0; i < NUM_OF_SLOTS; i++) {
 		me_state.slot_task[i]=NULL;
 		me_state.trigger_topic_list[i]=strdup("none");

@@ -89,7 +89,8 @@
         "esp_peripherals.h": "c",
         "audio_pipeline.h": "c",
         "esp_system.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "cstdlib": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

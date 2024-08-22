@@ -35,10 +35,14 @@ void analog_task(void *arg)
 
     int slot_num = *(int *)arg;
 	uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
-    // if(sens_pin_num>10){
-    //     ESP_LOGE(TAG, "Wrong analog pin, chose another slot, task exit");
-    //     vTaskDelete(NULL);
-    // }
+    if(slot_num==1){
+        char errorString[300];
+        sprintf(errorString, "no ADC on SLOT_1, use another slot");
+        ESP_LOGE(TAG, "%s", errorString);
+        writeErrorTxt(errorString);
+        vTaskDelay(200);
+        vTaskDelete(NULL);
+    }
 
 	static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
 	static const adc_atten_t atten = ADC_ATTEN_DB_11; // ADC_ATTEN_DB_11

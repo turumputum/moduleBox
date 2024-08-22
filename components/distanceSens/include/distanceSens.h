@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <string.h>
+#include "driver/ledc.h"
 
 typedef struct {
 //	uint8_t changeTrack;
@@ -19,6 +20,8 @@ typedef struct {
     uint32_t fall_lag;
 
     uint8_t flag_float_output;
+
+    ledc_channel_config_t ledc_chan;
 } distanceSens_t;
 
 #define DISTANCE_SENS_DEFAULT() {\
@@ -33,9 +36,12 @@ typedef struct {
     .deadBand = 0,\
     .k = 1.0,\
     .fall_lag = 3000*1000,\
-    .flag_float_output=0\
+    .flag_float_output=0,\
 }
 
 
 void start_VL53TOF_task(int slot_num);
 void start_benewakeTOF_task(int slot_num);
+
+
+void start_hlk2410_task(int slot_num);

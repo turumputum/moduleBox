@@ -10,8 +10,15 @@
 
 #define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.24";
+static const char* VERSION = "3.25";
 
+
+#define LEDC_TIMER              LEDC_TIMER_0
+#define LEDC_MODE               LEDC_LOW_SPEED_MODE
+//#define LEDC_OUTPUT_IO          (10) // Define the output GPIO
+//#define LEDC_CHANNEL            LEDC_CHANNEL_0
+#define LEDC_DUTY_RES           LEDC_TIMER_8_BIT // Set duty resolution to 13 bits
+#define LEDC_FREQUENCY          (5000) // Frequency in Hertz. Set frequency at 5 kHz
 
 
 typedef enum {
@@ -47,6 +54,8 @@ typedef struct {
 
 	int8_t udp_socket;
 	int8_t osc_socket;
+
+	int8_t ledc_chennelCounter;
 
 //	led_state_t bt_state_mass[8];
 //	led_state_t ledState;

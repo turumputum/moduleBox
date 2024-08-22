@@ -21,15 +21,6 @@
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 
-uint8_t chennelCounter=0;
-
-#define LEDC_TIMER              LEDC_TIMER_0
-#define LEDC_MODE               LEDC_LOW_SPEED_MODE
-//#define LEDC_OUTPUT_IO          (10) // Define the output GPIO
-//#define LEDC_CHANNEL            LEDC_CHANNEL_0
-#define LEDC_DUTY_RES           LEDC_TIMER_8_BIT // Set duty resolution to 13 bits
-#define LEDC_FREQUENCY          (5000) // Frequency in Hertz. Set frequency at 5 kHz
-
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "3n_MOSFET";
 
@@ -124,14 +115,14 @@ void rgb_ledc_task(void *arg){
 		ESP_LOGD(TAG, "LEDC timer inited");
 	//}
 
-	if(chennelCounter>4){
+	if(me_state.ledc_chennelCounter>= LEDC_CHANNEL_MAX){
 		ESP_LOGE(TAG, "LEDC channel has ended");
 		goto EXIT;
 	}
 
 	ledc_channel_config_t ledc_ch_R = {
 		.speed_mode = LEDC_MODE,
-		.channel = chennelCounter++,
+		.channel = me_state.ledc_chennelCounter++,
 		.timer_sel = LEDC_TIMER,
 		.intr_type = LEDC_INTR_DISABLE,
 		.gpio_num = SLOTS_PIN_MAP[slot_num][0],
@@ -140,7 +131,7 @@ void rgb_ledc_task(void *arg){
 
 	ledc_channel_config_t ledc_ch_G = {
 		.speed_mode = LEDC_MODE,
-		.channel = chennelCounter++,
+		.channel = me_state.ledc_chennelCounter++,
 		.timer_sel = LEDC_TIMER,
 		.intr_type = LEDC_INTR_DISABLE,
 		.gpio_num = SLOTS_PIN_MAP[slot_num][1],
@@ -149,7 +140,7 @@ void rgb_ledc_task(void *arg){
 
 	ledc_channel_config_t ledc_ch_B = {
 		.speed_mode = LEDC_MODE,
-		.channel = chennelCounter++,
+		.channel = me_state.ledc_chennelCounter++,
 		.timer_sel = LEDC_TIMER,
 		.intr_type = LEDC_INTR_DISABLE,
 		.gpio_num = SLOTS_PIN_MAP[slot_num][2],
@@ -158,7 +149,7 @@ void rgb_ledc_task(void *arg){
 	ESP_ERROR_CHECK(ledc_channel_config(&ledc_ch_R));
 	ESP_ERROR_CHECK(ledc_channel_config(&ledc_ch_G));
 	ESP_ERROR_CHECK(ledc_channel_config(&ledc_ch_B));
-	ESP_LOGD(TAG, "LEDC channel counter:%d", chennelCounter);
+	ESP_LOGD(TAG, "LEDC channel counter:%d", me_state.ledc_chennelCounter);
 
 	if (strstr(me_config.slot_options[slot_num], "pwmRGBled_topic") != NULL) {
 		char* custom_topic=NULL;

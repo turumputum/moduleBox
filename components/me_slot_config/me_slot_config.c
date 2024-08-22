@@ -91,7 +91,7 @@ int init_slots(void){
 			start_encoderPWM_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "encoder_inc", 10)){
 			start_encoder_inc_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "benewake_TOF", 12)){
+		}else if(!memcmp(me_config.slot_mode[i], "benewakeTOF", 12)){
 			start_benewakeTOF_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "VL53TOF", 7)){
 			start_VL53TOF_task(i);
@@ -133,8 +133,6 @@ int init_slots(void){
 			start_buttonMatrix4_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dwin_uart", 9)){
 			start_dwinUart_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "hlk2420", 7)){
-			start_hlk2420_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
 			start_hlk2410_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dialer", 7)){
