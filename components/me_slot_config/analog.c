@@ -26,6 +26,10 @@ extern uint8_t led_segment;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ANALOG";
 
+#define MODE_3V3 0
+#define MODE_5V 1
+#define MODE_10V 2
+
 void analog_task(void *arg)
 {
     uint16_t raw_val;
@@ -35,6 +39,7 @@ void analog_task(void *arg)
 
     int slot_num = *(int *)arg;
 	uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
+
     if(slot_num==1){
         char errorString[300];
         sprintf(errorString, "no ADC on SLOT_1, use another slot");
@@ -111,6 +116,29 @@ void analog_task(void *arg)
     if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
         periodic = get_option_int_val(slot_num, "periodic");
 		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d",periodic, slot_num);
+	}
+
+	uint8_t divPin_1 = SLOTS_PIN_MAP[slot_num][2];
+	esp_rom_gpio_pad_select_gpio(divPin_1);
+	gpio_set_direction(divPin_1, GPIO_MODE_OUTPUT);
+	uint8_t divPin_2 = SLOTS_PIN_MAP[slot_num][1];
+	esp_rom_gpio_pad_select_gpio(divPin_2);
+	gpio_set_direction(divPin_2, GPIO_MODE_OUTPUT);
+    if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
+        char *dividerModeStr = get_option_string_val(slot_num, "dividerMode");
+		if(strcmp(dividerModeStr, "3V3")==0){
+			gpio_set_level(divPin_1, 0);
+			gpio_set_level(divPin_2, 0);
+			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
+		}else if(strcmp(dividerModeStr, "5V")==0){
+			gpio_set_level(divPin_1, 1);
+			gpio_set_level(divPin_2, 0);
+			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
+		}else if(strcmp(dividerModeStr, "10V")==0){
+			gpio_set_level(divPin_1, 0);
+			gpio_set_level(divPin_2, 1);
+			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
+		}
 	}
 
     uint8_t flag_custom_topic = 0;

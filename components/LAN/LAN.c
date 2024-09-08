@@ -176,7 +176,10 @@ void udp_recive_task(){
 		if(len<0){
 			//ESP_LOGD(TAG, "UDP incoming fail(");
 		}else{
-			ESP_LOGD(TAG, "UDP incoming:%.*s",len, buff);
+			//ESP_LOGD(TAG, "UDP incoming:%.*s",len, buff);
+			char strT[255];
+			sprintf(strT, "%.*s", len, buff);
+			execute(strT);
 			//to-do add to queue
 
 			// buff[len]='\0';
@@ -189,8 +192,7 @@ void udp_recive_task(){
 	}
 }
 
-void wait_lan()
-{
+void wait_lan(){
 	while (me_state.LAN_init_res != ESP_OK)
 	{
 		vTaskDelay(pdMS_TO_TICKS(100));

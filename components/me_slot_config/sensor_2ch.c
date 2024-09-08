@@ -111,7 +111,7 @@ void sensors_task(void *arg){
 		//vTaskDelay(pdMS_TO_TICKS(10));
 		uint8_t tmp;
 		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
-			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+			ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
 
 			if(gpio_get_level(pin_num_1)){
 				sens_1_state=ch_1_inverse ? 0 : 1;
