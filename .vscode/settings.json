@@ -90,7 +90,9 @@
         "audio_pipeline.h": "c",
         "esp_system.h": "c",
         "stdint.h": "c",
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "esp_check.h": "c",
+        "rmt_tx.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

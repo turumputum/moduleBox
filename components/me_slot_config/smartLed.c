@@ -8,6 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 
 #include "esp_log.h"
 #include "esp_check.h"
@@ -34,6 +35,13 @@ extern stateStruct me_state;
 static const char *TAG = "SMART_LED";
 
 extern const uint8_t gamma_8[256];
+
+SemaphoreHandle_t rmt_semaphore=NULL;
+
+#define MAX_CHANNELS 4
+uint8_t rmt_chan_counter = 0;
+
+
 
 void led_strip_set_pixel(uint8_t *pixel_array, int pos, int r, int g, int b){
     pixel_array[pos * 3 + 0]= (uint8_t)g;
@@ -153,6 +161,32 @@ err:
     return ret;
 }
 
+uint8_t rmt_createAndSend(rmt_led_heap_t *rmt_slot_heap, uint8_t *led_strip_pixels, uint16_t size, uint8_t slot_num){
+    if (xSemaphoreTake(rmt_semaphore, portMAX_DELAY) == pdTRUE) {
+        //ESP_LOGD(TAG, "rmt_slot_heap->->resolution_hz:%ld, rmt_slot_heap->->trans_queue_depth:%d", rmt_slot_heap->tx_chan_config.resolution_hz,rmt_slot_heap->tx_chan_config.trans_queue_depth);
+        //ESP_LOGD(TAG, "sizeof(led_strip_pixels):%d", sizeof(led_strip_pixels));
+        //rmt_slot_heap->led_chan->channel_id = uxSemaphoreGetCount(rmt_semaphore);
+        if(rmt_new_tx_channel(&rmt_slot_heap->tx_chan_config, &rmt_slot_heap->led_chan)!= ESP_OK){
+            ESP_LOGE(TAG, "RMT TX channel fail for slot:%d", slot_num);
+            ESP_LOGD(TAG, "rmt_semaphore_count:%d", uxSemaphoreGetCount(rmt_semaphore));
+        }else{
+            rmt_enable(rmt_slot_heap->led_chan);
+            esp_err_t err = rmt_transmit(rmt_slot_heap->led_chan, rmt_slot_heap->led_encoder, led_strip_pixels, size, &rmt_slot_heap->tx_config);
+            if(err!=ESP_OK){
+                ESP_LOGE(TAG, "RMT TX error:%d", err);
+            }
+            rmt_tx_wait_all_done(rmt_slot_heap->led_chan, portMAX_DELAY);
+            rmt_disable(rmt_slot_heap->led_chan);
+            rmt_del_channel(rmt_slot_heap->led_chan);
+            gpio_set_direction(rmt_slot_heap->tx_chan_config.gpio_num, GPIO_MODE_OUTPUT);
+            gpio_set_level(rmt_slot_heap->tx_chan_config.gpio_num, 0);
+        }
+        
+    }
+    xSemaphoreGive(rmt_semaphore);
+    return 0;
+}
+
 void smartLed_task(void *arg){
     uint32_t startTick = xTaskGetTickCount();
 	int slot_num = *(int*) arg;
@@ -161,6 +195,10 @@ void smartLed_task(void *arg){
 
 	me_state.command_queue[slot_num] = xQueueCreate(10, sizeof(command_message_t));
     
+    if(rmt_semaphore==NULL){
+        rmt_semaphore = xSemaphoreCreateCounting(2, 2);
+    }
+
     uint16_t num_of_led=24;
     if (strstr(me_config.slot_options[slot_num], "num_of_led") != NULL) {
 		num_of_led = get_option_int_val(slot_num, "num_of_led");
@@ -231,39 +269,12 @@ void smartLed_task(void *arg){
         ledMode = modeToEnum(tmp);
     }
     uint8_t led_strip_pixels[num_of_led * 3];
-    //ESP_LOGI(TAG, "Create RMT TX channel");
-    rmt_transmit_config_t tx_config = {
-        .loop_count = 0, // no transfer loop
-    };
-    rmt_channel_handle_t led_chan = NULL;
-        // led_chan->channel_id = slot_num;
-        // led_chan.gpio_num = pin_num;
-        // led_chan.group.group_id = 0;
 
-    rmt_tx_channel_config_t tx_chan_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT, // select source clock
-        .gpio_num = pin_num,
-        .mem_block_symbols = 48,//64, // increase the block size can make the LED less flickering
-        .resolution_hz = 10000000 , // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-        .trans_queue_depth = 4, // set the number of transactions that can be pending in the background
-    };
+    rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
+    rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
+    //rmt_slot_heap.tx_chan_config.flags.io_od_mode = true;
+    rmt_new_led_strip_encoder(&rmt_slot_heap.encoder_config, &rmt_slot_heap.led_encoder);
 
-    if(rmt_new_tx_channel(&tx_chan_config, &led_chan)!= ESP_OK){
-        me_state.action_topic_list[slot_num] = "none";
-        ESP_LOGE(TAG, "RMT TX channel fail for slot:%d", slot_num);
-        goto EXIT;
-    }
-
-    //ESP_LOGI(TAG, "Install led strip encoder");
-    rmt_encoder_handle_t led_encoder = NULL;
-    led_strip_encoder_config_t encoder_config = {
-        .resolution = tx_chan_config.resolution_hz,
-    };
-    ESP_ERROR_CHECK(rmt_new_led_strip_encoder(&encoder_config, &led_encoder));
-
-    //ESP_LOGI(TAG, "Enable RMT TX channel");
-    ESP_ERROR_CHECK(rmt_enable(led_chan));
-  
     if (strstr(me_config.slot_options[slot_num], "smartLed_topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "smartLed_topic");
@@ -276,9 +287,7 @@ void smartLed_task(void *arg){
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
 
-
     ESP_LOGD(TAG, "Smart led task config end. Slot_num:%d, duration_ms:%ld", slot_num, pdTICKS_TO_MS(xTaskGetTickCount()-startTick));
-
 
     uint16_t currentBright=0;
     uint16_t targetBright=min_bright;
@@ -354,18 +363,16 @@ void smartLed_task(void *arg){
 
         if(flag_ledUpdate){
             flag_ledUpdate = false;
-            esp_err_t err = rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config);
-            if(err!=ESP_OK){
-                ESP_LOGE(TAG, "RMT TX error:%d", err);
-            }
+            //ESP_LOGD(TAG, "sizeof(led_strip_pixels):%d", sizeof(led_strip_pixels));
+            rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
         }
 
         //uint16_t delay = refreshRate_ms - pdTICKS_TO_MS(xTaskGetTickCount()-startTick);
         //ESP_LOGD(TAG, "Led delay :%d state:%d, currentBright:%d", delay, state, currentBright); 
         vTaskDelay(pdMS_TO_TICKS(refreshRate_ms));
     }
-    EXIT:
-    vTaskDelete(NULL);
+    //EXIT:
+    //vTaskDelete(NULL);
 }
 
 
@@ -643,35 +650,11 @@ void ledRing_task(void *arg){
     ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", targetRGB.r, targetRGB.g, targetRGB.b, slot_num);
 
     uint8_t led_strip_pixels[num_of_led * 3];
-    ESP_LOGI(TAG, "Create RMT TX channel");
-    rmt_transmit_config_t tx_config = {
-        .loop_count = 0, // no transfer loop
-    };
-    rmt_channel_handle_t led_chan = NULL;
 
-    rmt_tx_channel_config_t tx_chan_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT, // select source clock
-        .gpio_num = pin_num,
-        .mem_block_symbols = 48,//64, // increase the block size can make the LED less flickering
-        .resolution_hz = 10000000 , // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-        .trans_queue_depth = 4, // set the number of transactions that can be pending in the background
-    };
-
-    if(rmt_new_tx_channel(&tx_chan_config, &led_chan)!= ESP_OK){
-        me_state.action_topic_list[slot_num] = "none";
-        ESP_LOGE(TAG, "RMT TX channel fail for slot:%d", slot_num);
-        goto EXIT;
-    }
-
-    ESP_LOGI(TAG, "Install led strip encoder");
-    rmt_encoder_handle_t led_encoder = NULL;
-    led_strip_encoder_config_t encoder_config = {
-        .resolution = tx_chan_config.resolution_hz,
-    };
-    ESP_ERROR_CHECK(rmt_new_led_strip_encoder(&encoder_config, &led_encoder));
-
-    ESP_LOGI(TAG, "Enable RMT TX channel");
-    ESP_ERROR_CHECK(rmt_enable(led_chan));
+    rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
+    rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
+    //rmt_slot_heap.tx_chan_config.flags.io_od_mode = true;
+    rmt_new_led_strip_encoder(&rmt_slot_heap.encoder_config, &rmt_slot_heap.led_encoder);
   
     if (strstr(me_config.slot_options[slot_num], "ledRing_topic") != NULL) {
 		char* custom_topic=NULL;
@@ -736,7 +719,7 @@ void ledRing_task(void *arg){
             processLedEffect(&ledRing);
         }
           
-        rmt_transmit(led_chan, led_encoder, ledRing.pixelBuffer, sizeof(led_strip_pixels), &tx_config);
+        rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
 
         // uint16_t delay = refreshRate_ms - pdTICKS_TO_MS(xTaskGetTickCount())-startTick;
         // if(delay> refreshRate_ms){
@@ -746,8 +729,6 @@ void ledRing_task(void *arg){
         //
         vTaskDelay(pdMS_TO_TICKS(refreshRate_ms));
     }
-    EXIT:
-    vTaskDelete(NULL);
 }
 
 void start_ledRing_task(int slot_num){

@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "driver/rmt_encoder.h"
+#include "driver/rmt_tx.h"
 //#include "rgbHsv.h"
 
 #define NONE 0
@@ -29,6 +30,8 @@ enum {
 	LED_RUN, LED_STOP
 };
 
+
+
 typedef struct {
     rmt_encoder_t base;
     rmt_encoder_t *bytes_encoder;
@@ -43,6 +46,27 @@ typedef struct {
 
 
 
+typedef struct {
+    rmt_tx_channel_config_t tx_chan_config;
+    rmt_channel_handle_t led_chan;
+    rmt_transmit_config_t tx_config;
+
+    rmt_encoder_handle_t led_encoder;
+    led_strip_encoder_config_t encoder_config;
+}rmt_led_heap_t;
+
+
+#define RMT_LED_HEAP_DEFAULT() {\
+    .tx_chan_config.clk_src = RMT_CLK_SRC_DEFAULT,\
+    .tx_chan_config.gpio_num = 0,\
+    .tx_chan_config.mem_block_symbols = 64,\
+    .tx_chan_config.resolution_hz = 10 * 1000 * 1000,\
+    .tx_chan_config.trans_queue_depth = 4,\
+    .tx_config.loop_count = 0,\
+    .encoder_config.resolution = 10 * 1000 * 1000,\
+    .led_chan = NULL,\
+    .led_encoder = NULL,\
+}
 
 void start_smartLed_task(int slot_num);
 void start_ledRing_task(int slot_num);
