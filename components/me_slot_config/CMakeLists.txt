@@ -16,6 +16,6 @@ idf_component_register(SRCS
                         "tachometer.c"
                         "dwin_uart.c"
                     INCLUDE_DIRS "include"
-                    REQUIRES accelStepper stateConfig reporter audioPlayer reporter esp32-rotary-encoder driver rgbHsv myHID someUnique distanceSens)
+                    REQUIRES accelStepper stateConfig reporter audioPlayer reporter esp32-rotary-encoder driver rgbHsv myHID someUnique distanceSens accel)
 
  

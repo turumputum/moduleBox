@@ -39,6 +39,7 @@
 
 #include "distanceSens.h"
 #include "mb_oneWire.h"
+#include "accel.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -141,6 +142,8 @@ int init_slots(void){
 			start_whitelist_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
 			start_ds18b20_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "MPU9250_kick", 7)){
+			start_MPU9250_kick_task(i);
 		}
 	}
 

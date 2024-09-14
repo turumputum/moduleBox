@@ -10,7 +10,7 @@
 
 #define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.25";
+static const char* VERSION = "3.26";
 
 
 #define LEDC_TIMER              LEDC_TIMER_0
