@@ -144,7 +144,7 @@ void audio_task(void *arg) {
 
 	//ESP_LOGD(TAG, "Create audio pipeline for playback");
 	audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
-	pipeline_cfg.rb_size = 8 * 1024;//3
+	//pipeline_cfg.rb_size = 8 * 1024;//3
 	pipeline = audio_pipeline_init(&pipeline_cfg);
 	mem_assert(pipeline);
 
@@ -154,25 +154,25 @@ void audio_task(void *arg) {
 	// i2s_cfg.i2s_config.dma_buf_count = 3; //3
 	// i2s_cfg.i2s_config.dma_buf_len = 300; //300
 	i2s_cfg.type = AUDIO_STREAM_WRITER;
-	i2s_cfg.task_prio = 23; //23
+	//i2s_cfg.task_prio = 23; //23
 	i2s_cfg.use_alc = true;
 	i2s_cfg.volume = -34 + (volume / 3);
 	i2s_stream_writer = i2s_stream_init(&i2s_cfg);
 
 	fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
 	fatfs_cfg.type = AUDIO_STREAM_READER;
-	fatfs_cfg.task_prio = 22; //22
+	//fatfs_cfg.task_prio = 22; //22
 	fatfs_stream_reader = fatfs_stream_init(&fatfs_cfg);
 
 	//ESP_LOGD(TAG, "Create mp3 decoder to decode mp3 file");
 	mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
-	mp3_cfg.task_prio = 22; //22
+	//mp3_cfg.task_prio = 22; //22
 	//mp3_cfg.out_rb_size = 3 * 1024;
 	mp3_decoder = mp3_decoder_init(&mp3_cfg);
 
 	//ESP_LOGD(TAG, "Create resample filter");
 	rsp_filter_cfg_t rsp_cfg = DEFAULT_RESAMPLE_FILTER_CONFIG();
-	rsp_cfg.task_prio = 22; //22
+	//rsp_cfg.task_prio = 22; //22
 	rsp_cfg.prefer_flag = 1;
 	rsp_handle = rsp_filter_init(&rsp_cfg);
 
@@ -223,7 +223,9 @@ void audio_task(void *arg) {
 			if(strstr(command, ":")!=NULL){
 				cmd_arg = strstr(command, ":")+1;
 			}else{
-				cmd_arg = strdup("0");
+				char tmp="0\0";
+				cmd_arg = &tmp;
+				//cmd_arg = strdup("0");
 			}
 			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "play", 4)){//------------------------------
@@ -287,11 +289,11 @@ void audio_task(void *arg) {
 
 		//listen audio event i2s_stream_writer
 		ret = audio_event_iface_listen(evt, &msg, 0);
-		el_state = audio_element_get_state(i2s_stream_writer);
 		// if(ret == ESP_OK){
 		// 	ESP_LOGD(TAG, "audio_Event: %d el_state: %d", msg.cmd, el_state);
 		// }
 		if (msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
+			el_state = audio_element_get_state(i2s_stream_writer);
 			if (el_state == AEL_STATE_FINISHED) {
 				audioStop();
 				audioSetIndicator(slot_num, 0);
@@ -348,12 +350,15 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	audio_element_info_t music_info = { 0 };
 	audio_element_set_uri(fatfs_stream_reader, me_config.soundTracks[truckNum]);
 	audio_element_getinfo(mp3_decoder, &music_info);
+
+	ESP_ERROR_CHECK(audio_pipeline_reset_ringbuffer(pipeline));
+	ESP_ERROR_CHECK(audio_pipeline_reset_elements(pipeline));
 	//audio_element_getdata(mp3_decoder);
 	// music_info.byte_pos=music_info.total_bytes/2;
 	// audio_element_set_byte_pos(mp3_decoder, music_info.byte_pos);
 	ESP_LOGD(TAG, "Received music info from mp3 decoder, file:%s sample_rates=%d, bits=%d, ch=%d byte_pos:%lld total_bytes:%lld", me_config.soundTracks[truckNum], music_info.sample_rates, music_info.bits, music_info.channels, music_info.byte_pos, music_info.total_bytes);
-	audio_element_setinfo(i2s_stream_writer, &music_info);
-	rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
+	//audio_element_setinfo(i2s_stream_writer, &music_info);
+	//rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
 
 	return audio_pipeline_run(pipeline);
 
@@ -363,14 +368,15 @@ esp_err_t audioPlay(uint8_t truckNum) {
 void audioStop(void) {
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
 	//ESP_LOGD(TAG, "audioStop state: %d", el_state);
-	if ((el_state != AEL_STATE_FINISHED) && (el_state != AEL_STATE_STOPPED)) {
+	//if ((el_state != AEL_STATE_FINISHED) && (el_state != AEL_STATE_STOPPED)) {
 		audio_pipeline_stop(pipeline);
 		audio_pipeline_wait_for_stop(pipeline);
-	}
+	//}
 	ESP_ERROR_CHECK(audio_pipeline_terminate(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_reset_ringbuffer(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_reset_elements(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_change_state(pipeline, AEL_STATE_INIT));
+
 
 	ESP_LOGD(TAG, "Stop playing. Free heap:%d", xPortGetFreeHeapSize());
 }

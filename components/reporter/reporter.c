@@ -70,7 +70,10 @@ void crosslinker(char* str){
 			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s", crosslink, croslink_rest);
 			if (strstr(crosslink, "->") != NULL){
 				
-				char *event=strdup(str);
+				char eventMem[strlen(str)+1];
+				strcpy(eventMem, str);
+				char *event = eventMem;
+				//char *event=strdup(str);
 				//char *event = str;
 				if(strstr(event, me_config.deviceName)!=NULL){
 					event = event + strlen(me_config.deviceName) + 1;
@@ -82,7 +85,10 @@ void crosslinker(char* str){
 
 				// char crosslinkCopy[strlen(me_config.slot_cross_link[slot_num])+1];
 				// strcpy(crosslinkCopy,me_config.slot_cross_link[slot_num]);
-				char *crosslinkCopy = strdup(crosslink);
+				
+				char memForCopy[strlen(crosslink)+1];
+				strcpy(memForCopy, crosslink);
+				char *crosslinkCopy = memForCopy;
 
 				trigger = strtok_r(crosslinkCopy, "->", &action);
 				if(trigger[0]==' '){
@@ -123,7 +129,7 @@ void crosslinker(char* str){
 				}else{
 					//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
 				}
-				vPortFree(crosslinkCopy);
+				//vPortFree(crosslinkCopy);
 			}
 			
 			
@@ -232,7 +238,8 @@ void reporter_task(void){
 			}
 			
 			crosslinker(tmpStr);
-			vPortFree(received_message.str);
+			heap_caps_free(received_message.str);
+			//vPortFree(received_message.str);
 		}	
 	}
 }
@@ -247,8 +254,13 @@ void report(char *msg, int slot_num){
 	//	memset(tmpStr, 0,64);
 	//	sprintf(tmpStr, "monofonMSD\n");
 	reporter_message_t send_message;
-	//strcpy(&send_message.str, msg);
-	send_message.str = strdup(msg);
+
+	//send_message.str = strdup(msg);
+
+	char *copy = heap_caps_malloc(strlen(msg)+1, MALLOC_CAP_8BIT);
+	strcpy(copy, msg);
+	send_message.str = copy;
+
 	send_message.slot_num = slot_num;
 	esp_err_t ret = xQueueSend(me_state.reporter_queue, &send_message, portMAX_DELAY);
 	if(ret!= pdPASS){

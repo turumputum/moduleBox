@@ -62,20 +62,20 @@ void button_task(void *arg){
 	char str[255];
 
 	int button_inverse=0;
-	if (strstr(me_config.slot_options[slot_num], "button_inverse")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "buttonInverse")!=NULL){
 		button_inverse=1;
 	}
 
 
 	int debounce_gap = 200;
-	if (strstr(me_config.slot_options[slot_num], "button_debounce_gap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "button_debounce_gap");
+	if (strstr(me_config.slot_options[slot_num], "buttonDebounceGap") != NULL) {
+		debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap");
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
     
-    if (strstr(me_config.slot_options[slot_num], "button_topic") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "button_topic");
+    	custom_topic = get_option_string_val(slot_num, "buttonTopic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -187,33 +187,33 @@ void led_task(void *arg){
     //vQueueAddToRegistry( xQueue, "AMeaningfulName" );
     
     uint8_t inverse = 0;
-    if (strstr(me_config.slot_options[slot_num], "led_inverse")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "ledInverse")!=NULL){
 		inverse=1;
 	}
 
     uint8_t fade_increment = 255;
-    if (strstr(me_config.slot_options[slot_num], "fade_increment") != NULL) {
-		fade_increment = get_option_int_val(slot_num, "fade_increment");
+    if (strstr(me_config.slot_options[slot_num], "fadeIncrement") != NULL) {
+		fade_increment = get_option_int_val(slot_num, "fadeIncrement");
 		ESP_LOGD(TAG, "Set fade_increment:%d for slot:%d",fade_increment, slot_num);
 	}
 
     uint16_t max_bright = 255;
-    if (strstr(me_config.slot_options[slot_num], "max_bright") != NULL) {
-		max_bright = get_option_int_val(slot_num, "max_bright");
+    if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
+		max_bright = get_option_int_val(slot_num, "maxBright");
         if(max_bright>255)max_bright=255;
 		ESP_LOGD(TAG, "Set max_bright:%d for slot:%d",max_bright, slot_num);
 	}
 
     uint16_t min_bright = 0;
-    if (strstr(me_config.slot_options[slot_num], "min_bright") != NULL) {
-		min_bright = get_option_int_val(slot_num, "min_bright");
+    if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
+		min_bright = get_option_int_val(slot_num, "minBright");
         if(min_bright>255)min_bright=255;
 		ESP_LOGD(TAG, "Set min_bright:%d for slot:%d",min_bright, slot_num);
 	}
 
     uint16_t refreshRate_ms = 30;
-    if (strstr(me_config.slot_options[slot_num], "refreshRate_ms") != NULL) {
-		refreshRate_ms = get_option_int_val(slot_num, "refreshRate_ms");
+    if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
+		refreshRate_ms = get_option_int_val(slot_num, "refreshRate");
 		ESP_LOGD(TAG, "Set refreshRate_ms:%d for slot:%d",refreshRate_ms, slot_num);
 	}
 
@@ -229,9 +229,9 @@ void led_task(void *arg){
         animate=NONE;
     }
 
-	if (strstr(me_config.slot_options[slot_num], "led_topic") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "led_topic");
+    	custom_topic = get_option_string_val(slot_num, "ledTopic");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{

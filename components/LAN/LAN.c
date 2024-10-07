@@ -113,40 +113,29 @@ void osc_recive_task(){
 	while(1){
 		int len=recvfrom(me_state.osc_socket, buff, buff_size-1, 0,(struct sockaddr *)&source_addr, &socklen);
 		if(len<0){
-			ESP_LOGD(TAG, "OSC incoming fail(");
+			//ESP_LOGD(TAG, "OSC incoming fail(");
 		}else{
 			ESP_LOGD(TAG, "OSC incoming:%s", buff);
-			// if (!tosc_parseMessage(&osc, buff, len)) {
-			// 	//printf("Received OSC message: [%i bytes] %s %s ",
-			// 		//len, // the number of bytes in the OSC message
-			// 		//tosc_getAddress(&osc), // the OSC address string, e.g. "/button1"
-			// 		tosc_getFormat(&osc); // the OSC format string, e.g. "f"
-			// 	for (int i = 0; osc.format[i] != '\0'; i++) {
-			// 		if(osc.format[i]== 'i'){
-			// 			//printf("%i ", ); break;
-			// 			exec_message_t message;
-			// 			memset(message.str,0,strlen(message.str));
-			// 			sprintf(message.str, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
-
-			// 			ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
-			// 			if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
-			// 				ESP_LOGE(TAG, "Send message FAIL");
-			// 			}
-			// 		} 
-			// 		if(osc.format[i]== 'f'){
-			// 			//printf("%i ", ); break;
-			// 			exec_message_t message;
-			// 			memset(message.str,0,strlen(message.str));
-			// 			sprintf(message.str, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
-
-			// 			ESP_LOGD(TAG, "Add to exec_queue:%s ",message.str);
-			// 			if (xQueueSend(exec_mailbox, &message, portMAX_DELAY) != pdPASS) {
-			// 				ESP_LOGE(TAG, "Send message FAIL");
-			// 			}
-			// 		} 
-			// 	}
-			// 	printf("\n");
-			// }
+			if (!tosc_parseMessage(&osc, buff, len)) {
+				//printf("Received OSC message: [%i bytes] %s %s ",
+					//len, // the number of bytes in the OSC message
+					//tosc_getAddress(&osc), // the OSC address string, e.g. "/button1"
+					tosc_getFormat(&osc); // the OSC format string, e.g. "f"
+				for (int i = 0; osc.format[i] != '\0'; i++) {
+					if(osc.format[i]== 'i'){
+						
+						char strT[255];
+						sprintf(strT, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
+						execute(strT);
+					} 
+					if(osc.format[i]== 'f'){
+						//printf("%i ", ); break;
+						char strT[255];
+						sprintf(strT, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
+						execute(strT);
+					} 
+				}
+			}
 		}
 		vTaskDelay(pdMS_TO_TICKS(20));
 	}

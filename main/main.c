@@ -258,6 +258,9 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("AUDIO_LAN", level);
 	esp_log_level_set("RTP_STREAM", level);
 	esp_log_level_set("ONE_WIRE", level);
+	esp_log_level_set("ACCEL", level);
+	esp_log_level_set("CYBERGEAR", level);
+	esp_log_level_set("TICKETDISPENSER", level);
 	}
 
 
@@ -361,7 +364,7 @@ void app_main(void)
 {
 
 	setLogLevel(4);
-
+	me_state.free_i2c_num=0;
 	ESP_LOGD(TAG, "Start up");
 	ESP_LOGD(TAG, "free Heap size %d", xPortGetFreeHeapSize());
 

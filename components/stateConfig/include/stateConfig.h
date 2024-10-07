@@ -55,6 +55,7 @@ typedef struct {
 	int8_t udp_socket;
 	int8_t osc_socket;
 
+	int8_t free_i2c_num;
 	int8_t ledc_chennelCounter;
 
 //	led_state_t bt_state_mass[8];

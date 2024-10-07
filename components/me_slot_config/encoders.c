@@ -168,7 +168,7 @@ void encoderPWM_task(void *arg)
 	int val_mass[ANTI_DEBOUNCE_INERATIONS];
 
 	while (1){
-		vTaskDelay(pdMS_TO_TICKS(25));
+		vTaskDelay(pdMS_TO_TICKS(10));
 		if (tickVals.flag){
 			raw_val = tickVals.dTime + offset;
 		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
@@ -176,9 +176,9 @@ void encoderPWM_task(void *arg)
 		}
 
 		//raw_val = raw_val + offset;
-
+		//ESP_LOGD(TAG, "raw_val:%d", raw_val);
 		while(raw_val > pole){
-			raw_val -= pole;
+			raw_val = pole;
 		}
 
 		val_mass[anti_deb_mass_index] = raw_val;

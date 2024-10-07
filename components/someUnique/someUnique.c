@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_err.h"
@@ -366,4 +367,98 @@ void start_dialer_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
     xTaskCreate(dialer_task, "dialer_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
     ESP_LOGD(TAG, "dialer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+//-------------------academia-kick---------------------
+
+int hex_to_dec(char high, char low) {
+    int result = 0;
+    result += (high >= 'A') ? (high - 'A' + 10) : (high - '0');
+    result = result << 4;
+    result += (low >= 'A') ? (low - 'A' + 10) : (low - '0');
+    return result;
+}
+
+void academKick_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    int uart_num = UART_NUM_1; // Начинаем с минимального порта
+    while (uart_is_driver_installed(uart_num)) {
+        uart_num++;
+        if (uart_num >= UART_NUM_MAX) {
+            ESP_LOGE(TAG, "slot num:%d ___ No free UART driver", slot_num);
+            vTaskDelete(NULL);
+        }
+    }
+
+    uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][1];
+
+    uart_config_t uart_config = {
+        .baud_rate = 19200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    uart_param_config (uart_num, &uart_config);
+    gpio_reset_pin (tx_pin);
+    gpio_reset_pin (rx_pin);
+    uart_set_pin (uart_num, tx_pin, rx_pin, -1, -1);
+    uart_is_driver_installed (uart_num);
+    uart_driver_install (uart_num, 255, 255, 0, NULL, 0);
+    
+    #define BUF_SIZE 30
+    uint8_t data[BUF_SIZE];
+    memset(data, 0, BUF_SIZE);
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/kick_0")+3];
+		sprintf(t_str, "%s/kick_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+    while (1) {
+        
+        int len_read = uart_read_bytes(uart_num, data, 25, 100 / portTICK_PERIOD_MS);
+        if(len_read > 0){
+            // Remove the first byte
+            //ESP_LOGD(TAG, "In data:%s str_1:", data);
+            uint8_t str_1[4];
+            memmove(data, data + 1, 8);
+            for (int i = 0; i < sizeof(float); i++) {
+                str_1[i]=hex_to_dec(data[i*2], data[i*2+1]);
+            }
+
+            // }
+            //str_1[8]='\0';
+            ESP_LOGD(TAG, "Str_1:%02x %02x %02x %02x", str_1[0], str_1[1], str_1[2], str_1[3]);
+            // Convert bytes 1-6 to float (little endian)
+            float result;// = *(float*)(str_1);
+            memcpy(&result, str_1, sizeof(float));
+            ESP_LOGI(TAG, "Received float value: %.4f - %d",(result*32), (int)roundf(result*32));
+
+            char tmpString[255];
+            memset(tmpString, 0, strlen(tmpString));
+            sprintf(tmpString,"%d", (int)roundf(result*32));
+            report(tmpString, slot_num);
+
+            memset(data, 0, BUF_SIZE);
+        }
+    }
+
+
+}
+
+void start_academKick_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    xTaskCreate(academKick_task, "academKick_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
+    ESP_LOGD(TAG, "academKick_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

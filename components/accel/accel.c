@@ -29,10 +29,10 @@ extern configuration me_config;
 extern stateStruct me_state;
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-static const char *TAG = "SWIPER";
+static const char *TAG = "ACCEL";
 
 void MPU9250_kick_task(void *arg) {
-    #define I2C_MASTER_TIMEOUT_MS 1000
+    #define I2C_MASTER_TIMEOUT_MS 100
     #define MPU9250_ADDR 0x68
 	int slot_num = *(int*) arg;
 	uint32_t heapBefore = xPortGetFreeHeapSize();
@@ -56,66 +56,88 @@ void MPU9250_kick_task(void *arg) {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = sda_pin,
         .scl_io_num = scl_pin,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE,
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
         .master.clk_speed = 100000,
     };
-
-    int i2c_num = 0;
-    while(i2c_num < I2C_NUM_MAX) {
-        esp_err_t ret = i2c_driver_install(i2c_num, I2C_MODE_MASTER, 0, 0, 0);
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "I2C_%d initialized for slot:%d", i2c_num, slot_num);
-            i2c_param_config(i2c_num, &conf);
-        } else if (ret == ESP_ERR_INVALID_STATE) {
-            ESP_LOGW(TAG, "I2C_%d defined, try next", i2c_num);
-            i2c_num++;
-        }
-    }
+    int i2c_num = me_state.free_i2c_num;
+    me_state.free_i2c_num++;
     if(i2c_num == I2C_NUM_MAX){
         ESP_LOGE(TAG, "No free I2C driver");
         vTaskDelete(NULL);
     }
 
+    i2c_param_config(i2c_num, &conf);
+    esp_err_t ret = i2c_driver_install(i2c_num, conf.mode,  0, 0, 0);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "I2C_%d initialized for slot:%d", i2c_num, slot_num);
+    } else if (ret == ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "I2C_%d defined, try next", i2c_num);
+        i2c_num++;
+    }
+    
     uint8_t data;
-
+    // for(int addr = 0x0; addr <= 0xFF; addr++) {
+    //     ESP_LOGD(TAG, "addr: %d", addr);
+    //     i2c_master_write_read_device(i2c_num, addr, &(uint8_t){0x75}, 1, &data, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //     if (data == 0x71) {
+    //         ESP_LOGI(TAG, "MPU-9250 found on address 0x%02X", addr);
+    //         break;
+    //     }
+    // }
+    //ESP_LOGI(TAG, "search done");
     i2c_master_write_read_device(i2c_num, MPU9250_ADDR, &(uint8_t){0x75}, 1, &data, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     if (data != 0x71) {
         ESP_LOGE(TAG, "MPU-9250 не обнаружен");
-        vTaskDelete(NULL);
+        //vTaskDelete(NULL);
     }
+    //vTaskDelete(NULL);
+    // i2c_device_config_t i2c_dev_conf = {
+    //     .scl_speed_hz = 100000,
+    //     .device_address = MPU9250_ADDR,
+    // };
+
+
 
     // Сброс устройства
     i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x80}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Включение акселерометра
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x00}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x00}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 
-    // Настройка диапазона акселерометра (±2g)
+    // Настройка диапазона акселерометра (±16g)
     i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x1C, 0x18}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //Turn on the internal low-pass filter for accelerometer with 10.2Hz bandwidth
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x1D, 0x05}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //turn on the bypass multiplexer
+    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x37, 0x02}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 
     
 
     while(1){
-        int16_t accel_raw[3];
+        //int16_t accel_raw[3];
         float accel[3];
         float magnitude;
 
         // Чтение акселерометра
         uint8_t reg = 0x3B;
-        i2c_master_write_read_device(i2c_num, MPU9250_ADDR, &reg, 1, (uint8_t*)accel_raw, 6, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+        uint8_t data[6];
+        i2c_master_write_read_device(i2c_num, MPU9250_ADDR, &reg, 1, (uint8_t*)data, 6, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
         // Преобразование сырых данных в значения g
+        
         for (int i = 0; i < 3; i++) {
-            accel[i] = (float)accel_raw[i] / 2048.0; // 2048 LSB/g для диапазона ±16g
+            accel[i] = (float)((data[i*2]<<8 | data[i*2+1])/ 2048.0); // 2048 LSB/g для диапазона ±16g
         }
+
+        //ESP_LOGD(TAG, "Acceleration  X:%.2dg, Y:%.2dg, Z:%.2d g", accel[0], accel[1], accel[2]);
         // Вычисление величины ускорения
-        magnitude = sqrt(accel[0]*accel[0] + accel[1]*accel[1] + accel[2]*accel[2]);
+        magnitude = sqrt(accel[0]*accel[0] + accel[1]*accel[1]);
         // Проверка на удар
-        if (magnitude > 3) {
-            ESP_LOGI(TAG, "Обнаружен удар! Сила: %.2f g", magnitude);
-            // Здесь можно добавить код для обработки события удара
-        }
+        // if (magnitude > 3) {
+        //     ESP_LOGI(TAG, "Обнаружен удар! Сила: %.2f g", magnitude);
+        //     // Здесь можно добавить код для обработки события удара
+        // }
         vTaskDelay(30 / portTICK_PERIOD_MS);
     }
 }

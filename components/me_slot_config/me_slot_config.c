@@ -40,6 +40,8 @@
 #include "distanceSens.h"
 #include "mb_oneWire.h"
 #include "accel.h"
+#include "cybergear.h"
+#include "ticketDispenser.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -144,7 +146,14 @@ int init_slots(void){
 			start_ds18b20_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "MPU9250_kick", 7)){
 			start_MPU9250_kick_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "cybergear", 7)){
+			start_cybergear_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "ticketDispenser", 15)){
+			start_ticketDispenser_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "academKick", 10)){
+			start_academKick_task(i);
 		}
+
 	}
 
 	ESP_LOGD(TAG, "Load config complite. Duration: %ld ms. Heap usage: %lu",
