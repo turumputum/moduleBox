@@ -29,68 +29,160 @@ static const char *TAG = "SOME_UNIQUE";
 
 
 
-void buttonMatrix4_task(void* arg) {
+void buttonMatrix_task(void* arg) {
     int slot_num = *(int*)arg;
 
-    uint8_t pin_row[4];
-    pin_row[0] = SLOTS_PIN_MAP[slot_num][0];
-    pin_row[1] = SLOTS_PIN_MAP[slot_num][1];
-    pin_row[2] = SLOTS_PIN_MAP[slot_num][2];
-    pin_row[3] = SLOTS_PIN_MAP[slot_num][3];
-    for(int i=0; i<4; i++){
+    int outSlots[5] = {0};
+    int outSlotsCount = 0;
+
+    if (strstr(me_config.slot_options[slot_num], "outSlots:") != NULL) {
+        char *strPtr=strstr(me_config.slot_options[slot_num], "outSlots:")+strlen("outSlots:");
+        char strDup[strlen(strPtr)];
+        strcpy(strDup, strPtr);
+        char* rest = NULL;
+        char* payload = strtok_r(strDup, ",", &rest);
+        
+        if (payload != NULL) {
+            char* token = strtok(payload, " ");
+            while (token != NULL && outSlotsCount < 5) {
+                outSlots[outSlotsCount++] = atoi(token);
+                token = strtok(NULL, " ");
+            }
+        }
+    }else{
+        outSlots[0]=slot_num;
+        outSlotsCount=1;
+    }
+    uint8_t out_pin[outSlotsCount+3];
+    for(int i=0; i<outSlotsCount; i++){
+        out_pin[i*3] = SLOTS_PIN_MAP[outSlots[i]][0];
+        out_pin[i*3+1] = SLOTS_PIN_MAP[outSlots[i]][1];
+        out_pin[i*3+2] = SLOTS_PIN_MAP[outSlots[i]][2];
+    }
+    
+
+    int inSlots[5] = {0};
+    int inSlotsCount = 0;
+    if (strstr(me_config.slot_options[slot_num], "inSlots:") != NULL) {
+        char *strPtr=strstr(me_config.slot_options[slot_num], "inSlots:")+strlen("inSlots:");
+        char strDup[strlen(strPtr)];
+        strcpy(strDup, strPtr);
+        char* rest = NULL;
+        char* payload = strtok_r(strDup, ",", &rest);
+        
+        if (payload != NULL) {
+            char* token = strtok(payload, " ");
+            while (token != NULL && inSlotsCount < 5) {
+                inSlots[inSlotsCount++] = atoi(token);
+                token = strtok(NULL, " ");
+            }
+        }
+    }else{
+        inSlots[0]=slot_num+1;
+        inSlotsCount=1;
+    }
+    uint8_t in_pin[inSlotsCount+3];
+    for(int i=0; i<inSlotsCount; i++){
+        in_pin[i*3] = SLOTS_PIN_MAP[inSlots[i]][0];
+        in_pin[i*3+1] = SLOTS_PIN_MAP[inSlots[i]][1];
+        in_pin[i*3+2] = SLOTS_PIN_MAP[inSlots[i]][2];
+    }
+
+    for(int x=0; x<outSlotsCount*3; x++){
+        for(int y=0; y<inSlotsCount*3; y++){
+            if(out_pin[x]==in_pin[y]){
+                char errorString[50];
+                sprintf(errorString,  "buttonMatrix_%d wrong slots config", slot_num);
+                ESP_LOGE(TAG, "%s", errorString);
+                writeErrorTxt(errorString);
+                vTaskDelete(NULL);
+            }
+        }
+    }
+
+    for(int i=0; i<(outSlotsCount*3); i++){
         gpio_config_t io_conf = {};
         io_conf.intr_type = GPIO_INTR_DISABLE;
         io_conf.mode = GPIO_MODE_OUTPUT;
-        io_conf.pin_bit_mask = 1ULL<<pin_row[i];
+        io_conf.pin_bit_mask = 1ULL<<out_pin[i];
         io_conf.pull_down_en = 0;
         io_conf.pull_up_en = 0;
         esp_err_t ret = gpio_config(&io_conf);
         if(ret!= ESP_OK){
             ESP_LOGE(TAG, "gpio_config failed");
         }
-        ESP_LOGD(TAG, "Set output pin: %d", pin_row[i]);
+        ESP_LOGD(TAG, "Set output pin: %d", out_pin[i]);
     }
-    uint8_t pin_col[4];
-    pin_col[0] = SLOTS_PIN_MAP[slot_num+1][0];
-    pin_col[1] = SLOTS_PIN_MAP[slot_num+1][1];
-    pin_col[2] = SLOTS_PIN_MAP[slot_num+1][2];
-    pin_col[3] = SLOTS_PIN_MAP[slot_num+1][3];
-    for(int i=0; i<4; i++){
+
+    for(int i=0; i<(inSlotsCount*3); i++){
         gpio_config_t io_conf = {};
         io_conf.intr_type = GPIO_INTR_DISABLE;
         io_conf.mode = GPIO_MODE_INPUT;
-        io_conf.pin_bit_mask = 1ULL<<pin_col[i];
-        io_conf.pull_down_en = 0;
+        io_conf.pin_bit_mask = 1ULL<<in_pin[i];
+        io_conf.pull_down_en = 1;
         io_conf.pull_up_en = 0;
         esp_err_t ret = gpio_config(&io_conf);
         if(ret!= ESP_OK){
             ESP_LOGE(TAG, "gpio_config failed");
         }
-        ESP_LOGD(TAG, "Set input pin: %d", pin_col[i]);
+        ESP_LOGD(TAG, "Set input pin: %d", in_pin[i]);
     }
 
-    char t_str[strlen(me_config.deviceName)+strlen("/buttonMatrix_0")+3];
-    sprintf(t_str, "%s/buttonMatrix_%d",me_config.deviceName, slot_num);
-    me_state.trigger_topic_list[slot_num]=strdup(t_str);
-    ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    char charMap[(inSlotsCount*3*outSlotsCount*3)+1];
+    memset(charMap, 0, sizeof(charMap));
+    if (strstr(me_config.slot_options[slot_num], "mapping:") != NULL) {
+        char *strPtr=strstr(me_config.slot_options[slot_num], "mapping:")+strlen("mapping:");
+        if(strstr(strPtr, ",")!=NULL){
+            char* pt = strchr(strPtr, ',');
+            pt[0] = "\0";
+        }
+        int len=strlen(strPtr);
+        if(len>(inSlotsCount*3*outSlotsCount*3)){
+            len=inSlotsCount*3*outSlotsCount*3;
+        }
+        strPtr[len]='\0';
+        strcpy(charMap, strPtr);
+    }
+    ESP_LOGD(TAG, "mapping:%s", charMap);
 
-    int countMatrix[4][4];
-    int resMatrix[4][4];
-    int _resMatrix[4][4];
-    int maxCount=6;
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/buttonMatrix_0")+3];
+		sprintf(t_str, "%s/buttonMatrix_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart buttonMatrixTopic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+    for(int i=0; i<(outSlotsCount*3); i++){
+        gpio_set_level(out_pin[i],0);
+    }
+
+
+    int countMatrix[outSlotsCount*3][inSlotsCount*3];
+    memset(countMatrix, 0, sizeof(countMatrix));
+    uint8_t resMatrix[outSlotsCount*3][inSlotsCount*3];
+    memset(resMatrix, 0, sizeof(resMatrix));
+    uint8_t _resMatrix[outSlotsCount*3][inSlotsCount*3];
+    memset(_resMatrix, 0, sizeof(_resMatrix));
+    uint8_t maxCount=6;
 
     while (1){
-        vTaskDelay(5/portTICK_PERIOD_MS);
+        vTaskDelay(15/portTICK_PERIOD_MS);
 
-        for(int r=0; r<4; r++){
-            for(int a=0; a<4; a++){
-                gpio_set_level(pin_row[a], 0);
-            }
+        for(int r=0; r<(outSlotsCount*3); r++){
+            // for(int a=0; a<(outSlotsCount*3); a++){
+            //      gpio_set_level(out_pin[a],0);
+            // }
+            // vTaskDelay(1/portTICK_PERIOD_MS);
+            gpio_set_level(out_pin[r],1);
             vTaskDelay(1/portTICK_PERIOD_MS);
-            gpio_set_level(pin_row[r],1);
-            vTaskDelay(1/portTICK_PERIOD_MS);
-            for(int c=0; c<4; c++){
-                if(gpio_get_level(pin_col[c])==1){
+            for(int c=0; c<(inSlotsCount*3); c++){
+                if(gpio_get_level(in_pin[c])==1){
                     countMatrix[r][c]+=1;
                     if(countMatrix[r][c]>maxCount) countMatrix[r][c]=maxCount;
                 }else{
@@ -98,23 +190,29 @@ void buttonMatrix4_task(void* arg) {
                     if(countMatrix[r][c]<0) countMatrix[r][c]=0;
                 }
 
-                if(countMatrix[r][c]>(maxCount/2)+1) resMatrix[r][c]=1;
-                else if(countMatrix[r][c]<(maxCount/2)-1) resMatrix[r][c]=0;
+                if(countMatrix[r][c]>(maxCount/2)+1){ 
+                    resMatrix[r][c]=1;
+                }else if(countMatrix[r][c]<(maxCount/2)-1) resMatrix[r][c]=0;
             }
+            gpio_set_level(out_pin[r],0);
+            //vTaskDelay(1/portTICK_PERIOD_MS);
         }
 
         if(memcmp(resMatrix, _resMatrix, sizeof(resMatrix))!=0){
-            for(int r=0; r<4; r++){
-                for(int c=0; c<4; c++){
+            for(int r=0; r<(outSlotsCount*3); r++){
+                for(int c=0; c<(inSlotsCount*3); c++){
+                    //printf("%d ", resMatrix[r][c]);
                     _resMatrix[r][c]=resMatrix[r][c];
                     if(resMatrix[r][c]==1){
                         ESP_LOGD(TAG, "ButtonMatrix4_task: slot:%d, row:%d, col:%d", slot_num, r, c);
-                        char str[12];
+                        char str[2];
                         memset(str, 0, strlen(str));
-				        sprintf(str, "%d %d",r,c);
+				        sprintf(str, "%c",charMap[r*inSlotsCount*3+c]);
+                        ESP_LOGD(TAG, "report:%s", str);
                         report(str, slot_num);
                     }
                 }
+                //printf("\n");
             }           
         }
 
@@ -123,11 +221,10 @@ void buttonMatrix4_task(void* arg) {
 
 }
 
-
-void start_buttonMatrix4_task(int slot_num) {
+void start_buttonMatrix_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(buttonMatrix4_task, "buttonMatrix4_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
-    ESP_LOGD(TAG, "buttonMatrix4_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+    xTaskCreate(buttonMatrix_task, "buttonMatrix_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
+    ESP_LOGD(TAG, "buttonMatrix_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 

@@ -455,3 +455,103 @@ void start_whitelist_task(int slot_num) {
 	xTaskCreatePinnedToCore(whitelist_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 20, NULL, 0);
     ESP_LOGD(TAG, "whitelist_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+
+
+
+//---------------------------------COLLECTOR---------------------------------
+
+void collector_task(void *arg) {
+    #define MAX_LINE_LENGTH 256
+
+    int slot_num = *(int*) arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+
+    uint8_t stringMaxLenght = 7;
+    if (strstr(me_config.slot_options[slot_num], "stringMaxLenght") != NULL) {
+		stringMaxLenght = get_option_int_val(slot_num, "stringMaxLenght");
+		ESP_LOGD(TAG, "Set stringMaxLenght:%d for slot:%d", stringMaxLenght, slot_num);
+	}
+
+    uint16_t waitingTime = 3000;//ms
+    if (strstr(me_config.slot_options[slot_num], "waitingTime") != NULL) {
+		waitingTime = get_option_int_val(slot_num, "waitingTime");
+		ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", waitingTime, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/collector_0")+3];
+		sprintf(t_str, "%s/collector_%d",me_config.deviceName, slot_num);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
+	}
+
+
+    uint string_lenght=0;
+    char str[stringMaxLenght+1];
+    memset(str, 0, sizeof(str));
+    uint32_t dial_start_time = 0;
+    uint8_t state_flag = 0;
+    
+    while(1){
+        vTaskDelay(15 / portTICK_PERIOD_MS);
+        command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload = NULL;
+            char* cmd = msg.str+strlen(me_state.action_topic_list[slot_num])+1;
+            if(strstr(cmd, ":")!=NULL){
+                cmd = strtok_r(cmd, ":", &payload);
+                //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            }
+            if(strstr(cmd, "clear")!=NULL){
+                memset(str, 0, sizeof(str));
+                string_lenght=0;
+                state_flag = 0;
+                ESP_LOGD(TAG, "strUpdate:%s", str);
+            }else if(strstr(cmd, "add")!=NULL){
+                if(payload!=NULL){
+                    uint8_t len = strlen(payload);
+                    if(len+string_lenght>stringMaxLenght){
+                        len = stringMaxLenght-string_lenght;
+                    }
+                    strncat(str, payload, len);
+                    string_lenght+=strlen(payload);
+                    //ESP_LOGD(TAG, "strUpdate:%s", str);
+                    if(state_flag == 0){
+                        state_flag =1;
+                    }
+                    dial_start_time=pdTICKS_TO_MS(xTaskGetTickCount());
+
+                }
+            }  
+        }
+
+        if(state_flag == 1){
+            if(((pdTICKS_TO_MS(xTaskGetTickCount())-dial_start_time)>=waitingTime)||(string_lenght>=stringMaxLenght)){
+                //ESP_LOGD(TAG, "Input end, report number: %s", number_str);
+                report(str, slot_num);
+                memset(str, 0, stringMaxLenght);
+                state_flag = 0;
+                string_lenght = 0;
+            }
+        }
+
+    }
+}
+
+void start_collector_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "collector_task_%d", slot_num);
+	xTaskCreatePinnedToCore(collector_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 20, NULL, 0);
+    ESP_LOGD(TAG, "collector_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}

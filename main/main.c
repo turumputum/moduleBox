@@ -260,6 +260,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("ONE_WIRE", level);
 	esp_log_level_set("ACCEL", level);
 	esp_log_level_set("CYBERGEAR", level);
+	esp_log_level_set("STEADYWIN", level);
 	esp_log_level_set("TICKETDISPENSER", level);
 	}
 

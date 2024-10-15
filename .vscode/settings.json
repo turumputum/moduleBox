@@ -95,7 +95,8 @@
         "rmt_tx.h": "c",
         "gpio_ll.h": "c",
         "span": "c",
-        "esp_task_wdt.h": "c"
+        "esp_task_wdt.h": "c",
+        "ticketdispenser.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

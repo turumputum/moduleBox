@@ -187,6 +187,8 @@ uint8_t rmt_createAndSend(rmt_led_heap_t *rmt_slot_heap, uint8_t *led_strip_pixe
     return 0;
 }
 
+
+
 void smartLed_task(void *arg){
     uint32_t startTick = xTaskGetTickCount();
 	int slot_num = *(int*) arg;
@@ -200,19 +202,19 @@ void smartLed_task(void *arg){
     }
 
     uint16_t num_of_led=24;
-    if (strstr(me_config.slot_options[slot_num], "num_of_led") != NULL) {
-		num_of_led = get_option_int_val(slot_num, "num_of_led");
+    if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
+		num_of_led = get_option_int_val(slot_num, "numOfLed");
 		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
 	}
 
     uint8_t inverse = 0;
-    if (strstr(me_config.slot_options[slot_num], "led_inverse")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "ledInverse")!=NULL){
 		inverse=1;
 	}
 
     uint8_t state=0;
-    if (strstr(me_config.slot_options[slot_num], "default_state") != NULL) {
-		state = get_option_int_val(slot_num, "default_state");
+    if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
+		state = get_option_int_val(slot_num, "defaultState");
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
 	}
 
@@ -223,22 +225,22 @@ void smartLed_task(void *arg){
 	}
 
     uint16_t max_bright = 255;
-    if (strstr(me_config.slot_options[slot_num], "max_bright") != NULL) {
-		max_bright = get_option_int_val(slot_num, "max_bright");
+    if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
+		max_bright = get_option_int_val(slot_num, "maxBright");
         if(max_bright>255)max_bright=255;
 		ESP_LOGD(TAG, "Set max_bright:%d for slot:%d",max_bright, slot_num);
 	}
 
     uint16_t min_bright = 0;
-    if (strstr(me_config.slot_options[slot_num], "min_bright") != NULL) {
-		min_bright = get_option_int_val(slot_num, "min_bright");
+    if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
+		min_bright = get_option_int_val(slot_num, "minBright");
         if(min_bright>255)min_bright=255;
 		ESP_LOGD(TAG, "Set min_bright:%d for slot:%d",min_bright, slot_num);
 	}
 
     uint16_t refreshRate_ms = 30;
-    if (strstr(me_config.slot_options[slot_num], "refreshRate_ms") != NULL) {
-		refreshRate_ms = get_option_int_val(slot_num, "refreshRate_ms");
+    if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
+		refreshRate_ms = get_option_int_val(slot_num, "refreshRate");
 		ESP_LOGD(TAG, "Set refreshRate_ms:%d for slot:%d",refreshRate_ms, slot_num);
 	}
     	
@@ -248,7 +250,7 @@ void smartLed_task(void *arg){
         .b=250
     };
     //HsvColor HSV;
-    if (strstr(me_config.slot_options[slot_num], "RGB_color") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "RGBcolor") != NULL) {
         char strDup[strlen(me_config.slot_options[slot_num])];
         strcpy(strDup, me_config.slot_options[slot_num]);
         char* payload=NULL;
@@ -275,9 +277,9 @@ void smartLed_task(void *arg){
     //rmt_slot_heap.tx_chan_config.flags.io_od_mode = true;
     rmt_new_led_strip_encoder(&rmt_slot_heap.encoder_config, &rmt_slot_heap.led_encoder);
 
-    if (strstr(me_config.slot_options[slot_num], "smartLed_topic") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "smartLed_topic");
+    	custom_topic = get_option_string_val(slot_num, "ledTopic");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
@@ -296,6 +298,7 @@ void smartLed_task(void *arg){
         .g=0,
         .b=0
     };
+    state = inverse;
 
     while (1) {
         startTick = xTaskGetTickCount();
@@ -307,7 +310,7 @@ void smartLed_task(void *arg){
             char* cmd = strtok_r(msg.str, ":", &payload);
             ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
             if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
-                state = atoi(payload);
+                state = inverse ? !atoi(payload) : atoi(payload);
                 ESP_LOGD(TAG, "Change state to:%d", state);
             }else{
                 cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;

@@ -189,9 +189,9 @@ void audio_task(void *arg) {
 
 	//ESP_LOGD(TAG, "Set up  event listener");
 	audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
-	evt_cfg.external_queue_size = 10;//5
-	evt_cfg.internal_queue_size = 10;//5
-	evt_cfg.queue_set_size = 10;//5
+	evt_cfg.external_queue_size = 40;//5
+	evt_cfg.internal_queue_size = 20;//5
+	evt_cfg.queue_set_size = 20;//5
 	evt = audio_event_iface_init(&evt_cfg);
 
 	//xTaskCreatePinnedToCore(listenListener, "audio_listener", 1024 * 4, NULL, 1, NULL, 0);
@@ -199,7 +199,7 @@ void audio_task(void *arg) {
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
 			xPortGetFreeHeapSize());
 
-	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
 
 	int att_flag=0;
 	uint8_t att_vol=volume;
@@ -212,9 +212,9 @@ void audio_task(void *arg) {
 	audio_element_state_t el_state;
 
 	while(1){
-		//vTaskDelay(pdMS_TO_TICKS(30));
+		vTaskDelay(pdMS_TO_TICKS(5));
 		
-		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, pdMS_TO_TICKS(30)) == pdPASS){
+		if (xQueueReceive(me_state.command_queue[slot_num], &cmd,0) == pdPASS){
 			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
 			char *cmd_arg = NULL;
 			if(command[0]=='/'){
@@ -312,7 +312,7 @@ void audioInit(uint8_t slot_num){
 	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_player_%d", slot_num);
-	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-3, NULL, 1);
+	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 1);
 }
 
 void audioDeinit(void) {

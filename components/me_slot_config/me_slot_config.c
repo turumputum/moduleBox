@@ -41,6 +41,7 @@
 #include "mb_oneWire.h"
 #include "accel.h"
 #include "cybergear.h"
+#include "steadywin.h"
 #include "ticketDispenser.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -132,8 +133,8 @@ int init_slots(void){
 			start_disp_hd44780_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "disp_max7219", 12)){
 			start_max7219_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "buttonMatrix4", 13)){
-			start_buttonMatrix4_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "buttonMatrix", 13)){
+			start_buttonMatrix_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dwin_uart", 9)){
 			start_dwinUart_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
@@ -142,12 +143,16 @@ int init_slots(void){
 			start_dialer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "whitelist", 9)){
 			start_whitelist_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "collector", 9)){
+			start_collector_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
 			start_ds18b20_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "MPU9250_kick", 7)){
 			start_MPU9250_kick_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "cybergear", 7)){
+		}else if(!memcmp(me_config.slot_mode[i], "cybergear", 9)){
 			start_cybergear_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "steadywin", 9)){
+			start_steadywin_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ticketDispenser", 15)){
 			start_ticketDispenser_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "academKick", 10)){
