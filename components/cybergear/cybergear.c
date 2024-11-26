@@ -22,7 +22,7 @@
 
 #include "driver/twai.h"
 
-uint8_t CYBERGEAR_CAN_ID = 0x7F;
+uint8_t CYBERGEAR_CAN_ID = 127;
 uint8_t MASTER_CAN_ID = 0x00;
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -56,6 +56,7 @@ void _send_can_package(uint8_t can_id, uint8_t cmd_id, uint16_t option, uint8_t 
     uint32_t id = cmd_id << 24 | option << 8 | can_id;
     
     twai_message_t message;
+    memset(&message, 0, sizeof(message));
     message.extd = 1; //enable extended frame format
     message.identifier = id;
 
@@ -64,7 +65,7 @@ void _send_can_package(uint8_t can_id, uint8_t cmd_id, uint16_t option, uint8_t 
         message.data[i] = data[i];
     }
 
-
+    //ESP_LOGD(TAG, "TX->id:%.2x %.2x %.2x %.2x data:%.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x", (uint8_t)(message.identifier >> 24), (uint8_t)(message.identifier >> 16), (uint8_t)(message.identifier >> 8), (uint8_t)(message.identifier), message.data[0], message.data[1], message.data[2], message.data[3],  message.data[4], message.data[5], message.data[6], message.data[7]);
     
     if (twai_transmit(&message, pdMS_TO_TICKS(1000)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to transmit CAN message");
@@ -121,7 +122,7 @@ void send_motion_control(cgCmd_t cmd){
 
     uint16_t torque = _float_to_uint(cmd.torque, T_MIN, T_MAX, 16);
 
-    _send_can_package(CYBERGEAR_CAN_ID, CMD_POSITION, torque, 8, data);
+    _send_can_package(cmd.can_id, CMD_POSITION, torque, 8, data);
 }
 
 static void check_alerts(){
@@ -183,59 +184,141 @@ void cybergear_task(void *arg) {
         ESP_LOGE(TAG, "CAN Alerts not reconfigured");
     }
 
+    
+
     uint8_t data[8] = {0x00};
     _send_can_package(CYBERGEAR_CAN_ID, CMD_STOP, MASTER_CAN_ID, 8, data);
     
-    set_run_mode(MODE_MOTION);
-    
-    //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_LIMIT_TORQUE, 1.0, 0.0f, T_MAX);
-    enable_motor();
+    set_run_mode(MODE_CURRENT);
+    //set_run_mode(MODE_MOTION);
 
-   
-    //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_LIMIT_CURRENT, 1, 0.0f, I_MAX);
+    uint8_t rdata[8] = {0x00};
+    rdata[0]=1;
+    _send_can_package(CYBERGEAR_CAN_ID, CMD_SET_MECH_POSITION_TO_ZERO, MASTER_CAN_ID, 8, rdata);
+    
+
+    float limitTorque=4;
+    if (strstr(me_config.slot_options[slot_num], "limitTorque")!=NULL){
+        limitTorque = get_option_float_val(slot_num, "limitTorque");
+		ESP_LOGD(TAG, "Set limitTorque:%f.  Slot:%d", limitTorque, slot_num);
+	}
+    //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_LIMIT_TORQUE, limitTorque, 0.0f, T_MAX);
+    
+
+    float cKp=0.1;
+    if (strstr(me_config.slot_options[slot_num], "cKp")!=NULL){
+        cKp = get_option_float_val(slot_num, "cKp");
+		ESP_LOGD(TAG, "Set cKp:%f.  Slot:%d", cKp, slot_num);
+	}
+    _send_can_float_package(CYBERGEAR_CAN_ID, ADDR_CURRENT_KP, cKp, 0.0f, I_MAX);
+    float cKi=0.001;
+    if (strstr(me_config.slot_options[slot_num], "cKi")!=NULL){
+        cKi = get_option_float_val(slot_num, "cKi");
+		ESP_LOGD(TAG, "Set cKi:%f.  Slot:%d", cKi, slot_num);
+	}
+    _send_can_float_package(CYBERGEAR_CAN_ID, ADDR_CURRENT_KI, cKi, 0.0f, I_MAX);
     //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_LIMIT_SPEED, 5, 0.0f, V_MAX);
     //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_SPEED_REF, 5, 0.0f, V_MAX);
     
-
+    float pKp=10;
+    if (strstr(me_config.slot_options[slot_num], "pKp")!=NULL){
+        pKp = get_option_float_val(slot_num, "pKp");
+		ESP_LOGD(TAG, "Set pKp:%f.  Slot:%d", pKp, slot_num);
+	}
+    float sKp=3;
+    if (strstr(me_config.slot_options[slot_num], "sKp")!=NULL){
+        sKp = get_option_float_val(slot_num, "sKp");
+		ESP_LOGD(TAG, "Set sKp:%f.  Slot:%d", sKp, slot_num);
+	}
+    float deadBand=0.1;
+    if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
+        deadBand = get_option_float_val(slot_num, "deadBand");
+		ESP_LOGD(TAG, "Set deadBand:%f.  Slot:%d", pKp, slot_num);
+	}
     //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_POSITION_REF, 0, POS_MIN, POS_MAX);
-
+    enable_motor();
     
     float position = 1;
-    uint8_t count = 0;
+    float speed = 0;
+    float torque = 0;
+    float temp = 0;
+
+
+    float deadband = 0.2;
     while (1){
-        if(count++ > 10){
-            count = 0;
-            cgCmd_t cmd;
-            //position = -position;
+        //request_status();
 
-            request_status();
-            twai_message_t rx_msg;
-            if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
-                if (((rx_msg.identifier & 0xFF00) >> 8) == CYBERGEAR_CAN_ID){
-                    uint16_t raw_position = rx_msg.data[1] | rx_msg.data[0] << 8;
-                    uint16_t raw_speed = rx_msg.data[3] | rx_msg.data[2] << 8;
-                    uint16_t raw_torque = rx_msg.data[5] | rx_msg.data[4] << 8;
-                    uint16_t raw_temperature = rx_msg.data[7] | rx_msg.data[6] << 8;
-                    ESP_LOGD(TAG, "Raw Position: %d, Raw Speed: %d, Raw Torque: %d, Raw Temperature: %d", raw_position, raw_speed, raw_torque, raw_temperature);
-                }
-            }
+        cgCmd_t cmd;
+        memset(&cmd, 0, sizeof(cmd));
+        cmd.can_id = CYBERGEAR_CAN_ID;
+        cmd.position = 0;
+        cmd.speed = 0;
+        cmd.torque = 0;
+        cmd.kp = 0;
+        cmd.kd = 0;
+        send_motion_control(cmd);
 
-            cmd.position = position;
-            cmd.speed = 0.1;
-            cmd.torque = 0.1;
-            cmd.kp = 0.1;
-            cmd.kd = 0.1;
-
-            //_send_can_float_package(CYBERGEAR_CAN_ID, ADDR_POSITION_REF, position, POS_MIN, POS_MAX);
-
-            send_motion_control(cmd);
-            ESP_LOGD(TAG, "Sending position: %f", position);
-            //check_alerts();
+        twai_message_t rx_msg;
+        memset(&rx_msg, 0, sizeof(rx_msg));
+        if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
+            //if (((rx_msg.identifier & 0xFF00) >> 8) == CYBERGEAR_CAN_ID){
+                uint16_t raw_position = rx_msg.data[1] | rx_msg.data[0] << 8;
+                position = _uint_to_float(raw_position, POS_MIN, POS_MAX);
+                uint16_t raw_speed = rx_msg.data[3] | rx_msg.data[2] << 8;
+                speed = _uint_to_float(raw_speed, V_MIN, V_MAX);
+                uint16_t raw_torque = rx_msg.data[5] | rx_msg.data[4] << 8;
+                torque = _uint_to_float(raw_torque, T_MIN, T_MAX);
+                uint16_t raw_temperature = rx_msg.data[7] | rx_msg.data[6] << 8;
+                temp = raw_temperature/10;
+                //ESP_LOGD(TAG, "Position: %f, Speed: %f, Torque: %f, Temperature: %f", position, speed, torque, temp);
+                //ESP_LOGD(TAG, "Raw Position: %d, Raw Speed: %d, Raw Torque: %d, Raw Temperature: %d", raw_position, raw_speed, raw_torque, raw_temperature);
+            //}
         }
+        float posAntiiTorque = -(position*pKp);
+        //float posAntiiTorque = 0;
+        float speedAntiTorque = -(speed*sKp);
+        float setTorque = posAntiiTorque + speedAntiTorque;
+
+        if(fabs(setTorque) < deadBand){
+            setTorque=0;
+        }
+
+        if(setTorque >limitTorque){
+            setTorque=limitTorque;
+        }else if(setTorque < -limitTorque){
+            setTorque=-limitTorque;
+        }
+        _send_can_float_package(CYBERGEAR_CAN_ID, ADDR_I_REF, setTorque, -I_MAX, I_MAX);
+
+        ESP_LOGD(TAG, "antoTorque:%f posAntiTourque:%f speedAntiTorque:%f", setTorque, posAntiiTorque, speedAntiTorque);
+
+        // float outVal = -(position*1)-(speed*1);
+
+        // float torqueLim = fabs(position);
+        // if(torqueLim < deadband){
+        //     torqueLim = deadband*5;
+        // }
+
+        // if(position >2){
+        //     position = 2;
+        // }else if(position<-2){
+        //     position = -2;
+        // }
+        // if(fabs(position) < deadband ){
+        //     position = 0;
+        // }
+        // ESP_LOGD(TAG, "pos:%f torqueLim: %f", position, torqueLim);
+        // _send_can_float_package(CYBERGEAR_CAN_ID, ADDR_LIMIT_TORQUE, torqueLim, T_MIN, T_MAX);
+        // _send_can_float_package(CYBERGEAR_CAN_ID, ADDR_I_REF, -position, -I_MAX, I_MAX);
+        
+        
+            //ESP_LOGD(TAG, "Sending position: %f", position);
+            //check_alerts();
+        
 
         
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
     
 }

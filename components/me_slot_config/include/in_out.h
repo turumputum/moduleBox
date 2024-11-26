@@ -10,6 +10,9 @@
 // 	uint32_t gpio_num;
 // 	QueueHandle_t gpio_evt_queue;
 // } gpio_and_queue_t;
+#define INDEPENDENT_MODE 0
+#define OR_LOGIC_MODE 1
+#define AND_LOGIC_MODE 2
 
 typedef struct{
 	uint8_t slot_num;
@@ -18,7 +21,9 @@ typedef struct{
 } out_level_cmd_t;
 
 
-void init_out(int slot_num);
+//void init_out(int slot_num);
 void start_in_task(int slot_num);
+void start_in_3ch_task(int slot_num);
 void start_out_task(int slot_num);
+void start_out_3ch_task(int slot_num);
 void exec_out(int slot_num, int payload);

@@ -24,4 +24,4 @@ HsvColor RgbToHsv(RgbColor rgb);
 void parseRGB(RgbColor *color, char* payload);
 uint8_t modeToEnum(char* str);
 
-uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *currentBright, uint16_t *targetBright, uint16_t fade_increment);
+uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, float *currentBright, float *targetBright, float fade_increment);

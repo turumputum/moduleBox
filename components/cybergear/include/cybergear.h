@@ -51,6 +51,8 @@
 
 
 typedef struct {
+    uint8_t can_id;
+    uint8_t mode;
     float position;
     float speed;
     float torque;

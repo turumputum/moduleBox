@@ -13,23 +13,9 @@
 #define FADE_UP 7
 #define FADE_DOWN 8
 
-
-// typedef struct RgbColor {
-// 	unsigned char r;
-// 	unsigned char g;
-// 	unsigned char b;
-// } RgbColor;
-
-// typedef struct HsvColor {
-// 	unsigned char h;
-// 	unsigned char s;
-// 	unsigned char v;
-// } HsvColor;
-
 enum {
 	LED_RUN, LED_STOP
 };
-
 
 
 typedef struct {
@@ -70,4 +56,5 @@ typedef struct {
 
 void start_smartLed_task(int slot_num);
 void start_ledRing_task(int slot_num);
+void start_swiperLed_task(int slot_num);
 

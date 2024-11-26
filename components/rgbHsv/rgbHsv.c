@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "rgbHsv.h"
+#include "math.h"
 #include <string.h>
 #include "sdkconfig.h"
+#include "esp_log.h"
+
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 const uint8_t gamma_8[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3,
 		3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18,
@@ -137,53 +141,58 @@ uint8_t modeToEnum(char* str){
 }
 
 
-uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint16_t *currentBright, uint16_t *targetBright, uint16_t fade_increment){
-    uint8_t ret = 0;
-	if(currentRGB!=targetRGB){
+uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, float *currentBright, float *targetBright, float fade_increment){
+    //ESP_LOGD("SMART_LED","currentRGB:%d %d %d", currentRGB->r, currentRGB->g, currentRGB->b);
+	//ESP_LOGD("SMART_LED","targetRGB:%d %d %d", targetRGB->r, targetRGB->g, targetRGB->b);
+	//ESP_LOGD("SMART_LED","currentBright:%f targetBright:%f increment:%f", *currentBright, *targetBright, fade_increment);
+	uint8_t ret = 0;
+	if(memcmp(currentRGB, targetRGB, sizeof(RgbColor))!=0){
+		//ESP_LOGD("SMART_LED", "Color difference");
 		ret=1;
         if(currentRGB->r < targetRGB->r){
-            if((targetRGB->r - currentRGB->r) < fade_increment){
+            if((targetRGB->r - currentRGB->r) < (uint8_t)(fade_increment*255)){
                currentRGB->r = targetRGB->r;
             }else{
-                currentRGB->r += fade_increment;
+                currentRGB->r += (uint8_t)(fade_increment*255);
             }
         }else if(currentRGB->r > targetRGB->r){
-            if((currentRGB->r - targetRGB->r) < fade_increment){
+            if((currentRGB->r - targetRGB->r) < (uint8_t)(fade_increment*255)){
                currentRGB->r = targetRGB->r;
             }else{
-                currentRGB->r -= fade_increment;
+                currentRGB->r -= (uint8_t)(fade_increment*255);
             }
         }
 
         if(currentRGB->g < targetRGB->g){
-            if((targetRGB->g - currentRGB->g) < fade_increment){
+            if((targetRGB->g - currentRGB->g) < (uint8_t)(fade_increment*255)){
                currentRGB->g = targetRGB->g;
             }else{
-                currentRGB->g += fade_increment;
+                currentRGB->g += (uint8_t)(fade_increment*255);
             }
         }else if(currentRGB->g > targetRGB->g){
-            if((currentRGB->g - targetRGB->g) < fade_increment){
+            if((currentRGB->g - targetRGB->g) < (uint8_t)(fade_increment*255)){
                currentRGB->g = targetRGB->g;
             }else{
-                currentRGB->g -= fade_increment;
+                currentRGB->g -= (uint8_t)(fade_increment*255);
             }
         }
 
         if(currentRGB->b < targetRGB->b){
-            if((targetRGB->b - currentRGB->b) < fade_increment){
+            if((targetRGB->b - currentRGB->b) < (uint8_t)(fade_increment*255)){
                currentRGB->b = targetRGB->b;
             }else{
-                currentRGB->b += fade_increment;
+                currentRGB->b += (uint8_t)(fade_increment*255);
             }
         }else if(currentRGB->b > targetRGB->b){
-            if((currentRGB->b - targetRGB->b) < fade_increment){
+            if((currentRGB->b - targetRGB->b) < (uint8_t)(fade_increment*255)){
                currentRGB->b = targetRGB->b;
             }else{
-                currentRGB->b -= fade_increment;
+                currentRGB->b -= (uint8_t)(fade_increment*255);
             }
         }
     }
-	if(*currentBright!=*targetBright){
+	if(fabs(*currentBright-*targetBright)>0.001){
+		//ESP_LOGD("SMART_LED", "Bright difference");	
 		ret=1;
         if(*currentBright < *targetBright){
             if((*targetBright - *currentBright) < fade_increment){

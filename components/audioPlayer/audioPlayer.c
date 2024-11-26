@@ -3,7 +3,7 @@
 
 #include "esp_log.h"
 
-
+#include "esp_task_wdt.h"
 #include "esp_vfs_fat.h"
 //#include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
@@ -48,6 +48,20 @@ audio_event_iface_handle_t evt;
 
 extern stateStruct me_state;
 extern configuration me_config;
+
+int your_event_handler_function(audio_event_iface_msg_t *event, void *context)
+{
+    switch (event->cmd) {
+        case AEL_MSG_CMD_NONE:
+            // Handle error events
+            break;
+        case AEL_MSG_CMD_REPORT_MUSIC_INFO:
+            // Handle music info reports
+            break;
+        // Add more cases as needed
+    }
+    return ESP_OK;
+}
 
 void audioSetIndicator(uint8_t slot_num, uint32_t level){
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
@@ -109,13 +123,13 @@ void audio_task(void *arg) {
 	
 
 	uint16_t play_delay=0;
-	if (strstr(me_config.slot_options[0], "play_delay_ms")!=NULL){
-		play_delay = get_option_int_val(slot_num, "play_delay_ms");
+	if (strstr(me_config.slot_options[0], "playDelay")!=NULL){
+		play_delay = get_option_int_val(slot_num, "playDelay");
 		ESP_LOGD(TAG, "Set play_delay:%d", play_delay);
 	}
 
 	uint8_t play_to_end=0;
-	if (strstr(me_config.slot_options[0], "play_to_end")!=NULL){
+	if (strstr(me_config.slot_options[0], "playToEnd")!=NULL){
 		play_to_end = 1;
 		ESP_LOGD(TAG, "Set play_to_end:%d", play_to_end);
 	}
@@ -150,11 +164,13 @@ void audio_task(void *arg) {
 
 	//ESP_LOGD(TAG, "Create i2s stream to write data to codec chip");
 	i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
+	i2s_cfg.out_rb_size = 12 * 1024;
+	i2s_cfg.task_core = 1;
 	// i2s_cfg.i2s_config.sample_rate = 48000;
 	// i2s_cfg.i2s_config.dma_buf_count = 3; //3
 	// i2s_cfg.i2s_config.dma_buf_len = 300; //300
 	i2s_cfg.type = AUDIO_STREAM_WRITER;
-	//i2s_cfg.task_prio = 23; //23
+	//i2s_cfg.task_prio = configMAX_PRIORITIES-1; //23
 	i2s_cfg.use_alc = true;
 	i2s_cfg.volume = -34 + (volume / 3);
 	i2s_stream_writer = i2s_stream_init(&i2s_cfg);
@@ -190,9 +206,11 @@ void audio_task(void *arg) {
 	//ESP_LOGD(TAG, "Set up  event listener");
 	audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
 	evt_cfg.external_queue_size = 40;//5
-	evt_cfg.internal_queue_size = 20;//5
-	evt_cfg.queue_set_size = 20;//5
+	evt_cfg.internal_queue_size = 40;//5
+	evt_cfg.queue_set_size = 40;//5
 	evt = audio_event_iface_init(&evt_cfg);
+
+	//audio_event_iface_set_listener(evt, your_event_handler_function);
 
 	//xTaskCreatePinnedToCore(listenListener, "audio_listener", 1024 * 4, NULL, 1, NULL, 0);
 	audio_pipeline_set_listener(pipeline, evt);
@@ -200,6 +218,9 @@ void audio_task(void *arg) {
 			xPortGetFreeHeapSize());
 
 	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
+
+	//audio_event_iface_set_listener(evt, your_event_handler_function);
+
 
 	int att_flag=0;
 	uint8_t att_vol=volume;

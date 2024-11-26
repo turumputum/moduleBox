@@ -101,14 +101,14 @@ void encoderPWM_task(void *arg)
 
 
 	uint8_t float_output = 0;
-	if (strstr(me_config.slot_options[slot_num], "float_output") != NULL){
+	if (strstr(me_config.slot_options[slot_num], "floatOutput") != NULL){
 		float_output = 1;
 		ESP_LOGD(TAG, "float_output mode: %d", slot_num);
 	}
 
 	uint8_t zero_shift = 0;
-	if (strstr(me_config.slot_options[slot_num], "zero_shift") != NULL){
-		zero_shift = get_option_int_val(slot_num, "zero_shift");
+	if (strstr(me_config.slot_options[slot_num], "zeroShift") != NULL){
+		zero_shift = get_option_int_val(slot_num, "zeroShift");
 		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
 	}
 
@@ -116,8 +116,8 @@ void encoderPWM_task(void *arg)
 #define MAX_VAL 926
 	int pole = MAX_VAL - MIN_VAL;
 	int num_of_pos;
-	if (strstr(me_config.slot_options[slot_num], "num_of_pos") != NULL)	{
-		num_of_pos = get_option_int_val(slot_num, "num_of_pos");
+	if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL)	{
+		num_of_pos = get_option_int_val(slot_num, "numOfPos");
 		if (num_of_pos <= 0){
 			ESP_LOGD(TAG, "pwmEncoder num_of_pos wrong format, set default slot:%d", slot_num);
 			num_of_pos = 24; // default val
@@ -131,7 +131,7 @@ void encoderPWM_task(void *arg)
 	uint16_t raw_val;
 	int current_pos, prev_pos = -1;
 
-	if (strstr(me_config.slot_options[slot_num], "encoder_topic") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "encoder_topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);

@@ -14,6 +14,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
+#include "esp_freertos_hooks.h"
 
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -30,7 +31,7 @@
 #include "rtp_play.h"
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "esp_task_wdt.h"
 #include "esp_vfs_fat.h"
 #include "esp_spiffs.h"
 // #include "sdmmc_cmd.h"
@@ -113,6 +114,8 @@ static const char *TAG = "MAIN";
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 
+
+
 extern uint8_t FTP_SESSION_START_FLAG;
 extern uint8_t FLAG_PC_AVAILEBLE;
 extern uint8_t FLAG_PC_EJECT;
@@ -158,8 +161,6 @@ uint32_t ADC_AVERAGE;
 
 #define RELAY_1_GPIO GPIO_NUM_18
 #define RELAY_2_GPIO GPIO_NUM_48
-
-void listenListener(void *pvParameters);
 
 void ftp_task(void *pvParameters);
 
@@ -374,7 +375,6 @@ void app_main(void)
 
 	nvs_init();
 
-	
 	xTaskCreatePinnedToCore(executer_task, "executer_task",  1024 * 4,NULL ,configMAX_PRIORITIES - 12, NULL, 0);
 	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL,0);
 	//xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, usb_device_stack, &usb_device_taskdef);
@@ -446,8 +446,8 @@ void app_main(void)
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
-
 	
+
 	while (1)
 	{
 
@@ -467,7 +467,6 @@ void app_main(void)
         //     printf("Error getting real time stats: %s\n", esp_err_to_name(ret));
         // }
         // vTaskDelay(pdMS_TO_TICKS(1000));
-
 		vTaskDelay(pdMS_TO_TICKS(1000));
 
 	}

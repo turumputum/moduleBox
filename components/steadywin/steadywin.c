@@ -89,8 +89,8 @@ void sendTWAI(motorState_t targetState){
 float reciveTWAI(){    
     twai_message_t rx_msg;
     if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
-        //ESP_LOGD(TAG, "Received CAN message:%ld %x %x %x %x %x %x %x %x", rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
-        if(rx_msg.identifier == 100){
+        ESP_LOGD(TAG, "Received CAN message:%ld %x %x %x %x %x %x %x %x", rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+        if(rx_msg.identifier == 0){
             //ESP_LOGD(TAG,"hui");
             //vTaskDelay(1/portTICK_PERIOD_MS);
             //int32_t p_int = (rx_msg.data[1]<<8) + rx_msg.data[2];
@@ -101,15 +101,147 @@ float reciveTWAI(){
     return 0;
 }
 
+void setTorque(float torque){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 8;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+
+    _message.data[0] = 0x93;
+    uint32_t int_value = *((int32_t*)(&torque));
+
+    _message.data[1] = (uint8_t)(int_value & 0xFF);
+    _message.data[2] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[3] = (uint8_t)((int_value >> 16) & 0xFF);
+    _message.data[4] = (uint8_t)((int_value >> 24) & 0xFF);
+
+    int_value = 1;
+    _message.data[5] = (uint8_t)(int_value & 0xFF);
+    _message.data[6] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[7] = (uint8_t)((int_value >> 16) & 0xFF);
+
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
+void reciveCAN(float* pos){
+    twai_message_t _rx_msg;
+    memset(&_rx_msg, 0, sizeof(_rx_msg));
+    if (twai_receive(&_rx_msg, pdMS_TO_TICKS(10)) == ESP_OK) {
+        //ESP_LOGD(TAG, "<-RX id:%ld message:%x %x %x %x %x %x %x %x",_rx_msg.identifier, _rx_msg.data[0], _rx_msg.data[1], _rx_msg.data[2], _rx_msg.data[3], _rx_msg.data[4], _rx_msg.data[5], _rx_msg.data[6], _rx_msg.data[7]);
+        if(_rx_msg.data[0] == 0x93){
+            uint16_t int_value = (_rx_msg.data[3] & 0xFF) | ((_rx_msg.data[4] & 0xFF) << 8);
+            uint16_t torque_int = ((_rx_msg.data[6] & 0x0F) << 8) | _rx_msg.data[7];
+            float torque_float = torque_int * (450 * 0.41 * 8) / 4095.0 - 225 * 0.41 * 8;
+            //ESP_LOGD(TAG, "torque:%f", torque_float);
+            
+            *pos = ((float)int_value*25/65535)-12.5;
+            //ESP_LOGD(TAG, "pos:%d", int_value);
+            //ESP_LOGD(TAG, "pos:%f", pos);
+        }  
+    }
+    //return 0;
+}
+
+void dd_get_pos(float* pos){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 1;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+    _message.data[0] = 0xA3;
+
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+
+    twai_message_t _rx_msg;
+    memset(&_rx_msg, 0, sizeof(_rx_msg));
+    if (twai_receive(&_rx_msg, pdMS_TO_TICKS(100)) == ESP_OK) {
+        if(_rx_msg.data[0] == 0xA3){
+            uint16_t int_value = (_rx_msg.data[1] & 0xFF) | ((_rx_msg.data[2] & 0xFF) << 8);
+            float angle = int_value * (2*M_PI /16384);
+            //ESP_LOGD(TAG, "angle:%f", angle);
+
+            *pos = angle;
+            //ESP_LOGD(TAG, "pos:%d", int_value);
+            //ESP_LOGD(TAG, "pos:%f", pos);
+        }
+    }
+}
+
+
+void dd_set_torque(float torque){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 5;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+    _message.data[0] = 0xC0;
+    //int32_t int_value = *((int32_t*)(&torque));
+    int32_t int_value = (int32_t)torque;
+    _message.data[1] = (uint8_t)(int_value & 0xFF);
+    _message.data[2] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[3] = (uint8_t)((int_value >> 16) & 0xFF);
+    _message.data[4] = (uint8_t)((int_value >> 24) & 0xFF);
+
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
+void dd_set_pos(float pos){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 5;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+    _message.data[0] = 0xC2;
+    //int32_t int_value = *((int32_t*)(&torque));
+    int32_t int_value = (int32_t)(pos*(16384/(2*M_PI)));
+    _message.data[1] = (uint8_t)(int_value & 0xFF);
+    _message.data[2] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[3] = (uint8_t)((int_value >> 16) & 0xFF);
+    _message.data[4] = (uint8_t)((int_value >> 24) & 0xFF);
+    ESP_LOGD(TAG, "set  pos:%ld", int_value);
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
 void steadywin_task(void *arg) {
+
+    //vTaskDelay(pdMS_TO_TICKS(500));
+
     int slot_num = *(int*) arg;
 
     uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][0];
     uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][1];
 
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
-    //twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
-    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+    //twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     // Install TWAI driver
@@ -125,111 +257,141 @@ void steadywin_task(void *arg) {
     if (twai_reconfigure_alerts(alerts_to_enable, NULL) != ESP_OK) {
         ESP_LOGE(TAG, "CAN Alerts not reconfigured");
     }
+
+    float maxTorque=14;
+    float torqueConst = 0.08;
+    float torque = 0.3;
+
     twai_message_t message;
     message.identifier = 1;
-    message.data_length_code = 8;
+    message.data_length_code = 5;
+    message.extd = 0;              // Standard Format message (11-bit ID)
+    message.rtr = 0;               // Send a data frame
+    message.ss = 0;                // Not single shot
+    message.self = 0;              // Not a self reception request
+    message.dlc_non_comp = 0;      // DLC is less than 8
     twai_message_t rx_msg;
+    memset(&rx_msg, 0, sizeof(rx_msg));
 
-    message.data[0] = 0x81;
-    message.data[1] = 0x00;
-    message.data[2] = 0x00;
-    message.data[3] = 0x00;
-    message.data[4] = 0x00;
-    message.data[5] = 0x00;
-    message.data[6] = 0x00;
-    message.data[7] = 0x00; 
-    if (twai_transmit(&message, pdMS_TO_TICKS(1000)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to transmit CAN message");
+    ESP_LOGD(TAG, "Send maxTorque");
+    message.data[0] = 0xB3; 
+    int32_t i2 = (int32_t)(maxTorque/torqueConst);
+    message.data[1] = (uint8_t)(i2 & 0xFF);
+    message.data[2] = (uint8_t)((i2 >> 8) & 0xFF);
+    message.data[3] = (uint8_t)((i2>> 16) & 0xFF);
+    message.data[4] = (uint8_t)((i2 >> 24) & 0xFF);
+
+    if (twai_transmit(&message, pdMS_TO_TICKS(1000)) == ESP_OK) {
+        ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x",message.identifier, message.data[0], message.data[1], message.data[2], message.data[3], message.data[4]);
     }
     if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
-        ESP_LOGD(TAG, "Received CAN message after reset:%x %x %x %x %x %x %x %x", rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+        ESP_LOGD(TAG, "<-RX id:%ld message:%x %x %x %x %x %x %x %x",rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
     }
 
-    message.data[0] = 0x91;
-    if (twai_transmit(&message, pdMS_TO_TICKS(1000)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to transmit CAN message");
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    ESP_LOGD(TAG, "Send torque Kp");
+    message.data[0] = 0xB4; 
+    int32_t i1 = (int32_t)(100000);
+    message.data[1] = (uint8_t)(i1 & 0xFF);
+    message.data[2] = (uint8_t)((i1 >> 8) & 0xFF);
+    message.data[3] = (uint8_t)((i1>> 16) & 0xFF);
+    message.data[4] = (uint8_t)((i1 >> 24) & 0xFF);
+    if (twai_transmit(&message, pdMS_TO_TICKS(1000)) == ESP_OK) {
+        ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x",message.identifier, message.data[0], message.data[1], message.data[2], message.data[3], message.data[4]);
     }
-     if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
-        ESP_LOGD(TAG, "Received CAN message after start::%x %x %x %x %x %x %x %x", rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+    if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
+        ESP_LOGD(TAG, "<-RX id:%ld message:%x %x %x %x %x %x %x %x",rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+    } 
+
+    ESP_LOGD(TAG, "Send MaxSpeed");
+    message.data[0] = 0xB2; 
+    int32_t i3 = (int32_t)(100);
+    message.data[1] = (uint8_t)(i3 & 0xFF);
+    message.data[2] = (uint8_t)((i3 >> 8) & 0xFF);
+    message.data[3] = (uint8_t)((i3>> 16) & 0xFF);
+    message.data[4] = (uint8_t)((i3 >> 24) & 0xFF);
+    if (twai_transmit(&message, pdMS_TO_TICKS(1000)) == ESP_OK) {
+        ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x",message.identifier, message.data[0], message.data[1], message.data[2], message.data[3], message.data[4]);
     }
+    if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
+        ESP_LOGD(TAG, "<-RX id:%ld message:%x %x %x %x %x %x %x %x",rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+    } 
 
-    
-    // message.data[7] = 0xFB; 
-    // if (twai_transmit(&message, pdMS_TO_TICKS(1000)) != ESP_OK) {
-    //     ESP_LOGE(TAG, "Failed to transmit CAN message");
-    // }
 
-    // message.data[7] = 0xFC;
-    // if (twai_transmit(&message, pdMS_TO_TICKS(1000)) != ESP_OK) {
-    //     ESP_LOGE(TAG, "Failed to transmit CAN message");
-    // }
-
-    uint8_t numOfPos=12;
-    uint8_t currentPos=0;
-    float halfZone_rad= M_PI*2/numOfPos;
+    uint8_t numOfZone=10;
+    uint8_t currentZone=0;
+    float halfZone_rad= M_PI/numOfZone;
     ESP_LOGD(TAG, "halfZone_rad:%f", halfZone_rad);
 
-    motorState_t targetState;
-    targetState.pos = 0;
-    targetState.vel = 30;
-    targetState.kP=100;
-    targetState.kD=0.5;
-    targetState.T=0.4;
-    motorState_t currentState;
-    currentState.pos = 0;
+    float prevPos=0.0;
+    float curPos=0.0;
+    float cPos=0.0;
 
-    // vTaskDelay(pdMS_TO_TICKS(100));
-    // sendTWAI(targetState);
-    // currentState.pos = reciveTWAI();
-    // vTaskDelay(pdMS_TO_TICKS(1000));
-    while(1){
-        message.data[0] = 0x93;
-        message.data[1] = 0x00;
-        message.data[2] = 0x00;
-        message.data[3] = 0x00;
-        message.data[4] = 0x00;
-        message.data[5] = 0x00;
-        message.data[6] = 0x00;
-        message.data[7] = 0x00;
+    float targetPos = halfZone_rad+halfZone_rad*currentZone;
 
-        union FloatBytes posFloat, durFloat;
+    float deadZone = halfZone_rad*0.2;
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    printf("torque,pos,centrZone,deltaPos,deltaSpd\r\n");
     
-        message.data[0] = 0x95;
-        
-        posFloat.f = 1.0;
-        for (int i = 1; i < 5; i++) {
-            message.data[i] = posFloat.bytes[i];
-        }
-        
-        durFloat.f = 1000.0;
-        for (int i = 5; i < 9; i++) {
-            message.data[i] = durFloat.bytes[i];
-        }
-
-        if (twai_transmit(&message, pdMS_TO_TICKS(1000)) != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to transmit CAN message");
-        }
-        twai_message_t rx_msg;
-        if (twai_receive(&rx_msg, pdMS_TO_TICKS(1000)) == ESP_OK) {
-            ESP_LOGD(TAG, "Received CAN message:%ld %x %x %x %x %x %x %x %x", rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+    while(1){  
+        //reciveCAN(&cPos);
+        dd_get_pos(&cPos);
+        float delta = prevPos - cPos;
+        prevPos = cPos;
+        curPos = curPos + delta;
+        if(curPos<0){
+            curPos = curPos + 2*M_PI;
+        }else if(curPos>2*M_PI){
+            curPos = curPos - 2*M_PI;
         }
 
+       
+        currentZone = (uint8_t)(curPos/(halfZone_rad*2));
+        if(currentZone==numOfZone){
+            currentZone = 0;
+        }
+        //ESP_LOGD(TAG, "Zone:%d ZoneCenter:%f curPos:%f", currentZone, currentZone*halfZone_rad*2+halfZone_rad, curPos);
+        float centrDelt=(currentZone*halfZone_rad*2+halfZone_rad)-curPos;
+        //float pos = (currentZone*halfZone_rad*2+halfZone_rad);
+        //float pos = (currentZone*halfZone_rad*2);
+        //ESP_LOGD(TAG, "pos:%f", pos);
+        //dd_set_pos(pos);
 
-        // sendTWAI(targetState); 
-        vTaskDelay(pdMS_TO_TICKS(100));
-        // currentState.pos = reciveTWAI();
+        //ESP_LOGD(TAG, "delta:%f deltaPercent:%f",centrDelt, fabs(centrDelt/halfZone_rad));
+        float tarTorque = -((centrDelt/halfZone_rad)*maxTorque)/torqueConst;
+        // if(fabs(tarTorque)>fabs(torque)){
+        //     torque = torque+5;
+        // }else{
+        //     torque = tarTorque;
+        // }
+        // ESP_LOGD(TAG, "torque:%f tarTorque:%f", torque, tarTorque);
+        if(deadZone>fabs(centrDelt)){
+            torque = 0;
+        }
+        //printf("%f,%f,%f,%f,%f\r\n", tarTorque, curPos,(currentZone*halfZone_rad*2+halfZone_rad), centrDelt, delta);
+        //ESP_LOGD(TAG, "torque:%f zone:%d pos:%f", torque, currentZone, curPos);
+        dd_set_torque(tarTorque);
+        //setTorque(torque);
+        vTaskDelay(pdMS_TO_TICKS(8));
+        //float torque = deltaPos/halfZone_rad;
+        //sendTWAI(targetState); 
         
-        // // targetState.pos = -targetState.pos;
-        // ESP_LOGD(TAG, "pos delta:%f currentPos:%f targetPos:%f", fabs(targetState.pos - currentState.pos), currentState.pos, targetState.pos);
+        //currentState.pos = reciveTWAI();
         
-        // if(fabs(targetState.pos - currentState.pos)>=halfZone_rad){
-        //     if(targetState.pos < currentState.pos){
+        //targetState.pos = -targetState.pos;
+        //ESP_LOGD(TAG, "pos delta:%f currentPos:%f targetPos:%f", fabs(targetState.pos - currentState.pos), currentState.pos, targetState.pos);
+        
+        // if(fabs(tPos - cPos)>=halfZone_rad){
+        //     if(tPos < cPos){
         //         currentPos = (currentPos+1)%numOfPos;
         //     }else{
         //         currentPos = (currentPos-1+numOfPos)%numOfPos;
         //     }
-        //     targetState.pos = currentPos*halfZone_rad*2;
-        //     ESP_LOGD(TAG, "curPosNum:%d targetPos:%f",currentPos, targetState.pos);
+        //     tPos = currentPos*halfZone_rad*2;
+        //     ESP_LOGD(TAG, "curPosNum:%d targetPos:%f",currentPos, tPos);
         // }
 
         

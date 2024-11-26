@@ -23,6 +23,9 @@
 #include "driver/i2c.h"
 #include "apds9960.h"
 
+#include "rgbHsv.h"
+#include "driver/rmt_tx.h"
+#include "math.h"
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -121,3 +124,7 @@ void start_swiper_task(int slot_num){
 
 	ESP_LOGD(TAG,"swiper task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+
+
+
+

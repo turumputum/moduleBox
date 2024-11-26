@@ -20,7 +20,7 @@
 static const char *TAG = "REPORTER";
 
 #define MAILBOX_SIZE 10
-#define MAX_STRING_LENGTH 255
+#define MAX_STRING_LENGTH 512
 
 int err;
 
@@ -245,8 +245,8 @@ void reporter_task(void){
 }
 
 void reporter_init(void){
-	me_state.reporter_queue=xQueueCreate(5, sizeof(reporter_message_t));
-	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL, 0);
+	me_state.reporter_queue=xQueueCreate(50, sizeof(reporter_message_t));
+	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 	//xTaskCreate (reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 }
 
@@ -262,7 +262,7 @@ void report(char *msg, int slot_num){
 	send_message.str = copy;
 
 	send_message.slot_num = slot_num;
-	esp_err_t ret = xQueueSend(me_state.reporter_queue, &send_message, portMAX_DELAY);
+	esp_err_t ret = xQueueSend(me_state.reporter_queue, &send_message, 5);
 	if(ret!= pdPASS){
 		ESP_LOGE(TAG, "QueueSend error:%d", ret);
 	}
@@ -272,109 +272,3 @@ void report(char *msg, int slot_num){
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 
 }
-
-/*
-void crosslinks_process(char *crosslinks_str, char *event){
-	char crosslinks[strlen(crosslinks_str)];
-	strcpy(crosslinks, crosslinks_str);
-	char *crosslink = NULL;
-	char *croslink_rest = crosslinks;
-	uint8_t last_link = 0;
-	do{
-		if (strstr(croslink_rest, ",") != NULL){
-			crosslink = strtok_r(croslink_rest, ",", &croslink_rest);
-			//TO_DO verify cross link len
-		}
-		else{
-			crosslink = croslink_rest;
-			last_link = 1;
-		}
-		if (strstr(crosslink, "->") != NULL){
-			//ESP_LOGD(TAG, "Cross_link:%s", crosslink);
-			char *trigger;
-			char *action;
-
-			trigger = strtok_r(crosslink, "->", &action);
-			if(trigger[0]==' '){
-				trigger = trigger+1;//  cut " " at begin
-			}
-			if(strstr(trigger, "*")!= NULL){
-				trigger = strtok(trigger, ":");
-				//ESP_LOGD(TAG, "Any value trigger:%s ", trigger);
-			}
-			action = action + 1;// cut ":" at begin
-
-			//ESP_LOGD(TAG, "Compare trigger:%s in event:%s", trigger, event);
-			if (strstr(event, trigger) != NULL){
-				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
-				char output_action[strlen(me_config.deviceName) + strlen(action) + 2];
-				sprintf(output_action, "%s/%s", me_config.deviceName, action);
-				execute(output_action);
-			}
-			else{
-				//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
-			}
-			free(trigger);
-			free(action);
-		}
-
-		free(crosslink);
-		free(croslink_rest);
-		free(crosslinks);
-		if (last_link == 1){
-			break;
-		}
-		
-	} while (crosslink != NULL);
-}
-*/
-
-
-// void startup_crosslinks_exec(void){
-// 	char crosslinks[strlen(me_config.startup_cross_link)];
-// 	strcpy(crosslinks, me_config.startup_cross_link);
-// 	char *crosslink = NULL;
-// 	char *croslink_rest = crosslinks;
-// 	uint8_t last_link = 0;
-// 	do
-// 	{
-// 		if (strstr(croslink_rest, ",") != NULL)
-// 		{
-// 			crosslink = strtok_r(croslink_rest, ",", &croslink_rest);
-// 			// TO_DO verify cross link len
-// 		}
-// 		else
-// 		{
-// 			crosslink = croslink_rest;
-// 			last_link = 1;
-// 		}
-// 		if (crosslink != NULL)
-// 		{
-// 			// ESP_LOGD(TAG, "Cross_link:%s", crosslink);
-// 			char *trigger;
-// 			char *action;
-
-// 			trigger = strtok_r(crosslink, "->", &action);
-// 			action = action + 1;
-
-// 			if (strstr(trigger, "startup") != NULL)
-// 			{
-// 				ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", "startup", trigger, action);
-// 				char output_action[strlen(me_config.deviceName) + strlen(action) + 2];
-// 				sprintf(output_action, "%s/%s", me_config.deviceName, action);
-// 				execute(output_action);
-// 			}
-// 			else
-// 			{
-// 				// ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
-// 			}
-// 		}
-// 		if (last_link == 1)
-// 		{
-// 			break;
-// 		}
-
-// 	} while (crosslink != NULL);
-// }
-
-

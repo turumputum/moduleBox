@@ -559,3 +559,105 @@ void start_academKick_task(int slot_num) {
     xTaskCreate(academKick_task, "academKick_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
     ESP_LOGD(TAG, "academKick_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+
+
+//------------------------------CRSF_RX_TASK---------------------------------
+
+typedef struct {
+    uint8_t deviceAddr;
+    uint8_t frameLength;
+    uint8_t type;
+    uint8_t payload[32];
+    uint8_t crc;
+} crsf_frame_t;
+
+
+void crsf_rx_task(void* arg) {
+    int slot_num = *(int*)arg;
+    crsf_frame_t frame;
+    
+    // Find available UART port
+    int uart_num = UART_NUM_1;
+    while (uart_is_driver_installed(uart_num)) {
+        uart_num++;
+        if (uart_num >= UART_NUM_MAX) {
+            ESP_LOGE(TAG, "slot num:%d ___ No free UART driver", slot_num);
+            vTaskDelete(NULL);
+        }
+    }
+
+    // Configure UART pins
+    uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][1];
+
+    // CRSF UART config (420000 baud, 8N1)
+    uart_config_t uart_config = {
+        .baud_rate = 420000,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+
+    uart_param_config(uart_num, &uart_config);
+    gpio_reset_pin(tx_pin);
+    gpio_reset_pin(rx_pin);
+    uart_set_pin(uart_num, tx_pin, rx_pin, -1, -1);
+    uart_driver_install(uart_num, 256, 256, 0, NULL, 0);
+
+    // CRSF frame buffer
+    //uint8_t buffer[64];
+    
+    // In the crsf_rx_task:
+    while(1) {
+        uint8_t buffer[64];
+        crsf_frame_t frame;
+        
+        // Wait for CRSF header (0xC8)
+        uint8_t byte;
+        if(uart_read_bytes(uart_num, &byte, 1, pdMS_TO_TICKS(100)) > 0) {
+            if(byte == 0xC8) {
+                buffer[0] = byte;
+                frame.deviceAddr = byte;
+                
+                // Read frame length
+                if(uart_read_bytes(uart_num, &byte, 1, pdMS_TO_TICKS(1)) > 0) {
+                    buffer[1] = byte;
+                    frame.frameLength = byte;
+                    
+                    // Read type and payload
+                    if(uart_read_bytes(uart_num, &buffer[2], frame.frameLength, pdMS_TO_TICKS(1)) == frame.frameLength) {
+                        frame.type = buffer[2];
+                        
+                        // Extract payload
+                        uint8_t payload_len = frame.frameLength - 2; // Subtract type and CRC
+                        memcpy(frame.payload, &buffer[3], payload_len);
+                        
+                        // Get CRC
+                        frame.crc = buffer[frame.frameLength + 1];
+                        
+                        // Parse RC channels data if type is 0x16
+                        if(frame.type == 0x16) {
+                            ESP_LOGD(TAG, "Received payload: %x %x %x %x %x %x", frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3], frame.payload[4], frame.payload[5]);
+                            uint16_t channels[16];
+                            //memcpy(channels, frame.payload, payload_len);
+                            
+                            // Now channels array contains 16 RC channel values
+                            // Each channel is 11 bits
+                            //ESP_LOGD(TAG, "CH1: %d, CH2: %d, CH3: %d, CH4: %d",channels[0], channels[1], channels[2], channels[3]);
+                        }
+                    }
+                }
+            }
+        }
+        vTaskDelay(1); // Prevent watchdog trigger
+    }
+}
+
+
+void start_crsf_rx_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    xTaskCreate(crsf_rx_task, "crsf_rx_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
+    ESP_LOGD(TAG, "crsf_rx_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}

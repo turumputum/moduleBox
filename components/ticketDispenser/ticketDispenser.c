@@ -91,6 +91,18 @@ void ticketDispenser_task(void *arg) {
 		ESP_LOGD(TAG, "Set outTimeout:%d mSek for slot:%d",outTimeout, slot_num);
 	}
 
+    uint16_t overPrint = 200;
+	if (strstr(me_config.slot_options[slot_num], "overPrint") != NULL) {
+		overPrint = get_option_int_val(slot_num, "overPrint");
+		ESP_LOGD(TAG, "Set overPrint:%d mSek for slot:%d",outTimeout, slot_num);
+	}
+
+    uint16_t blindGap = 200;
+    if (strstr(me_config.slot_options[slot_num], "blindGap") != NULL) {
+		blindGap = get_option_int_val(slot_num, "blindGap");
+		ESP_LOGD(TAG, "Set blindGap:%d mSek for slot:%d",outTimeout, slot_num);
+	}
+
     //---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -123,6 +135,7 @@ void ticketDispenser_task(void *arg) {
             if (targetCount > 0) {
                 ESP_LOGD(TAG, "ticketDispenser_task cmd: %s", msg.str);
                 gpio_set_level(outPin_num, !out_inverse);
+                vTaskDelay(pdMS_TO_TICKS(blindGap));
                 watchDogFlag=1;
                 count=0;
             }
@@ -144,6 +157,7 @@ void ticketDispenser_task(void *arg) {
         }
 
         if(count>=targetCount){
+            vTaskDelay(pdMS_TO_TICKS(overPrint));
             gpio_set_level(outPin_num, out_inverse);
             count=0;
             watchDogFlag=0;

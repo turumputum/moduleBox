@@ -215,11 +215,13 @@ void wait_lan(){
 	}
 
 	if((me_state.osc_socket >= 0)&&(me_config.oscMyPort>0)){
-		xTaskCreate(osc_recive_task, "osc_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
+		xTaskCreatePinnedToCore(osc_recive_task, "osc_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL,0);
+		//xTaskCreate(osc_recive_task, "osc_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	}
 
 	if((me_state.udp_socket >= 0)&&(me_config.udpMyPort>0)){
-		xTaskCreate(udp_recive_task, "udp_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
+		xTaskCreatePinnedToCore(udp_recive_task, "udp_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL,0);
+		//xTaskCreate(udp_recive_task, "udp_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	}
 
 	if(me_config.FTP_enable){
@@ -369,8 +371,8 @@ int LAN_init(void) {
 	timeout.tv_usec = 0;
 	setsockopt (me_state.osc_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
 
-
-	xTaskCreate(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
+	xTaskCreatePinnedToCore(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL, 0);
+	//xTaskCreate(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	vTaskDelay(pdMS_TO_TICKS(1000));
 
 	return 0;

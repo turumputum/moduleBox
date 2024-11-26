@@ -33,7 +33,7 @@ static const char *TAG = "ANALOG";
 void analog_task(void *arg)
 {
     uint16_t raw_val;
-    uint16_t resault=0, prev_resault=0;
+    uint16_t resault=0, prev_resault=0xFFFF;
 
 	char tmpString[255];
 
@@ -130,14 +130,14 @@ void analog_task(void *arg)
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 0);
 			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
-		}else if(strcmp(dividerModeStr, "5V")==0){
-			gpio_set_level(divPin_1, 1);
-			gpio_set_level(divPin_2, 0);
-			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
 		}else if(strcmp(dividerModeStr, "10V")==0){
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 1);
 			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
+		}else{
+			gpio_set_level(divPin_1, 1);
+			gpio_set_level(divPin_2, 0);
+			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
 		}
 	}
 
@@ -157,22 +157,53 @@ void analog_task(void *arg)
 		me_state.trigger_topic_list[slot_num]=custom_topic;
 	}
 
+
+	uint8_t oversumple = 150;
+
+	uint32_t tmp = 0;
+
     while (1) {
-        if(inverse){
-            if(slot_num==2){
-				adc2_get_raw(ADC_chan, width, &raw_val);
-				raw_val = 4096-raw_val;
-            }else{
-				raw_val = 4096-adc1_get_raw(ADC_chan);
-			}
-        }else{
-			if(slot_num==2){
-				adc2_get_raw(ADC_chan, width, &raw_val);
+		TickType_t startTick = xTaskGetTickCount();
+
+		tmp = 0;
+		for(int i=0;i<oversumple;i++){
+			if(inverse){
+				if(slot_num==2){
+					adc2_get_raw(ADC_chan, width, &raw_val);
+					raw_val = 4096-raw_val;
+				}else{
+					raw_val = 4096-adc1_get_raw(ADC_chan);
+				}
 			}else{
-				raw_val = adc1_get_raw(ADC_chan);
+				if(slot_num==2){
+					adc2_get_raw(ADC_chan, width, &raw_val);
+				}else{
+					raw_val = adc1_get_raw(ADC_chan);
+				}
 			}
-        }
-        resault =resault*(1-k)+raw_val*k;
+			tmp =tmp+raw_val;
+			//vTaskDelay(1);
+		}
+		tmp = tmp/oversumple;
+		resault =resault*(1-k)+tmp*k;
+		//printf(">val:%d\n",resault);
+		//ESP_LOGD(TAG, "raw_val:%d time:%ld", raw_val, xTaskGetTickCount()-startTick);
+
+        // if(inverse){
+        //     if(slot_num==2){
+		// 		adc2_get_raw(ADC_chan, width, &raw_val);
+		// 		raw_val = 4096-raw_val;
+        //     }else{
+		// 		raw_val = 4096-adc1_get_raw(ADC_chan);
+		// 	}
+        // }else{
+		// 	if(slot_num==2){
+		// 		adc2_get_raw(ADC_chan, width, &raw_val);
+		// 	}else{
+		// 		raw_val = adc1_get_raw(ADC_chan);
+		// 	}
+        // }
+        //resault =resault*(1-k)+raw_val*k;
 
 
         if((abs(resault - prev_resault)>dead_band)||(periodic!=0)){
@@ -207,9 +238,9 @@ void analog_task(void *arg)
         }
         //ESP_LOGD(TAG, "analog val:%d", resault);
         if(periodic!=0){
-			vTaskDelay(pdMS_TO_TICKS(periodic));
+			vTaskDelay(pdMS_TO_TICKS(periodic- pdTICKS_TO_MS(xTaskGetTickCount()-startTick)));
 		}else{
-			vTaskDelay(pdMS_TO_TICKS(20));
+			vTaskDelay(pdMS_TO_TICKS(32 - pdTICKS_TO_MS(xTaskGetTickCount()-startTick)));
 		}
     }
     
@@ -219,8 +250,8 @@ void start_analog_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
 	// int slot_num = *(int*) arg;
-	
-	xTaskCreate(analog_task, "analog_task", 1024 * 4, &t_slot_num, 12, NULL);
+	xTaskCreatePinnedToCore(analog_task, "analog_task", 1024 * 4, &t_slot_num, 12, NULL,1);
+	//xTaskCreate(analog_task, "analog_task", 1024 * 4, &t_slot_num, 12, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "analog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

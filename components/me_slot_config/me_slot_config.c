@@ -35,7 +35,7 @@
 #include "someUnique.h"
 #include "max7219_task.h"
 #include "hlk_sens.h"
-#include "dwin_uart.h"
+#include "dwin.h"
 
 #include "distanceSens.h"
 #include "mb_oneWire.h"
@@ -76,22 +76,27 @@ int init_slots(void){
 
 	for(int i=0;i<NUM_OF_SLOTS; i++){
 		ESP_LOGD(TAG,"[%d] check mode:%s", i,me_config.slot_mode[i]);
-		if(!memcmp(me_config.slot_mode[i], "audio_player", 12)){
+		if(!memcmp(me_config.slot_mode[i], "audioPlayer", 12)){
 			audioInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
-			//start_button_task(i);
+			start_button_task(i);
 			start_ledRing_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "button_swiperLed", 16)){
+			start_button_task(i);
+			start_swiperLed_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
 			start_button_task(i);
 			start_led_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_smartLed", 15)){
 			start_button_task(i);
 			start_smartLed_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "sensor_2ch", 9)){
-			start_sensors_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "pwmRGBled", 9)){
+		}else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
+			start_in_3ch_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
+			start_in_3ch_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);
-		}else if(!memcmp(me_config.slot_mode[i], "encoder_PWM", 10)){
+		}else if(!memcmp(me_config.slot_mode[i], "encoderPWM", 10)){
 			start_encoderPWM_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "encoder_inc", 10)){
 			start_encoder_inc_task(i);
@@ -108,6 +113,8 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
 			start_out_task(i);
 			start_in_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "out_3ch", 6)){
+			start_out_3ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
 			start_tenzo_button_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){
@@ -135,7 +142,7 @@ int init_slots(void){
 			start_max7219_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "buttonMatrix", 13)){
 			start_buttonMatrix_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "dwin_uart", 9)){
+		}else if(!memcmp(me_config.slot_mode[i], "dwin", 4)){
 			start_dwinUart_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
 			start_hlk2410_task(i);
@@ -157,6 +164,8 @@ int init_slots(void){
 			start_ticketDispenser_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "academKick", 10)){
 			start_academKick_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "CRSF", 4)){
+			start_crsf_rx_task(i);
 		}
 
 	}

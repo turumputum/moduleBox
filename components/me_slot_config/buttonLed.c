@@ -69,7 +69,7 @@ void button_task(void *arg){
 
 	int debounce_gap = 200;
 	if (strstr(me_config.slot_options[slot_num], "buttonDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap");
+		debounce_gap = get_option_int_val(slot_num, "v");
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
     
@@ -159,7 +159,7 @@ void start_button_task(int slot_num){
 }
 
 
-void checkBright(uint8_t *currentBright, uint8_t targetBright, uint8_t fade_increment){
+void checkBright(float *currentBright, float targetBright, float fade_increment){
 	if(*currentBright!=targetBright){
         if(*currentBright < targetBright){
             if((targetBright - *currentBright) < fade_increment){
@@ -191,24 +191,26 @@ void led_task(void *arg){
 		inverse=1;
 	}
 
-    uint8_t fade_increment = 255;
+    float fade_increment = 1.0;
     if (strstr(me_config.slot_options[slot_num], "fadeIncrement") != NULL) {
-		fade_increment = get_option_int_val(slot_num, "fadeIncrement");
-		ESP_LOGD(TAG, "Set fade_increment:%d for slot:%d",fade_increment, slot_num);
+		fade_increment = get_option_float_val(slot_num, "fadeIncrement");
+		ESP_LOGD(TAG, "Set fade_increment:%f for slot:%d",fade_increment, slot_num);
 	}
 
-    uint16_t max_bright = 255;
+    float maxBright = 1.0;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		max_bright = get_option_int_val(slot_num, "maxBright");
-        if(max_bright>255)max_bright=255;
-		ESP_LOGD(TAG, "Set max_bright:%d for slot:%d",max_bright, slot_num);
+		maxBright = get_option_float_val(slot_num, "maxBright");
+        if(maxBright>1.0)maxBright=1.0;
+		if(maxBright<0)maxBright=0.0;
+		ESP_LOGD(TAG, "Set maxBright:%f for slot:%d",maxBright, slot_num);
 	}
 
-    uint16_t min_bright = 0;
+    float minBright = 0.0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		min_bright = get_option_int_val(slot_num, "minBright");
-        if(min_bright>255)min_bright=255;
-		ESP_LOGD(TAG, "Set min_bright:%d for slot:%d",min_bright, slot_num);
+		minBright = get_option_float_val(slot_num, "minBright");
+        if(minBright>1.0)minBright=1.0;
+		if(minBright<0)minBright=0.0;
+		ESP_LOGD(TAG, "Set minBright:%f for slot:%d",minBright, slot_num);
 	}
 
     uint16_t refreshRate_ms = 30;
@@ -242,6 +244,7 @@ void led_task(void *arg){
 	}
 
 	// Prepare and then apply the LEDC PWM timer configuration
+	//todo ledc timer config!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_LOW_SPEED_MODE,
         .duty_resolution  = LEDC_TIMER_8_BIT,
@@ -252,9 +255,14 @@ void led_task(void *arg){
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
     // Prepare and then apply the LEDC PWM channel configuration
-    ledc_channel_config_t ledc_channel = {
+    if((LEDC_CHANNEL_MAX - me_state.ledc_chennelCounter)<1){
+		ESP_LOGE(TAG, "LEDC channel has ended");
+		goto EXIT;
+	}
+	
+	ledc_channel_config_t ledc_channel = {
         .speed_mode     = LEDC_LOW_SPEED_MODE,
-        .channel        = slot_num,
+        .channel        = me_state.ledc_chennelCounter++,
         .timer_sel      = LEDC_TIMER_0,
         .intr_type      = LEDC_INTR_DISABLE,
         .gpio_num       = pin_num,
@@ -265,8 +273,8 @@ void led_task(void *arg){
     ESP_LOGD(TAG, "Led task config end. Slot_num:%d, duration_ms:%ld", slot_num, pdTICKS_TO_MS(xTaskGetTickCount()-startTick));
 
 
-    uint8_t currentBright=0;
-    uint8_t targetBright=inverse ? max_bright : min_bright;
+    float currentBright=0;
+    float targetBright=inverse ? maxBright : minBright;
 
 	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
@@ -277,30 +285,33 @@ void led_task(void *arg){
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
             //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
 			int val = atoi(msg.str+strlen(me_state.action_topic_list[slot_num])+1);
-			if(val==1){
-				targetBright = max_bright;
+			if(val!=inverse){
+				targetBright = maxBright;
 			}else{
-				targetBright = min_bright;
+				targetBright = minBright;
 			}
         }
 
         if (animate == FLASH){
-            if(currentBright==min_bright){
-				targetBright=max_bright;
+            if(currentBright<=minBright){
+				targetBright=maxBright;
 				//ESP_LOGD(TAG, "Flash min bright:%d targetBright:%d", currentBright, targetBright); 
-			}else if(currentBright==max_bright){
-				targetBright=min_bright;
+			}else if(currentBright>=maxBright){
+				targetBright=minBright;
 				//ESP_LOGD(TAG, "Flash max bright:%d targetBright:%d", currentBright, targetBright); 
 			}
         }
 		checkBright(&currentBright, targetBright, fade_increment);
-		ledc_set_duty(LEDC_LOW_SPEED_MODE, slot_num, currentBright);
-		ledc_update_duty(LEDC_LOW_SPEED_MODE, slot_num);
+		ledc_set_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel, currentBright*255);
+		ledc_update_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel);
 
         uint16_t delay = refreshRate_ms - pdTICKS_TO_MS(xTaskGetTickCount()-startTick);
         //ESP_LOGD(TAG, "Led delay :%d", delay); 
         vTaskDelay(pdMS_TO_TICKS(delay));
     }
+
+	EXIT:
+    vTaskDelete(NULL);
 
 }
 
