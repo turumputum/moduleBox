@@ -476,3 +476,4 @@ void debugTopicLists(void){
 		ESP_LOGD(TAG, "SLOT:%d Trigger topic:%s", i, me_state.trigger_topic_list[i]);
 	}
 }
+

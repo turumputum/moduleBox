@@ -43,11 +43,11 @@ typedef struct {
 
 
 #define RMT_LED_HEAP_DEFAULT() {\
-    .tx_chan_config.clk_src = RMT_CLK_SRC_DEFAULT,\
+    .tx_chan_config.clk_src = RMT_CLK_SRC_XTAL,\
     .tx_chan_config.gpio_num = 0,\
-    .tx_chan_config.mem_block_symbols = 64,\
+    .tx_chan_config.mem_block_symbols = 256,\
     .tx_chan_config.resolution_hz = 10 * 1000 * 1000,\
-    .tx_chan_config.trans_queue_depth = 4,\
+    .tx_chan_config.trans_queue_depth = 256,\
     .tx_config.loop_count = 0,\
     .encoder_config.resolution = 10 * 1000 * 1000,\
     .led_chan = NULL,\

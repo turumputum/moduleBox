@@ -10,7 +10,7 @@
 
 #define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.27";
+static const char* VERSION = "3.28";
 
 
 #define LEDC_TIMER              LEDC_TIMER_0
@@ -70,7 +70,7 @@ typedef struct {
 
 	char *trigger_topic_list[NUM_OF_SLOTS];
 	char *action_topic_list[NUM_OF_SLOTS];
-
+	
 } stateStruct;
 
 
@@ -154,3 +154,4 @@ int saveConfig(void);
 void debugTopicLists(void);
 uint8_t scanFileSystem();
 uint8_t scan_dir(const char *path);
+

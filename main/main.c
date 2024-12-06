@@ -27,7 +27,6 @@
 #include "periph_adc_button.h"
 #include "board.h"
 
-#include "hlk_sens.h"
 #include "rtp_play.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,7 +82,7 @@
 #include "smartLed.h"
 #include "someUnique.h"
 #include "disp_hd44780.h"
-#include "TOFs.h"
+
 
 
 
@@ -110,6 +109,7 @@ static const char *TAG = "MAIN";
 #define CONFIG_FREERTOS_HZ 1000
 
 #define CFG_TUSB_DEBUG 3
+
 
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
@@ -255,7 +255,6 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("SWIPER", level);
 	esp_log_level_set("SOME_UNIQUE", level);
 	esp_log_level_set("DISP_HD44780", level);
-	esp_log_level_set("HLK_SENS", level);
 	esp_log_level_set("AUDIO_LAN", level);
 	esp_log_level_set("RTP_STREAM", level);
 	esp_log_level_set("ONE_WIRE", level);
@@ -263,6 +262,11 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("CYBERGEAR", level);
 	esp_log_level_set("STEADYWIN", level);
 	esp_log_level_set("TICKETDISPENSER", level);
+	esp_log_level_set("VESC", level);
+	esp_log_level_set("PPM", level);
+	esp_log_level_set("CRSF", level);
+	esp_log_level_set("RGB|HSV", level);
+	esp_log_level_set("rmt", ESP_LOG_WARN);
 	}
 
 
@@ -375,7 +379,7 @@ void app_main(void)
 
 	nvs_init();
 
-	xTaskCreatePinnedToCore(executer_task, "executer_task",  1024 * 4,NULL ,configMAX_PRIORITIES - 12, NULL, 0);
+	xTaskCreatePinnedToCore(executer_task, "executer_task",  1024 * 4,NULL ,configMAX_PRIORITIES - 6, NULL, 0);
 	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL,0);
 	//xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, usb_device_stack, &usb_device_taskdef);
 	
@@ -417,20 +421,11 @@ void app_main(void)
 	set_usb_debug();
 
 	me_state.slot_init_res = init_slots();
-	//start_ds18b20_task(0);
-	//start_TOF050F_task(0);
-	//start_audioLAN_task(0);
-	//start_hlk2420_task(2);
-	//start_buttonMatrix4_task(0);
-	//start_disp_hd44780_task(2);
-	//start_max7219_task(0);
-	//start_swiper_task(0);
-	//start_pn532Uart_task(0);
-	
+
 	//start_dwinUart_task(1);
 	//debugTopicLists();
 	
-	if (strstr(me_config.slot_mode[0], "audio_player") != NULL) {
+	if (strstr(me_config.slot_mode[0], "audioPlayer") != NULL) {
 		me_state.content_search_res = loadContent();
 		if (me_state.content_search_res != ESP_OK)	{
 			ESP_LOGD(TAG, "Load Content FAIL");

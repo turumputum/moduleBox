@@ -34,9 +34,9 @@ void startup_task(void *arg) {
 	}
 
 
-    if (strstr(me_config.slot_options[slot_num], "startup_report_topic") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "startup_report_topic");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "startup_report_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -93,9 +93,9 @@ void counter_task(void *arg) {
 		ESP_LOGD(TAG, "Set threshold :%d for slot:%d", threshold, slot_num);
 	}
 
-    if (strstr(me_config.slot_options[slot_num], "counter_topic") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "counter_topic");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -188,9 +188,9 @@ void timer_task(void *arg) {
 		ESP_LOGD(TAG, "Set time :%d for slot:%d", time, slot_num);
 	}
 
-    if (strstr(me_config.slot_options[slot_num], "timer_topic") != NULL) {
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "timer_topic");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -554,4 +554,124 @@ void start_collector_task(int slot_num) {
 	sprintf(tmpString, "collector_task_%d", slot_num);
 	xTaskCreatePinnedToCore(collector_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 20, NULL, 0);
     ESP_LOGD(TAG, "collector_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+//------------------------tankControl----------------------
+void tankControl_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
+
+    uint16_t deadBand = 10;
+	if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
+		deadBand = get_option_int_val(slot_num, "deadBand");
+		ESP_LOGD(TAG, "Set deadBand:%d for slot:%d",deadBand, slot_num);
+	}
+
+    uint16_t inputMinVal = 0;
+	if (strstr(me_config.slot_options[slot_num], "inputMinVal") != NULL) {
+		inputMinVal = get_option_int_val(slot_num, "inputMinVal");
+		ESP_LOGD(TAG, "Set inputMinVal:%d for slot:%d",inputMinVal, slot_num);
+	}
+    uint16_t inputMaxVal = 255;
+	if (strstr(me_config.slot_options[slot_num], "inputMaxVal") != NULL) {
+		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal");
+		ESP_LOGD(TAG, "Set inputMaxVal:%d for slot:%d",inputMaxVal, slot_num);
+	}
+    uint16_t inputMidlVal = (inputMaxVal-inputMinVal)/2+inputMinVal;
+    ESP_LOGD(TAG, "Set inputMidlVal:%d for slot:%d",inputMidlVal, slot_num);
+
+    uint16_t outputMaxVal = 255;
+	if (strstr(me_config.slot_options[slot_num], "outputMaxVal") != NULL) {
+		outputMaxVal = get_option_int_val(slot_num, "outputMaxVal");
+		ESP_LOGD(TAG, "Set outputMaxVal:%d for slot:%d",outputMaxVal, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/tankControl_0")+3];
+		sprintf(t_str, "%s/tankControl_%d",me_config.deviceName, slot_num);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
+	}
+
+    uint16_t accel =inputMaxVal/2;
+    uint16_t steering = inputMaxVal/2;
+
+
+    while(1){
+        command_message_t cmd;
+        if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
+            char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
+            if(strstr(command, ":")==NULL){
+                ESP_LOGE(TAG, "No arguments found. EXIT"); 
+            }else{
+                char *cmd_arg = strstr(command, ":")+1;
+                //ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+                if(!memcmp(command, "accel", 5)){//------------------------------
+                    accel = strtol(cmd_arg, NULL,10);
+                    if(accel>inputMaxVal)accel=inputMaxVal;
+                    if(accel<inputMinVal)accel=inputMinVal;
+                    if(abs(accel-inputMidlVal)<deadBand)accel=inputMidlVal;
+                    //accel = atof(cmd_arg);
+                }else if(!memcmp(command, "steering", 8)){
+                    steering = strtol(cmd_arg, NULL,10);
+                    if(steering>inputMaxVal)steering=inputMaxVal;
+                    if(steering<inputMinVal)steering=inputMinVal;
+                    //if(abs(steering-inputMidlVal)<deadBand)steering=inputMidlVal;
+                    //steering = atof(cmd_arg);
+                }
+                //ESP_LOGD(TAG, "Accel:%d Steering:%d", accel, steering);
+                int16_t midSteering = steering - inputMidlVal;
+                //float midSteering = (float)steering/(inputMidlVal*2) - 0.5;
+                // if(midSteering>127)midSteering=127;
+                // if(midSteering<-127)midSteering=-127;
+                int16_t midAccel = accel - inputMidlVal;
+                //float midAccel = (float)accel/(inputMidlVal*2) - 0.5;
+                // if(midAccel>127)midAccel=127;
+                // if(midAccel<-127)midAccel=-127;
+
+                //ESP_LOGD(TAG, "Accel:%f Steering^%f", midAccel, midSteering);
+                //ESP_LOGD(TAG, "Accel:%d Steering:%d", midAccel, midSteering);
+                //ESP_LOGD(TAG, "Accel:%d Steering:%d", accel, steering);
+                float ratio = (float)outputMaxVal/inputMaxVal;
+                int leftSpeed = (int)((midAccel + midSteering)+inputMidlVal)*ratio;
+                int rightSpeed = (int)((midAccel - midSteering)+inputMidlVal)*ratio;
+                //int rightSpeed = (int)(((midAccel - midSteering)+0.5)*outputMaxVal);
+
+                // Normalize speeds to 0.0 to 1.0 range
+                // if(leftSpeed > 255) leftSpeed = 255;
+                // if(leftSpeed < 0) leftSpeed = 0;
+                // if(rightSpeed > 255) rightSpeed = 255;
+                // if(rightSpeed < 0) rightSpeed = 0;
+                //ESP_LOGD(TAG, "leftSpeed:%d rightSpeed:%d", leftSpeed, rightSpeed);
+                
+                
+                char str[50];
+                sprintf(str, "/ch_0:%d", leftSpeed);
+                report(str, slot_num);
+                memset(str, 0, sizeof(str));
+                sprintf(str, "/ch_1:%d", rightSpeed);
+                report(str, slot_num);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+
+void start_tankControl_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "tankControl_task_%d", slot_num);
+	xTaskCreatePinnedToCore(tankControl_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+    ESP_LOGD(TAG, "tankControl_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

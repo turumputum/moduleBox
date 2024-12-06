@@ -192,7 +192,7 @@ void exec_led(int slot_num, int payload) {
 }
 
 void execute(char *action) {
-	ESP_LOGD(TAG, "Execute action:%s", action);
+	//ESP_LOGD(TAG, "Execute action:%s", action);
 	exec_message_t msg;
 	strcpy(msg.str, action);
 	if(xQueueSend(me_state.executor_queue, &msg, portMAX_DELAY)!= pdPASS) {
@@ -202,7 +202,7 @@ void execute(char *action) {
 
 void executer_task(void){
 	exec_message_t msg;
-	me_state.executor_queue = xQueueCreate(10, sizeof(exec_message_t));
+	me_state.executor_queue = xQueueCreate(150, sizeof(exec_message_t));
 
 	while(1){
 		if (xQueueReceive(me_state.executor_queue, &msg, portMAX_DELAY) == pdPASS){

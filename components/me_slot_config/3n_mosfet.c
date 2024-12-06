@@ -30,9 +30,10 @@ extern stateStruct me_state;
 
 extern const uint8_t gamma_8[256];
 
-void set_pwm_channels(ledc_channel_config_t ch_r, ledc_channel_config_t ch_g, ledc_channel_config_t ch_b, RgbColor color, float bbright){
+void set_pwm_channels(ledc_channel_config_t ch_r, ledc_channel_config_t ch_g, ledc_channel_config_t ch_b, RgbColor color, uint8_t bright){
 	//ESP_LOGI(TAG, "Set PWM channels: %d %d %d", color.r,color.g,color.b);
-	uint8_t R = (uint8_t)(color.r*bbright);
+	float bbright = (float)bright/255.0;
+    uint8_t R = (uint8_t)(color.r*bbright);
     uint8_t G = (uint8_t)(color.g*bbright);
     uint8_t B = (uint8_t)(color.b*bbright);
     //ESP_LOGI(TAG, "Set PWM channels: %d %d %d  ::  bright:%f", R,G,B, bbright);
@@ -51,30 +52,34 @@ void rgb_ledc_task(void *arg){
 
 	me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
     
-    float increment = 0.1;
+    int16_t increment = 255;
     if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-		increment = get_option_float_val(slot_num, "increment");
-		ESP_LOGD(TAG, "Set increment:%f for slot:%d",increment, slot_num);
+		increment = get_option_int_val(slot_num, "increment");
+        if(increment>255)increment=255;
+        if(increment<1)increment=1;
+		ESP_LOGD(TAG, "Set increment:%d for slot:%d",increment, slot_num);
 	}
 
-    float inverse = 0.0;
+    uint8_t inverse = 0;
     if (strstr(me_config.slot_options[slot_num], "inverse") != NULL) {
-		inverse = 1.0;
-		ESP_LOGD(TAG, "Set inverse:%f for slot:%d",inverse, slot_num);
+		inverse = 1;
+		ESP_LOGD(TAG, "Set inverse:%d for slot:%d",inverse, slot_num);
 	}
 
-    float max_bright = 1.0;
+    int16_t max_bright = 255;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		max_bright = get_option_float_val(slot_num, "maxBright");
+		max_bright = get_option_int_val(slot_num, "maxBright");
         if(max_bright>255)max_bright=255;
-		ESP_LOGD(TAG, "Set max_bright:%f for slot:%d",max_bright, slot_num);
+        if(max_bright<0)max_bright=0;
+		ESP_LOGD(TAG, "Set max_bright:%d for slot:%d",max_bright, slot_num);
 	}
 
-    float min_bright = 0.0;
+    int16_t min_bright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		min_bright = get_option_float_val(slot_num, "minBright");
+		min_bright = get_option_int_val(slot_num, "minBright");
         if(min_bright>255)min_bright=255;
-		ESP_LOGD(TAG, "Set min_bright:%f for slot:%d",min_bright, slot_num);
+        if(min_bright<0)min_bright=0;
+		ESP_LOGD(TAG, "Set min_bright:%d for slot:%d",min_bright, slot_num);
 	}
 
     uint16_t refreshPeriod = 40;
@@ -86,7 +91,7 @@ void rgb_ledc_task(void *arg){
     RgbColor targetRGB={
         .r=0,
         .g=0,
-        .b=250
+        .b=255
     };
     HsvColor HSV;
     if (strstr(me_config.slot_options[slot_num], "RGBcolor") != NULL) {
@@ -179,8 +184,8 @@ void rgb_ledc_task(void *arg){
 	} 
 
 
-	float currentBright=0;
-    float targetBright=fabs(inverse-min_bright);
+	int16_t currentBright=0;
+    int16_t targetBright=abs(255*inverse-min_bright);
     RgbColor currentRGB={
         .r=0,
         .g=0,
@@ -188,10 +193,9 @@ void rgb_ledc_task(void *arg){
     };
 	
     uint8_t aniSwitch=0;
+    TickType_t lastWakeTime = xTaskGetTickCount(); 
 
     while (1) {
-        startTick = xTaskGetTickCount();
-
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
             //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
@@ -208,35 +212,35 @@ void rgb_ledc_task(void *arg){
                 }else if(strstr(cmd, "setMode")!=NULL){
                     ledMode = modeToEnum(payload);
                 }else if(strstr(cmd, "setIncrement")!=NULL){
-                    increment = atof(payload);
-                    ESP_LOGD(TAG, "Slot:%d Increment:%f", slot_num, increment);
+                    increment = atoi(payload);
+                    ESP_LOGD(TAG, "Slot:%d Increment:%d", slot_num, increment);
                 }else if(strstr(cmd, "setMaxBright")!=NULL){
-                    max_bright = atof(payload);
-                    ESP_LOGD(TAG, "Slot:%d setMaxBright:%f", slot_num, max_bright);
+                    max_bright = atoi(payload);
+                    ESP_LOGD(TAG, "Slot:%d setMaxBright:%d", slot_num, max_bright);
                 }else if(strstr(cmd, "setMinBright")!=NULL){
-                    min_bright = atof(payload);
-                    ESP_LOGD(TAG, "Slot:%d setMinBright:%f", slot_num, min_bright);
+                    min_bright = atoi(payload);
+                    ESP_LOGD(TAG, "Slot:%d setMinBright:%d", slot_num, min_bright);
                 }
             }
         }
 
         if(state==0){
-            targetBright =fabs(inverse-min_bright); 
+            targetBright =abs(255*inverse-min_bright); 
             checkColorAndBright(&currentRGB, &targetRGB, &currentBright, &targetBright, increment);
 			set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB,currentBright);
         }else{
             if (ledMode==DEFAULT){
-                targetBright = fabs(inverse-max_bright); 
+                targetBright = abs(255*inverse-max_bright); 
                 checkColorAndBright(&currentRGB, &targetRGB, &currentBright, &targetBright, increment);
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB ,currentBright);
                 //ESP_LOGD(TAG, "pwmRGB currentBright:%f targetBright:%f", currentBright, targetBright); 
             }else if(ledMode==FLASH){
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d", currentBright, targetBright); 
                 if(currentBright==min_bright){
-                    targetBright=fabs(inverse-max_bright);
+                    targetBright=abs(255*inverse-max_bright);
                     //ESP_LOGD(TAG, "Flash min bright:%d targetBright:%d", currentBright, targetBright); 
                 }else if(currentBright==max_bright){
-                    targetBright=fabs(inverse-min_bright);
+                    targetBright=fabs(255*inverse-min_bright);
                     //ESP_LOGD(TAG, "Flash max bright:%d targetBright:%d", currentBright, targetBright); 
                 }
                 checkColorAndBright(&currentRGB, &targetRGB, &currentBright, &targetBright, increment);
@@ -247,7 +251,7 @@ void rgb_ledc_task(void *arg){
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d H:%d S:%d V:%d",currentBright, targetBright, hsv.h, hsv.s, hsv.v);
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d R:%d G:%d B:%d", currentBright, targetBright, currentRGB.r, currentRGB.g, currentRGB.b);
                 //ESP_LOGD(TAG, "hsv before:%d %d %d", hsv.h, hsv.s, hsv.v);
-                hsv.h+=(uint8_t)(increment*255);
+                hsv.h+=increment;
                 //hsv.s = 255;
                 //hsv.v = (uint8_t)(max_bright*255);
                 //ESP_LOGD(TAG, "hsv after:%d %d %d", hsv.h, hsv.s, hsv.v);
@@ -257,9 +261,7 @@ void rgb_ledc_task(void *arg){
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB, currentBright);
             }
         }
-        uint16_t delay = refreshPeriod - pdTICKS_TO_MS(xTaskGetTickCount()-startTick);
-        //ESP_LOGD(TAG, "Led delay :%d state:%d, currentBright:%d", delay, state, currentBright); 
-        vTaskDelay(pdMS_TO_TICKS(delay));
+        vTaskDelayUntil(&lastWakeTime, refreshPeriod);
     }
 
 	EXIT:

@@ -67,9 +67,9 @@ void button_task(void *arg){
 	}
 
 
-	int debounce_gap = 200;
+	int debounce_gap = 20;
 	if (strstr(me_config.slot_options[slot_num], "buttonDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "v");
+		debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap");
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
     
@@ -159,7 +159,7 @@ void start_button_task(int slot_num){
 }
 
 
-void checkBright(float *currentBright, float targetBright, float fade_increment){
+void checkBright(uint8_t *currentBright, uint8_t targetBright, uint8_t fade_increment){
 	if(*currentBright!=targetBright){
         if(*currentBright < targetBright){
             if((targetBright - *currentBright) < fade_increment){
@@ -183,7 +183,8 @@ void led_task(void *arg){
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
     uint8_t state = 0;
 
-	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
     //vQueueAddToRegistry( xQueue, "AMeaningfulName" );
     
     uint8_t inverse = 0;
@@ -191,32 +192,32 @@ void led_task(void *arg){
 		inverse=1;
 	}
 
-    float fade_increment = 1.0;
-    if (strstr(me_config.slot_options[slot_num], "fadeIncrement") != NULL) {
-		fade_increment = get_option_float_val(slot_num, "fadeIncrement");
-		ESP_LOGD(TAG, "Set fade_increment:%f for slot:%d",fade_increment, slot_num);
+    int16_t fade_increment = 255;
+    if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
+		fade_increment = get_option_int_val(slot_num, "increment");
+		ESP_LOGD(TAG, "Set fade_increment:%d for slot:%d",fade_increment, slot_num);
 	}
 
-    float maxBright = 1.0;
+    int16_t maxBright = 255;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
 		maxBright = get_option_float_val(slot_num, "maxBright");
-        if(maxBright>1.0)maxBright=1.0;
-		if(maxBright<0)maxBright=0.0;
-		ESP_LOGD(TAG, "Set maxBright:%f for slot:%d",maxBright, slot_num);
+        if(maxBright>255)maxBright=255;
+		if(maxBright<0)maxBright=0;
+		ESP_LOGD(TAG, "Set maxBright:%d for slot:%d",maxBright, slot_num);
 	}
 
-    float minBright = 0.0;
+    int16_t minBright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = get_option_float_val(slot_num, "minBright");
-        if(minBright>1.0)minBright=1.0;
-		if(minBright<0)minBright=0.0;
-		ESP_LOGD(TAG, "Set minBright:%f for slot:%d",minBright, slot_num);
+		minBright = get_option_int_val(slot_num, "minBright");
+        if(minBright>255)minBright=255;
+		if(minBright<0)minBright=0;
+		ESP_LOGD(TAG, "Set minBright:%d for slot:%d",minBright, slot_num);
 	}
 
-    uint16_t refreshRate_ms = 30;
+    uint16_t refreshPeriod = 40;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshRate_ms = get_option_int_val(slot_num, "refreshRate");
-		ESP_LOGD(TAG, "Set refreshRate_ms:%d for slot:%d",refreshRate_ms, slot_num);
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
     int animate;
@@ -273,13 +274,13 @@ void led_task(void *arg){
     ESP_LOGD(TAG, "Led task config end. Slot_num:%d, duration_ms:%ld", slot_num, pdTICKS_TO_MS(xTaskGetTickCount()-startTick));
 
 
-    float currentBright=0;
-    float targetBright=inverse ? maxBright : minBright;
+    int16_t currentBright=0;
+    int16_t targetBright=inverse ? maxBright : minBright;
 
-	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+	
 
+	TickType_t lastWakeTime = xTaskGetTickCount(); 
     while (1) {
-        startTick = xTaskGetTickCount();
 
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
@@ -302,12 +303,12 @@ void led_task(void *arg){
 			}
         }
 		checkBright(&currentBright, targetBright, fade_increment);
-		ledc_set_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel, currentBright*255);
+		ledc_set_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel, currentBright);
 		ledc_update_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel);
 
-        uint16_t delay = refreshRate_ms - pdTICKS_TO_MS(xTaskGetTickCount()-startTick);
+
         //ESP_LOGD(TAG, "Led delay :%d", delay); 
-        vTaskDelay(pdMS_TO_TICKS(delay));
+        vTaskDelayUntil(&lastWakeTime, refreshPeriod);
     }
 
 	EXIT:

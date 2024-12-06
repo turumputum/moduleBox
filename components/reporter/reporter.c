@@ -101,10 +101,11 @@ void crosslinker(char* str){
 					//ESP_LOGD(TAG, "Any value trigger:%s ", trigger);
 				}else if(strstr(trigger, "@")!= NULL){
 					if(strstr(trigger, ":")!= NULL){
-						trigger = strtok(trigger, ":");
+						trigger = strtok_r(trigger, ":");
 					}
 					if(strstr(event, ":")!= NULL){
 						event = strtok_r(event, ":", &payload);
+
 					}
 					//ESP_LOGD(TAG, "Lets transfer event payload to action.  event:%s  payload:%s", event, payload);
 				}
@@ -117,6 +118,21 @@ void crosslinker(char* str){
 					//ESP_LOGD(TAG, "strlen(me_config.deviceName):%d  strlen(action):%d", strlen(me_config.deviceName), strlen(action));
 					
 					char output_action[strlen(me_config.deviceName) + strlen(action) + 50];
+
+					for(int i=0; i<NUM_OF_SLOTS; i++){
+						//ESP_LOGD(TAG, "compare action:%s topic:%s",action, me_state.action_topic_list[i]);
+						if(strstr(action, me_state.action_topic_list[i])!=NULL){
+						    //ESP_LOGD(TAG, "Found custom action topic:%s", me_state.action_topic_list[i]);
+							action = strtok(action, ":");
+							strcpy(output_action, action);
+							if(payload!=NULL){
+								strcat(output_action, ":");
+								strcat(output_action, payload);
+							}
+							goto exec;
+						}
+					}
+
 					if(payload!=NULL){
 						action = strtok(action, ":");
 						sprintf(output_action, "%s/%s:%s", me_config.deviceName, action, payload);
@@ -125,6 +141,7 @@ void crosslinker(char* str){
 					}
 					
 					//ESP_LOGD(TAG, "output_action:%s", output_action);
+					exec:
 					execute(output_action);
 				}else{
 					//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
@@ -245,7 +262,7 @@ void reporter_task(void){
 }
 
 void reporter_init(void){
-	me_state.reporter_queue=xQueueCreate(50, sizeof(reporter_message_t));
+	me_state.reporter_queue=xQueueCreate(150, sizeof(reporter_message_t));
 	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 	//xTaskCreate (reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 }

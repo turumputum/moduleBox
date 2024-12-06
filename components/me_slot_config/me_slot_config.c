@@ -16,7 +16,6 @@
 #include "audioPlayer.h"
 #include "3n_mosfet.h"
 #include "encoders.h"
-#include "TOFs.h"
 #include "tachometer.h"
 #include "analog.h"
 #include "esp_heap_caps.h"
@@ -34,7 +33,6 @@
 #include "disp_hd44780.h"
 #include "someUnique.h"
 #include "max7219_task.h"
-#include "hlk_sens.h"
 #include "dwin.h"
 
 #include "distanceSens.h"
@@ -43,6 +41,9 @@
 #include "cybergear.h"
 #include "steadywin.h"
 #include "ticketDispenser.h"
+#include "VESC.h"
+#include "PPM.h"
+#include "CRSF.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -76,7 +77,7 @@ int init_slots(void){
 
 	for(int i=0;i<NUM_OF_SLOTS; i++){
 		ESP_LOGD(TAG,"[%d] check mode:%s", i,me_config.slot_mode[i]);
-		if(!memcmp(me_config.slot_mode[i], "audioPlayer", 12)){
+		if(!memcmp(me_config.slot_mode[i], "audioPlayer", 11)){
 			audioInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
 			start_button_task(i);
@@ -93,7 +94,7 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
 			start_in_3ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
-			start_in_3ch_task(i);
+			start_in_2ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);
 		}else if(!memcmp(me_config.slot_mode[i], "encoderPWM", 10)){
@@ -166,6 +167,12 @@ int init_slots(void){
 			start_academKick_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "CRSF", 4)){
 			start_crsf_rx_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "VESC", 4)){
+			start_CAN_VESC_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "PPM", 4)){
+			start_ppm_generator_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "tankControl", 4)){
+			start_tankControl_task(i);
 		}
 
 	}

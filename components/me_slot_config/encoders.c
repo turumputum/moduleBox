@@ -273,8 +273,8 @@ void encoder_inc_task(void *arg){
 	
 	uint8_t flag_custom_topic = 0;
 	char *custom_topic=NULL;
-	if (strstr(me_config.slot_options[slot_num], "custom_topic")!=NULL){
-		custom_topic = get_option_string_val(slot_num,"custom_topic");
+	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
+		custom_topic = get_option_string_val(slot_num,"topic");
 		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
 		flag_custom_topic=1;
 	}

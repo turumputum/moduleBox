@@ -161,9 +161,8 @@ void analog_task(void *arg)
 	uint8_t oversumple = 150;
 
 	uint32_t tmp = 0;
-
+	TickType_t lastWakeTime = xTaskGetTickCount();
     while (1) {
-		TickType_t startTick = xTaskGetTickCount();
 
 		tmp = 0;
 		for(int i=0;i<oversumple;i++){
@@ -188,23 +187,6 @@ void analog_task(void *arg)
 		resault =resault*(1-k)+tmp*k;
 		//printf(">val:%d\n",resault);
 		//ESP_LOGD(TAG, "raw_val:%d time:%ld", raw_val, xTaskGetTickCount()-startTick);
-
-        // if(inverse){
-        //     if(slot_num==2){
-		// 		adc2_get_raw(ADC_chan, width, &raw_val);
-		// 		raw_val = 4096-raw_val;
-        //     }else{
-		// 		raw_val = 4096-adc1_get_raw(ADC_chan);
-		// 	}
-        // }else{
-		// 	if(slot_num==2){
-		// 		adc2_get_raw(ADC_chan, width, &raw_val);
-		// 	}else{
-		// 		raw_val = adc1_get_raw(ADC_chan);
-		// 	}
-        // }
-        //resault =resault*(1-k)+raw_val*k;
-
 
         if((abs(resault - prev_resault)>dead_band)||(periodic!=0)){
             prev_resault = resault;
@@ -238,9 +220,9 @@ void analog_task(void *arg)
         }
         //ESP_LOGD(TAG, "analog val:%d", resault);
         if(periodic!=0){
-			vTaskDelay(pdMS_TO_TICKS(periodic- pdTICKS_TO_MS(xTaskGetTickCount()-startTick)));
+			vTaskDelayUntil(&lastWakeTime, periodic);
 		}else{
-			vTaskDelay(pdMS_TO_TICKS(32 - pdTICKS_TO_MS(xTaskGetTickCount()-startTick)));
+			vTaskDelayUntil(&lastWakeTime, 32);
 		}
     }
     

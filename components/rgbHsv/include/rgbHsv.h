@@ -3,6 +3,7 @@
 #define GLITCH 2
 #define SWIPER 3
 #define RAINBOW 4
+#define RUN 5
 
 typedef struct RgbColor{
 //typedef struct RgbColor{
@@ -24,4 +25,4 @@ HsvColor RgbToHsv(RgbColor rgb);
 void parseRGB(RgbColor *color, char* payload);
 uint8_t modeToEnum(char* str);
 
-uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, float *currentBright, float *targetBright, float fade_increment);
+uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint8_t *currentBright, uint8_t *targetBright, uint8_t fade_increment);

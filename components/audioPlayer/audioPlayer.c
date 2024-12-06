@@ -49,8 +49,7 @@ audio_event_iface_handle_t evt;
 extern stateStruct me_state;
 extern configuration me_config;
 
-int your_event_handler_function(audio_event_iface_msg_t *event, void *context)
-{
+int your_event_handler_function(audio_event_iface_msg_t *event, void *context){
     switch (event->cmd) {
         case AEL_MSG_CMD_NONE:
             // Handle error events
@@ -70,6 +69,7 @@ void audioSetIndicator(uint8_t slot_num, uint32_t level){
 
 void trackShift(char* cmd_arg){
 	//ESP_LOGD(TAG,"trackShift arg:%d", cmd_arg[0]);
+	if(strlen(cmd_arg)==0){return;}
 	if (cmd_arg[0] == 43) {
 		me_state.currentTrack += atoi(cmd_arg + 1);
 		if (me_state.currentTrack >= me_state.numOfTrack) {
@@ -97,12 +97,15 @@ void trackShift(char* cmd_arg){
 }
 
 void audio_task(void *arg) {
+	
 	int slot_num = *(int*) arg;
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
 	//ESP_LOGD(TAG, "Start codec chip");
+
+	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
 
 	int16_t currentTrack=0;
 
@@ -112,6 +115,8 @@ void audio_task(void *arg) {
 		volume = (int)(100*tmp);
 		ESP_LOGD(TAG, "Set volume:%d", volume);
 	}
+
+	
 
 	int attenuation=0;
 	if (strstr(me_config.slot_options[0], "attenuation")!=NULL){
@@ -217,8 +222,8 @@ void audio_task(void *arg) {
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
 			xPortGetFreeHeapSize());
 
-	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
-
+	
+	vTaskDelay(100);
 	//audio_event_iface_set_listener(evt, your_event_handler_function);
 
 
@@ -232,12 +237,15 @@ void audio_task(void *arg) {
 	esp_err_t ret;
 	audio_element_state_t el_state;
 
+
+
 	while(1){
 		vTaskDelay(pdMS_TO_TICKS(5));
 		
 		if (xQueueReceive(me_state.command_queue[slot_num], &cmd,0) == pdPASS){
 			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
 			char *cmd_arg = NULL;
+			if(strlen(command)==0){break;}
 			if(command[0]=='/'){
 				command = command+1;
 			}
@@ -248,15 +256,15 @@ void audio_task(void *arg) {
 				cmd_arg = &tmp;
 				//cmd_arg = strdup("0");
 			}
-			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "play", 4)){//------------------------------
 				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), currentTrack);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(play_to_end==1)){
 					ESP_LOGD(TAG, "skip restart track");
 				}else{
-					ESP_LOGD(TAG, "before shift:%d", me_state.currentTrack);
+					//ESP_LOGD(TAG, "before shift:%d", me_state.currentTrack);
 					trackShift(cmd_arg);
-					ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
+					//ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
 					vTaskDelay(pdMS_TO_TICKS(play_delay));
 					if(audioPlay(me_state.currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);
@@ -289,9 +297,11 @@ void audio_task(void *arg) {
 			}
 		}
 
+		
+
 		if(att_flag==1){
 			att_vol-=1;
-			//ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
+			ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
 			setVolume_num(att_vol);
 			if(att_vol==0){
 				audioStop();
@@ -300,6 +310,8 @@ void audio_task(void *arg) {
 				att_flag=0;
 			}
 		}
+
+		
 
 		//listen audio event mp3_decoder
 		el_state = audio_element_get_state(mp3_decoder);
@@ -333,7 +345,7 @@ void audioInit(uint8_t slot_num){
 	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_player_%d", slot_num);
-	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 1);
+	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
 }
 
 void audioDeinit(void) {
