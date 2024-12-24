@@ -118,7 +118,7 @@ void counter_task(void *arg) {
                 ESP_LOGD(TAG, "No arguments found. EXIT"); 
             }else{
                 char *cmd_arg = strstr(command, ":")+1;
-                ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+                //ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
                 if(!memcmp(command, "set", 3)){//------------------------------
                     if(cmd_arg[0]=='+'){
                         counter+= atoi(cmd_arg+1);
@@ -212,9 +212,9 @@ void timer_task(void *arg) {
     esp_timer_create(&delay_timer_args, &virtual_timer);
 
     while(1){
-		vTaskDelay(pdMS_TO_TICKS(10));
+		//vTaskDelay(pdMS_TO_TICKS(10));
         uint8_t tmp;
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
+        if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 10) == pdPASS){
 			report("/timerEnd:1", slot_num);
             //ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
         }
@@ -227,7 +227,7 @@ void timer_task(void *arg) {
 			}else{
 				cmd_arg = strdup("0");
 			}
-			ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
+			//ESP_LOGD(TAG, "Incoming command:%s  arg:%s", command, cmd_arg); 
 			if(!memcmp(command, "start", 5)){ 
                 //char *payload = strdup(cmd.str+strlen(me_state.action_topic_list[slot_num])+strlen()+1);
                 //ESP_LOGD(TAG, "slot_num:%d payload:%s",slot_num, payload);
@@ -238,20 +238,21 @@ void timer_task(void *arg) {
                 }
 
                 if(esp_timer_is_active(virtual_timer)){
+                    //ESP_LOGD(TAG, "timer already started, lets stop it");
                     esp_timer_stop(virtual_timer);
                 }
 
-                esp_timer_start_once(virtual_timer, val*1000);
+                esp_timer_start_once(virtual_timer, (val-20)*1000);///20ms report delay
 			}else if(!memcmp(command, "stop", 4)){
-                ESP_LOGD(TAG, "stop timeer slot:%d", slot_num);
+                //ESP_LOGD(TAG, "stop timeer slot:%d", slot_num);
                 esp_err_t ret = esp_timer_stop(virtual_timer);
                 if(ret!=ESP_OK){
                     ESP_LOGE(TAG, "stop timer error:%s", esp_err_to_name(ret));
                 }
-                ret = esp_timer_delete(virtual_timer);
-                if(ret!=ESP_OK){
-                    ESP_LOGE(TAG, "delete timer error:%s", esp_err_to_name(ret));
-                }
+                // ret = esp_timer_delete(virtual_timer);
+                // if(ret!=ESP_OK){
+                //     ESP_LOGE(TAG, "delete timer error:%s", esp_err_to_name(ret));
+                // }
             }
         }
     }

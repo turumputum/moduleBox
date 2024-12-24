@@ -159,8 +159,8 @@ int init_slots(void){
 			start_MPU9250_kick_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "cybergear", 9)){
 			start_cybergear_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "steadywin", 9)){
-			start_steadywin_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "steadywinGIM", 12)){
+			start_GIM_motor_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ticketDispenser", 15)){
 			start_ticketDispenser_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "academKick", 10)){

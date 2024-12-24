@@ -13,7 +13,7 @@
 //#include <netdb.h>
 #include <lwip/sockets.h>
 //#include <netinet/in.h>
-
+#include "esp_timer.h"
 #include "myMqtt.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -37,7 +37,7 @@ extern configuration me_config;
 extern stateStruct me_state;
 
 void crosslinker(char* str){
-	uint32_t startTick = xTaskGetTickCount();
+	uint64_t startTick = esp_timer_get_time();
 	int slot_num;
 
 	for(int i=0; i<NUM_OF_SLOTS; i++){
@@ -67,30 +67,39 @@ void crosslinker(char* str){
 				crosslink = croslink_rest;
 				last_link = 1;
 			}
-			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s", crosslink, croslink_rest);
+			//ESP_LOGD(TAG, "Cross_link:%s croslink_rest:%s lastLink flag:%d", crosslink, croslink_rest, last_link);
 			if (strstr(crosslink, "->") != NULL){
 				
 				char eventMem[strlen(str)+1];
 				strcpy(eventMem, str);
 				char *event = eventMem;
-				//char *event=strdup(str);
-				//char *event = str;
+				char *eventVal=NULL;
 				if(strstr(event, me_config.deviceName)!=NULL){
 					event = event + strlen(me_config.deviceName) + 1;
 				}
 
 				char *trigger=NULL;
+				char *trigerVal=NULL;
 				char *action=NULL;
-				char *payload=NULL;
+				char *actionVal=NULL;
 
-				// char crosslinkCopy[strlen(me_config.slot_cross_link[slot_num])+1];
-				// strcpy(crosslinkCopy,me_config.slot_cross_link[slot_num]);
-				
 				char memForCopy[strlen(crosslink)+1];
 				strcpy(memForCopy, crosslink);
 				char *crosslinkCopy = memForCopy;
 
-				trigger = strtok_r(crosslinkCopy, "->", &action);
+				if(strstr(crosslink, "->")!= NULL){
+					action = strstr(crosslink, "->");
+					*action = '\0';
+					action+=2;
+					if(strstr(action, ":")!= NULL){
+						action = strtok_r(action, ":", &actionVal);
+					}
+					trigger = crosslink;
+				}else{
+					break;
+				}
+				//trigger = strtok_r(crosslinkCopy, "->", &action);
+				//ESP_LOGD(TAG, "Trigger:%s action:%s actionVal:%s", trigger, action, actionVal);
 				if(trigger[0]==' '){
 					trigger = trigger+1;//  cut " " at begin
 				}
@@ -101,20 +110,87 @@ void crosslinker(char* str){
 					//ESP_LOGD(TAG, "Any value trigger:%s ", trigger);
 				}else if(strstr(trigger, "@")!= NULL){
 					if(strstr(trigger, ":")!= NULL){
-						trigger = strtok_r(trigger, ":");
+						trigger = strtok_r(trigger, ":", &trigerVal);
+						//ESP_LOGD(TAG, "Trigger:%s trigerVal:%s", trigger, trigerVal);
 					}
 					if(strstr(event, ":")!= NULL){
-						event = strtok_r(event, ":", &payload);
+						event = strtok_r(event, ":", &eventVal);
+						//ESP_LOGD(TAG, "Event:%s eventVal:%s", event, eventVal);
+					}
+					if((strstr(trigerVal, "==")!= NULL)||(strstr(trigerVal, ">")!= NULL)||(strstr(trigerVal, "<")!= NULL)){
+						//ESP_LOGD(TAG, "Lets work whith bolean operator");
+						char operator='0';
+						char *leftVal=NULL;
+						char *rightVal=NULL;
+						int32_t val=0, threshold=0;
+						if(strstr(trigerVal, "==")!= NULL){
+							operator = '=';
+							leftVal = strtok_r(trigerVal, "==",&rightVal);
+							rightVal = rightVal + 1;// cut "==" at begin
+						}else if(strstr(trigerVal, ">")!= NULL){
+							operator = '>';
+							leftVal = strtok_r(trigerVal, ">",&rightVal);
+							rightVal = rightVal;// cut ">" at begin
+						}else if(strstr(trigerVal, "<")!= NULL){
+							operator = '<';
+							leftVal = strtok_r(trigerVal, "<",&rightVal);
+							rightVal = rightVal;// cut "<" at begin
+						}
 
+						//ESP_LOGD(TAG, "Bolean operator.  leftVal:%s  rightVal:%s", leftVal, rightVal);
+						if(leftVal[0]=='@'){
+							threshold = atoi(rightVal);
+						}else{
+							threshold = atoi(leftVal);
+						}
+						val = atoi(eventVal);
+
+						if(operator == '='){
+							if(val == threshold){
+								val = 1;
+							}else{
+								val = 0;
+							}
+						}else if(operator == '>'){
+							if(val > threshold){
+								val = 1;
+							}else{
+								val = 0;
+							}
+						}else if(operator == '<'){
+							if(val < threshold){
+								val = 1;
+							}else{
+								val = 0;
+							}
+						}
+
+						if(strchr(actionVal, '@')!= NULL){
+							if(val == 1){
+								actionVal="1\0";
+							}else{
+								actionVal="0\0";
+							}
+						}else{
+							if(val != 1){
+								//ESP_LOGD(TAG, "skip execution");
+								goto skip;
+							}
+						}
+						
+
+						//ESP_LOGD(TAG, "Lets work whith bolean operator.  eventVal:%d  threshold:%d  operator:%c", val, threshold, operator);
+					}else{
+						actionVal = eventVal;
 					}
 					//ESP_LOGD(TAG, "Lets transfer event payload to action.  event:%s  payload:%s", event, payload);
 				}
-				action = action + 1;// cut ":" at begin
+				//action = action + 1;// cut ":" at begin
 
 				//ESP_LOGD(TAG, "Compare trigger:%s in event:%s", trigger, event);
 				
 				if (strstr(event, trigger) != NULL){
-					//ESP_LOGD(TAG, "Crosslink event:%s, trigger=%s, action=%s", event, trigger, action);
+					//ESP_LOGD(TAG, "Crosslink event:%s, eventVal:%s trigger=%s, action=%s actionVal:%s", event, eventVal, trigger, action, actionVal);
 					//ESP_LOGD(TAG, "strlen(me_config.deviceName):%d  strlen(action):%d", strlen(me_config.deviceName), strlen(action));
 					
 					char output_action[strlen(me_config.deviceName) + strlen(action) + 50];
@@ -125,39 +201,41 @@ void crosslinker(char* str){
 						    //ESP_LOGD(TAG, "Found custom action topic:%s", me_state.action_topic_list[i]);
 							action = strtok(action, ":");
 							strcpy(output_action, action);
-							if(payload!=NULL){
+							if(actionVal!=NULL){
 								strcat(output_action, ":");
-								strcat(output_action, payload);
+								strcat(output_action, actionVal);
 							}
 							goto exec;
 						}
 					}
 
-					if(payload!=NULL){
+					if(actionVal!=NULL){
 						action = strtok(action, ":");
-						sprintf(output_action, "%s/%s:%s", me_config.deviceName, action, payload);
+						sprintf(output_action, "%s/%s:%s", me_config.deviceName, action, actionVal);
 					}else{
 						sprintf(output_action, "%s/%s", me_config.deviceName, action);
 					}
 					
-					//ESP_LOGD(TAG, "output_action:%s", output_action);
+					
 					exec:
 					execute(output_action);
+					//ESP_LOGD(TAG, "output_action:%s", output_action);
 				}else{
 					//ESP_LOGD(TAG, "BAD event:%s, trigger=%s, action=%s", event, trigger, action);
 				}
 				//vPortFree(crosslinkCopy);
 			}
 			
-			
+			skip:
 			if (last_link == 1){
+				//ESP_LOGD(TAG, "Break on last link");
 				break;
 			}
 		} while (crosslink != NULL);
 		
 
 	}
-	//ESP_LOGD(TAG, "Crosslink calc time:%ld", xTaskGetTickCount() - startTick);
+	//ESP_LOGD(TAG, "Crosslink calc time:%lld", esp_timer_get_time() - startTick);
 }
 
 void reporter_task(void){
@@ -280,6 +358,7 @@ void report(char *msg, int slot_num){
 
 	send_message.slot_num = slot_num;
 	esp_err_t ret = xQueueSend(me_state.reporter_queue, &send_message, 5);
+	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 	if(ret!= pdPASS){
 		ESP_LOGE(TAG, "QueueSend error:%d", ret);
 	}

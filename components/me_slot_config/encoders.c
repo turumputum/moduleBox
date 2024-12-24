@@ -33,6 +33,7 @@ extern char debugString[200];
 // uint64_t dTime=0;
 // uint8_t flag_calc;
 
+
 typedef struct
 {
 	uint8_t flag;
@@ -41,27 +42,30 @@ typedef struct
 	int64_t dTime;
 } pwmEvent_t;
 
-static void IRAM_ATTR rise_handler(void *args)
-{
+static void IRAM_ATTR rise_handler(void *args){
 	pwmEvent_t *tickVals = (pwmEvent_t *)args;
 	tickVals->tick_rise = esp_timer_get_time();
+	//tickVals->tick_fall =-1;
 
 	//esp_rom_printf("rise_handler\n");
 }
 
-static void IRAM_ATTR fall_handler(void *args)
-{
+static void IRAM_ATTR fall_handler(void *args){
 	//esp_rom_printf("fall_handler\n");
 	pwmEvent_t *tickVals = (pwmEvent_t *)args;
 
-	tickVals->tick_fall = esp_timer_get_time();
+	//if(tickVals->tick_rise==-1){
+		
+		tickVals->tick_fall = esp_timer_get_time();
 
-	// if((abs((tickVals->tick_fall-tickVals->tick_rise)-tickVals->dTime)>15)&&((tickVals->tick_fall-tickVals->tick_rise)>2)){
-	if ((tickVals->tick_fall - tickVals->tick_rise) > 2){
-		tickVals->flag = 1;
-		tickVals->dTime = (tickVals->tick_fall - tickVals->tick_rise);
-	}
+		// if((abs((tickVals->tick_fall-tickVals->tick_rise)-tickVals->dTime)>15)&&((tickVals->tick_fall-tickVals->tick_rise)>2)){
+		if ((tickVals->tick_fall - tickVals->tick_rise) > 2){
+			tickVals->flag = 1;
+			tickVals->dTime = (tickVals->tick_fall - tickVals->tick_rise);
+		}
+	//}
 }
+
 
 void encoderPWM_task(void *arg)
 {
@@ -112,8 +116,22 @@ void encoderPWM_task(void *arg)
 		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
 	}
 
-#define MIN_VAL 3
-#define MAX_VAL 926
+	uint8_t calibrationFlag = 0;
+	if (strstr(me_config.slot_options[slot_num], "calibration") != NULL){
+		calibrationFlag = 1;
+		ESP_LOGD(TAG, "calibrationFlag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	}
+
+    uint16_t MIN_VAL = 4;
+	// if (strstr(me_config.slot_options[slot_num], "pwmMinVal") != NULL){
+	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMinVal");
+	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
+	// }
+	uint16_t MAX_VAL = 899;
+	// if (strstr(me_config.slot_options[slot_num], "pwmMaxVal") != NULL){
+	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMaxVal");
+	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
+	// }
 	int pole = MAX_VAL - MIN_VAL;
 	int num_of_pos;
 	if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL)	{
@@ -143,6 +161,24 @@ void encoderPWM_task(void *arg)
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 
+	while(calibrationFlag){
+		if(tickVals.dTime>1000){
+			ESP_LOGD(TAG, "EBOLA rise:%lld fall:%lld dTime:%lld", tickVals.tick_rise, tickVals.tick_fall, tickVals.dTime);
+		}else{
+			if(tickVals.dTime<MIN_VAL){
+				MIN_VAL = tickVals.dTime;
+			}
+			if(tickVals.dTime>MAX_VAL){
+				MAX_VAL = tickVals.dTime;
+			}
+
+			sprintf(str, "/calibration: pwmMinVal:%d pwmMaxVal:%d", MIN_VAL, MAX_VAL);
+			report(str, slot_num);
+			ESP_LOGD(TAG,"VAL:%lld MIN_VAL:%d MAX_VAL:%d",tickVals.dTime, MIN_VAL, MAX_VAL);
+		}
+		vTaskDelay(20 / portTICK_PERIOD_MS);
+	}
+
 	ESP_LOGD(TAG, "Lets wait first interrupt");
 	while (tickVals.flag != 1)
 	{
@@ -163,7 +199,7 @@ void encoderPWM_task(void *arg)
 	offset = -(offset - (pos_length / 2)); //
 	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, offset, pos_length);
 
-	#define ANTI_DEBOUNCE_INERATIONS 3
+	#define ANTI_DEBOUNCE_INERATIONS 1
 	int anti_deb_mass_index = 0;
 	int val_mass[ANTI_DEBOUNCE_INERATIONS];
 

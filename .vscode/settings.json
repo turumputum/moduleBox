@@ -4,7 +4,7 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.portWin": "COM13",
+    "idf.portWin": "COM14",
     "files.associations": {
         "esp_eth_mac.h": "c",
         "esp_efuse.h": "c",
@@ -100,11 +100,12 @@
         "algorithm": "c",
         "utility": "c",
         "adc.h": "c",
-        "semphr.h": "c"
+        "semphr.h": "c",
+        "ratio": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",
-    "idf.baudeRate":"921600",
+    "idf.flashBaudRate":"1152000",
     "cmake.configureOnOpen": false,
     "idf.espIdfPathWin": "C:\\Users\\Yac\\esp\\esp-idf",
     "idf.pythonBinPathWin": "C:\\Espressif\\python_env\\idf5.1_py3.11_env\\Scripts\\python.exe",

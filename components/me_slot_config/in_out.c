@@ -41,7 +41,7 @@ static void gpio_handler(void* arg){
 void set_out_level(void* arg){
 	out_level_cmd_t cmd = *(out_level_cmd_t*)arg;
 	gpio_set_level(cmd.gpio_num, cmd.level);
-	ESP_LOGD(TAG, "Set level: %ld for slot: %d", cmd.level, cmd.slot_num);
+	//ESP_LOGD(TAG, "Set level: %ld for slot: %d", cmd.level, cmd.slot_num);
 }
 
 

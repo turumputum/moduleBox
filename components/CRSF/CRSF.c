@@ -34,7 +34,7 @@ typedef struct {
     uint8_t crc;
 } crsf_frame_t;
 
-static void UnpackChannels(uint8_t const * const payload, uint32_t * const dest){
+static void UnpackChannels(uint8_t const * const payload, int32_t * const dest){
     const unsigned numOfChannels = 16;
     const unsigned srcBits = 11;
     //const unsigned dstBits = 32;
@@ -42,14 +42,14 @@ static void UnpackChannels(uint8_t const * const payload, uint32_t * const dest)
 
     // code from BetaFlight rx/crsf.cpp / bitpacker_unpack
     uint8_t bitsMerged = 0;
-    uint32_t readValue = 0;
+    int32_t readValue = 0;
     unsigned readByteIndex = 0;
     for (uint8_t n = 0; n < numOfChannels; n++)
     {
         while (bitsMerged < srcBits)
         {
             uint8_t readByte = payload[readByteIndex++];
-            readValue |= ((uint32_t) readByte) << bitsMerged;
+            readValue |= ((int32_t) readByte) << bitsMerged;
             bitsMerged += 8;
         }
         //printf("rv=%x(%x) bm=%u\n", readValue, (readValue & inputChannelMask), bitsMerged);
@@ -69,7 +69,7 @@ void crsf_rx_task(void* arg) {
     uint16_t minVal = 0;
     uint16_t maxVal = 1984;
 
-    uint16_t deadBand = 10;
+    uint16_t deadBand = 1;
 	if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
 		deadBand = get_option_int_val(slot_num, "deadBand");
 		ESP_LOGD(TAG, "Set deadBand:%d for slot:%d",deadBand, slot_num);
@@ -120,7 +120,7 @@ void crsf_rx_task(void* arg) {
     // CRSF frame buffer
     //uint8_t buffer[64];
     uint8_t numOfChannel = 16;
-    uint32_t channels[numOfChannel];
+    int32_t channels[numOfChannel];
     memset (channels, ((maxVal-minVal)/2)+minVal, sizeof(channels));
     // In the crsf_rx_task:
     while(1) {
@@ -153,17 +153,17 @@ void crsf_rx_task(void* arg) {
                         // Parse RC channels data if type is 0x16
                         if(frame.type == 0x16) {
                             //ESP_LOGD(TAG, "Received payload: %x %x %x %x %x %x", frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3], frame.payload[4], frame.payload[5]);
-                            uint32_t rawChannels[numOfChannel];
+                            int32_t rawChannels[numOfChannel];
                             UnpackChannels(&frame.payload, rawChannels);
                             for(int i=0; i<8; i++){
-                                if((rawChannels[i]-channels[i])>deadBand){
+                                if(abs(rawChannels[i]-channels[i])>deadBand){
                                    
                                     char str[255];
                                     memset(str, 0, sizeof(str));
                                     //sprintf(str, "/ch_%d:%d", i,(uint8_t)(fVal*255));
-                                    sprintf(str, "/ch_%d:%d", i, (int)channels[i]);
+                                    sprintf(str, "/ch_%d:%ld", i, rawChannels[i]);
                                     report(str, slot_num);
-                                    //ESP_LOGD(TAG, "report chan:%d val:%f rawVal:%ld", i, fVal, rawChannels[i]);
+                                    //ESP_LOGD(TAG, "report chan:%d rawVal:%ld", i, rawChannels[i]);
                                     channels[i] = rawChannels[i];
                                 }
                             }

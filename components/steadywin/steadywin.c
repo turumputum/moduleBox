@@ -40,12 +40,6 @@ typedef struct{
     float T;
 }motorState_t;
 
-union FloatBytes {
-    float f;
-    uint8_t bytes[4];
-};
-
-
 uint16_t float_to_uint(float v,float v_min,float v_max,uint32_t width){
     float temp;
     int32_t utemp;
@@ -99,36 +93,6 @@ float reciveTWAI(){
         }
     }
     return 0;
-}
-
-void setTorque(float torque){
-    twai_message_t _message;
-    _message.identifier = 1;
-    _message.data_length_code = 8;
-    _message.extd = 0;              // Standard Format message (11-bit ID)
-    _message.rtr = 0;               // Send a data frame
-    _message.ss = 0;                // Not single shot
-    _message.self = 0;              // Not a self reception request
-    _message.dlc_non_comp = 0;      // DLC is less than 8
-
-    _message.data[0] = 0x93;
-    uint32_t int_value = *((int32_t*)(&torque));
-
-    _message.data[1] = (uint8_t)(int_value & 0xFF);
-    _message.data[2] = (uint8_t)((int_value >> 8) & 0xFF);
-    _message.data[3] = (uint8_t)((int_value >> 16) & 0xFF);
-    _message.data[4] = (uint8_t)((int_value >> 24) & 0xFF);
-
-    int_value = 1;
-    _message.data[5] = (uint8_t)(int_value & 0xFF);
-    _message.data[6] = (uint8_t)((int_value >> 8) & 0xFF);
-    _message.data[7] = (uint8_t)((int_value >> 16) & 0xFF);
-
-    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
-
-    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
-        ESP_LOGE(TAG, "Transmit CAN Error");
-    }
 }
 
 void reciveCAN(float* pos){
@@ -408,4 +372,272 @@ void start_steadywin_task(int slot_num){
 	xTaskCreatePinnedToCore(steadywin_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-12, NULL, 1);
 
 	ESP_LOGD(TAG,"steadywin_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+//----------------GIM_series-----------------------------
+
+
+void setTorque(float torque){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 8;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+
+    _message.data[0] = 0x93;
+    uint32_t int_value = *((int32_t*)(&torque));
+
+    _message.data[1] = (uint8_t)(int_value & 0xFF);
+    _message.data[2] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[3] = (uint8_t)((int_value >> 16) & 0xFF);
+    _message.data[4] = (uint8_t)((int_value >> 24) & 0xFF);
+
+    int_value = 1;
+    _message.data[5] = (uint8_t)(int_value & 0xFF);
+    _message.data[6] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[7] = (uint8_t)((int_value >> 16) & 0xFF);
+
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
+void GIM_start(){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 8;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+
+    _message.data[0] = 0x91;
+
+    _message.data[1] = 0x00;
+    _message.data[2] = 0x00;
+    _message.data[3] = 0x00;
+    _message.data[4] = 0x00;
+
+    _message.data[5] = 0x00;
+    _message.data[6] = 0x00;
+    _message.data[7] = 0x00;
+
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
+void GIM_stop(){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 8;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+
+    _message.data[0] = 0x97;
+
+    _message.data[1] = 0x00;
+    _message.data[2] = 0x00;
+    _message.data[3] = 0x00;
+    _message.data[4] = 0x00;
+
+    _message.data[5] = 0x00;
+    _message.data[6] = 0x00;
+    _message.data[7] = 0x00;
+
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
+
+
+union FloatBytes {
+    float f;
+    uint8_t bytes[4];
+};
+
+void GIM_setPos(float pos){
+    twai_message_t _message;
+    _message.identifier = 1;
+    _message.data_length_code = 8;
+    _message.extd = 0;              // Standard Format message (11-bit ID)
+    _message.rtr = 0;               // Send a data frame
+    _message.ss = 0;                // Not single shot
+    _message.self = 0;              // Not a self reception request
+    _message.dlc_non_comp = 0;      // DLC is less than 8
+
+    _message.data[0] = 0x95;
+
+    union FloatBytes converter = {.f =pos};
+    _message.data[1] = converter.bytes[0];
+    _message.data[2] = converter.bytes[1];
+    _message.data[3] = converter.bytes[2];
+    _message.data[4] = converter.bytes[3];
+
+    uint32_t int_value = 100;
+    _message.data[5] = (uint8_t)(int_value & 0xFF);
+    _message.data[6] = (uint8_t)((int_value >> 8) & 0xFF);
+    _message.data[7] = (uint8_t)((int_value >> 16) & 0xFF);
+
+    //ESP_LOGD(TAG, "TX-> id:%ld message:%x %x %x %x %x %x %x %x",_message.identifier, _message.data[0], _message.data[1], _message.data[2], _message.data[3], _message.data[4], _message.data[5], _message.data[6], _message.data[7]);
+
+    if (twai_transmit(&_message, pdMS_TO_TICKS(10)) != ESP_OK) {
+        ESP_LOGE(TAG, "Transmit CAN Error");
+    }
+}
+
+
+void GIM_motor_task(void *arg) {
+
+    //vTaskDelay(pdMS_TO_TICKS(500));
+
+    int slot_num = *(int*) arg;
+
+    uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][1];
+
+    me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
+
+    int16_t maxVal = 255;
+	if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
+		maxVal = get_option_int_val(slot_num, "maxVal");
+		ESP_LOGD(TAG, "Set maxVal:%d for slot:%d",maxVal, slot_num);
+	}
+
+    int16_t minVal = 0;
+	if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
+		minVal = get_option_int_val(slot_num, "minVal");
+		ESP_LOGD(TAG, "Set minVal:%d for slot:%d",minVal, slot_num);
+	}
+
+    uint8_t inverse = 0;
+    if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
+		inverse=1;
+	}
+
+    int8_t state=0;
+    if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
+		state = get_option_int_val(slot_num, "defaultState");
+		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/GIM_0")+3];
+		sprintf(t_str, "%s/GIM_%d",me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
+	} 
+
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
+    //twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+    // Install TWAI driver
+    if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to install TWAI driver");
+    }
+
+    if (twai_start() != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start TWAI driver");
+    } 
+
+    uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA | TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
+    if (twai_reconfigure_alerts(alerts_to_enable, NULL) != ESP_OK) {
+        ESP_LOGE(TAG, "CAN Alerts not reconfigured");
+    }
+
+    //GIM_start();
+    int8_t prev_state = -1;
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
+    int16_t current_pos = (maxVal-minVal)/2;
+    int16_t target_pos = (maxVal-minVal)/2;
+
+    int16_t increment = (maxVal-minVal)/100;
+
+    while(1){ 
+         command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
+                state = atoi(payload);
+                  
+            }else{
+                cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
+                if(strstr(cmd, "setPos")!=NULL){
+                   int16_t rawPos = atoi(payload);
+                   if(rawPos>maxVal)rawPos = maxVal;
+                   if(rawPos<minVal)rawPos = minVal;
+                   target_pos = atoi(payload);
+                   ESP_LOGD(TAG, "Set target_pos:%d for slot:%d",target_pos, slot_num);
+                }
+            }
+        }
+
+        if(state!=prev_state){
+            prev_state = state;
+            if(state==1){
+                GIM_start();
+                ESP_LOGD(TAG, "Start motor for slot:%d", slot_num);
+            }else{
+                GIM_stop();
+                ESP_LOGD(TAG, "Stop motor for slot:%d", slot_num);
+            }
+        } 
+
+        if(current_pos!=target_pos){
+            if(current_pos<target_pos){
+                current_pos+=increment;
+                if(current_pos>target_pos){
+                    current_pos = target_pos;
+                }
+            }else{
+                current_pos-=increment;
+                if(current_pos<target_pos){
+                    current_pos = target_pos;
+                }
+            }
+
+            float pos = ((float)current_pos/maxVal-minVal)*M_PI*2-M_PI;
+            ESP_LOGD(TAG, "Set pos:%f for slot:%d",pos, slot_num);
+            GIM_setPos(pos);
+        }
+
+        vTaskDelayUntil(&lastWakeTime, 25);
+    }
+
+}
+
+void start_GIM_motor_task(int slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "GIM_motor_task_%d", slot_num);
+	xTaskCreatePinnedToCore(GIM_motor_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-12, NULL, 1);
+
+	ESP_LOGD(TAG,"GIM_motor_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
