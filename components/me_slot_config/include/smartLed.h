@@ -57,4 +57,5 @@ typedef struct {
 void start_smartLed_task(int slot_num);
 void start_ledRing_task(int slot_num);
 void start_swiperLed_task(int slot_num);
+void start_ledBar_task(int slot_num);
 

@@ -196,7 +196,7 @@ void encoderPWM_task(void *arg)
 	while(offset >= pos_length){
 		offset -= pos_length;
 	}
-	offset = -(offset - (pos_length / 2)); //
+	offset = -(offset); //
 	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, offset, pos_length);
 
 	#define ANTI_DEBOUNCE_INERATIONS 1
@@ -206,7 +206,7 @@ void encoderPWM_task(void *arg)
 	while (1){
 		vTaskDelay(pdMS_TO_TICKS(10));
 		if (tickVals.flag){
-			raw_val = tickVals.dTime + offset;
+			raw_val = tickVals.dTime + offset + pos_length/2;
 		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
 			raw_val = 0;
 		}
@@ -235,7 +235,7 @@ void encoderPWM_task(void *arg)
 			}
 		}
 
-		//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);
+		//ESP_LOGD(TAG, "raw_val:%d center:%d", raw_val, (int)(current_pos*pos_length) );
 
 		if (current_pos != prev_pos){
 			//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);

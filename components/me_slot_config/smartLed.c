@@ -130,9 +130,9 @@ esp_err_t rmt_new_led_strip_encoder(const led_strip_encoder_config_t *config, rm
         },
         .bit1 = {
             .level0 = 1,
-            .duration0 = 0.6 * config->resolution / 1000000, // T1H=0.9us
+            .duration0 = 0.9 * config->resolution / 1000000, // T1H=0.9us
             .level1 = 0,
-            .duration1 = 0.6 * config->resolution / 1000000, // T1L=0.3us
+            .duration1 = 0.3 * config->resolution / 1000000, // T1L=0.3us
         },
         .flags.msb_first = 1 // WS2812 transfer bit order: G7...G0R7...R0B7...B0
     };
@@ -1113,4 +1113,295 @@ void start_ledRing_task(int slot_num){
 
     xTaskCreatePinnedToCore(ledRing_task, "ledRing_task", 1024*4, &slot_num,12, NULL,1);
 	ESP_LOGD(TAG,"ledRing_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+
+//---------------------LED BAR-----------------------------
+
+uint8_t colorChek(uint8_t currentColor, uint8_t targetColor, uint8_t increment){
+    if(currentColor<targetColor){
+        if(targetColor-currentColor>increment){
+            return currentColor+increment;
+        }else{
+            return targetColor;
+        }
+    }else if(currentColor>targetColor){
+        if(currentColor-targetColor>increment){
+            return currentColor-increment;
+        }else{
+            return targetColor;
+        }
+    }else{
+        return targetColor;
+    }
+}
+
+void ledBar_task(void *arg){
+    
+	int slot_num = *(int*) arg;
+	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
+
+	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    if(rmt_semaphore==NULL){
+        rmt_semaphore = xSemaphoreCreateCounting(2, 2);
+    }
+    
+    uint16_t num_of_led=24;
+    if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
+		num_of_led = get_option_int_val(slot_num, "numOfLed");
+		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
+	}
+
+    int16_t increment = 255;
+    if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
+		increment = get_option_int_val(slot_num, "increment");
+        if(increment>255)increment=255;
+        if(increment<0)increment=0;
+		ESP_LOGD(TAG, "Set increment:%d for slot:%d",increment, slot_num);
+	}
+
+    int16_t maxBright = 255;
+    if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
+		maxBright = get_option_int_val(slot_num, "maxBright");
+        if(maxBright>255)maxBright=255;
+        if(maxBright<0)maxBright=0;
+		ESP_LOGD(TAG, "Set maxBright:%d for slot:%d",maxBright, slot_num);
+	}
+
+    int16_t minBright = 0;
+    if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
+		minBright = get_option_int_val(slot_num, "minBright");
+        if(minBright<0)minBright=0;
+        if(minBright>255)minBright=255;
+		ESP_LOGD(TAG, "Set minBright:%d for slot:%d",minBright, slot_num);
+	}
+
+    uint16_t refreshPeriod = 1000/30;
+    if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
+	}
+
+    uint16_t numOfPos = num_of_led;
+    if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL) {
+		numOfPos = (get_option_int_val(slot_num, "numOfPos"));
+		ESP_LOGD(TAG, "Set numOfPos:%d for slot:%d",numOfPos, slot_num);
+	}
+
+    uint8_t state=0;
+    if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
+		state = get_option_int_val(slot_num, "defaultState");
+		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
+	}
+    uint8_t prevState=255;
+
+    int8_t dir=1;
+    if (strstr(me_config.slot_options[slot_num], "dirInverse") != NULL) {
+		dir=-1;
+		ESP_LOGD(TAG, "Set dir inverse for slot:%d", slot_num);
+	}
+
+    int16_t offset=0;
+    if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
+		offset = get_option_int_val(slot_num, "offset");
+		ESP_LOGD(TAG, "Set offset:%d for slot:%d", offset, slot_num);
+	}
+
+   	
+    RgbColor targetRGB={
+        .r=0,
+        .g=0,
+        .b=255
+    };
+
+    RgbColor currentRGB={
+        .r=0,
+        .g=0,
+        .b=0
+    };
+    //HsvColor HSV;
+    if (strstr(me_config.slot_options[slot_num], "RGBcolor") != NULL) {
+        char strDup[strlen(me_config.slot_options[slot_num])];
+        strcpy(strDup, me_config.slot_options[slot_num]);
+        char* payload=NULL;
+        char* cmd = strtok_r(strDup, ":", &payload);
+        //ESP_LOGD(TAG, "Set cmd:%s RGB_color:%s for slot:%d", cmd,payload, slot_num);
+        if(strstr(payload, ",")!= NULL) {
+            payload = strtok(payload, ",");
+        }
+        parseRGB(&targetRGB, payload);
+		//HSV = RgbToHsv(targetRGB);
+    }
+    ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", targetRGB.r, targetRGB.g, targetRGB.b, slot_num);
+
+    uint8_t current_bright_mass[num_of_led];
+    memset(current_bright_mass, 0, num_of_led);
+    uint8_t target_bright_mass[num_of_led];
+    memset(target_bright_mass, 0, num_of_led);
+
+    uint8_t led_strip_pixels[num_of_led * 3];
+
+    rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
+    rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
+    //rmt_slot_heap.tx_chan_config.flags.io_od_mode = true;
+    rmt_new_led_strip_encoder(&rmt_slot_heap.encoder_config, &rmt_slot_heap.led_encoder);
+  
+    if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "ledTopic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/ledBar_0")+3];
+		sprintf(t_str, "%s/ledBar_%d",me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
+	} 
+
+    // float currentBrightness[num_of_led];
+    // for(int i=0;i<num_of_led;i++){
+    //     currentBrightness[i]= (state==0) ? minBright: maxBright;
+    // }
+    float ledToPosRatio = (float)num_of_led/numOfPos;
+
+    float currentPos=-1;
+    int targetPos=0;
+
+    uint8_t flag_ledUpdate=1;
+    // float fIncrement = (float)increment/255;
+    
+    //vTaskDelay(pdMS_TO_TICKS(1000));
+    TickType_t lastWakeTime = xTaskGetTickCount(); 
+    while(1){
+        command_message_t msg;
+
+        while(xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS) {
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
+                targetPos = atoi(payload);
+                ESP_LOGD(TAG, "Change pos to:%d", targetPos);
+            }else{
+                cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
+                if(strstr(cmd, "setRGB")!=NULL){
+                    parseRGB(&targetRGB, payload);
+                }else if(strstr(cmd, "setPos")!=NULL){
+                    // brightCorrection
+                }
+            }
+        }
+
+        if(targetPos!=currentPos){
+            currentPos=targetPos;
+            float ledPos = (ledToPosRatio * currentPos);
+            for(int i=0;i<num_of_led;i++){
+                int curentLedPos = i + offset;
+                if(curentLedPos>num_of_led-1){
+                    curentLedPos = curentLedPos - num_of_led;
+                }
+                if((i == (int)ledPos)&&(i>0)){
+                    float ratio = ledPos - (int)ledPos;
+                    target_bright_mass[curentLedPos]=(int)(maxBright*ratio);
+                    if(target_bright_mass[curentLedPos]<minBright){
+                        target_bright_mass[curentLedPos]=minBright;
+                    }
+                }else if(i>(int)ledPos-1){
+                    target_bright_mass[curentLedPos]=minBright;
+                }else{
+                    target_bright_mass[curentLedPos]=maxBright;
+                }
+            }
+            // printf("targetMass:");
+            // for(int i=0;i<num_of_led;i++){
+            //     printf(" %d", target_bright_mass[i]);
+            // }
+            // printf("\n");
+
+            // printf("currentMass:");
+            // for(int i=0;i<num_of_led;i++){
+            //     printf(" %d", current_bright_mass[i]);
+            // }
+            // printf("\n");
+
+        }
+
+        if(memcmp(&currentRGB, &targetRGB, sizeof(RgbColor))){
+            if(currentRGB.r!=targetRGB.r){
+                currentRGB.r = colorChek(currentRGB.r, targetRGB.r, increment);
+                flag_ledUpdate=true;
+            }
+            if(currentRGB.g!=targetRGB.g){
+                currentRGB.g = colorChek(currentRGB.g, targetRGB.g, increment);
+                flag_ledUpdate=true;
+            }
+            if(currentRGB.b!=targetRGB.b){
+                currentRGB.b = colorChek(currentRGB.b, targetRGB.b, increment);
+                flag_ledUpdate=true;
+            }
+        }
+
+        for(int i=0;i<num_of_led;i++){
+            if(target_bright_mass[i]!=current_bright_mass[i]){
+                
+                flag_ledUpdate=true;
+                if(target_bright_mass[i]>current_bright_mass[i]){
+                    if(i>0){
+                        if(current_bright_mass[i-1]!=target_bright_mass[i-1]){
+                            goto end_loop;
+                        }
+                    }
+                    if(abs(target_bright_mass[i]-current_bright_mass[i])<increment){
+                        current_bright_mass[i] = target_bright_mass[i];
+                    }else{
+                        current_bright_mass[i] = current_bright_mass[i] + increment;
+                    }
+                    break;
+                }else{
+                    if(i<num_of_led-1){
+                        if(current_bright_mass[i+1]!=target_bright_mass[i+1]){
+                            //ESP_LOGD(TAG, "skip:%d nextTarget:%d nextBright:%d", i, target_bright_mass[i+1], current_bright_mass[i+1]);
+                            goto end_loop;
+                        }
+                    }
+                    if(abs(target_bright_mass[i]-current_bright_mass[i])<increment){
+                        current_bright_mass[i] = target_bright_mass[i];
+                    }else{
+                        current_bright_mass[i] = current_bright_mass[i] - increment;
+                    }
+                    //ESP_LOGD(TAG, "Changed bright i:%d target:%d current:%d", i, target_bright_mass[i], current_bright_mass[i]);
+                    break;
+                }
+            }
+            end_loop:;
+        }
+
+        if(flag_ledUpdate){
+            for(int i=0;i<num_of_led;i++){
+                int index = i;
+                if(dir<0){
+                    index = num_of_led - i - 1;
+                }
+                float  tmpBright = (float)current_bright_mass[i]/255;
+                led_strip_pixels[index*3] = gamma_8[(uint8_t)(currentRGB.r * tmpBright)];
+                led_strip_pixels[index*3+1] = gamma_8[(uint8_t)(currentRGB.g * tmpBright)];
+                led_strip_pixels[index*3+2] = gamma_8[(uint8_t)(currentRGB.b * tmpBright)];
+            }
+
+            flag_ledUpdate = false;
+            //ESP_LOGD(TAG, "sizeof(led_strip_pixels):%d", sizeof(led_strip_pixels));
+            rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
+        }
+
+        vTaskDelayUntil(&lastWakeTime, refreshPeriod);
+    }
+}
+
+void start_ledBar_task(int slot_num){
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+
+    xTaskCreatePinnedToCore(ledBar_task, "ledBar_task", 1024*4, &slot_num,12, NULL,1);
+	ESP_LOGD(TAG,"ledBar_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

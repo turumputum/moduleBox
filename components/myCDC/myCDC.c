@@ -146,7 +146,7 @@ static void execCommand(char *cmd, int len) {
 			vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
 			esp_restart();
 		}
-	}else if (len < 3) {
+	}else if (len < 2) {
 		// //printf("vot:%s\n", cmd);
 		// ESP_LOGD(TAG, "unknown commnad: %s \n", cmd);
 		// //usbprintf("unknown commnad: %s \n", cmd);

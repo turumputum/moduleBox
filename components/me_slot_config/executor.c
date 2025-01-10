@@ -16,7 +16,7 @@
 #include "3n_mosfet.h"
 #include "stepper.h"
 #include "in_out.h"
-
+#include "myCDC.h"
 #include "audioPlayer.h"
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -207,16 +207,22 @@ void executer_task(void){
 	while(1){
 		if (xQueueReceive(me_state.executor_queue, &msg, portMAX_DELAY) == pdPASS){
 			//ESP_LOGD(TAG, "incoming cmd:%s", msg.str);
+			int sum=0;
 			for(int i=0; i<NUM_OF_SLOTS; i++){
 				//ESP_LOGD(TAG, "command_queue[%d]:%d",i,me_state.command_queue[i]==NULL);
 				if(strstr(msg.str, me_state.action_topic_list[i])!=NULL){
 					//ESP_LOGD(TAG, "Forward cmd to slot:%d", i);
 					if(me_state.command_queue[i]!=NULL){
 						xQueueSend(me_state.command_queue[i], &msg, portMAX_DELAY);
+						sum++;
 					}else{
 						ESP_LOGE(TAG, "Slot queue is not initialized");
 					}
 				}
+			}
+			if(sum==0){
+				usbprint("Action not found!!!");
+				ESP_LOGE(TAG, "Action not found!!!");
 			}
 		}
 	}

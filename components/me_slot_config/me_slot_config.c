@@ -82,15 +82,18 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
 			start_button_task(i);
 			start_ledRing_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "button_ledBar", 13)){
+			start_button_task(i);
+			start_ledBar_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_swiperLed", 16)){
 			start_button_task(i);
 			start_swiperLed_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
-			start_button_task(i);
-			start_led_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_smartLed", 15)){
 			start_button_task(i);
 			start_smartLed_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
+			start_button_task(i);
+			start_led_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
 			start_in_3ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){

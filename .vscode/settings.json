@@ -101,7 +101,8 @@
         "utility": "c",
         "adc.h": "c",
         "semphr.h": "c",
-        "ratio": "c"
+        "ratio": "c",
+        "usb_hal.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",
