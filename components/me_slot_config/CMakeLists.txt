@@ -5,7 +5,7 @@ idf_component_register(SRCS
                         "buttonLed.c" 
                         "smartLed.c" 
                         "in_out.c" 
-                        "stepper.c" 
+                        
                         "analog.c" 
                         "virtual_slots.c"
                         "encoders.c" 
@@ -16,6 +16,6 @@ idf_component_register(SRCS
                         "tachometer.c"
                        
                     INCLUDE_DIRS "include"
-                    REQUIRES myCDC accelStepper stateConfig reporter audioPlayer esp32-rotary-encoder driver rgbHsv myHID someUnique distanceSens accel cybergear ticketDispenser dwin VESC PPM CRSF)
+                    REQUIRES myCDC stepper stateConfig reporter audioPlayer esp32-rotary-encoder driver rgbHsv myHID someUnique distanceSens accel cybergear ticketDispenser dwin VESC PPM CRSF)
 
  

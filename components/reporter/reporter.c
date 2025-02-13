@@ -238,6 +238,83 @@ void crosslinker(char* str){
 	//ESP_LOGD(TAG, "Crosslink calc time:%lld", esp_timer_get_time() - startTick);
 }
 
+void send_report(char *tmpStr){
+	usbprint(tmpStr);
+
+	if(me_state.MQTT_init_res==ESP_OK){
+		char tmpString[strlen(tmpStr)];
+		strcpy(tmpString, tmpStr);
+		char *payload;
+		char *topic = strtok_r(tmpString, ":", &payload);
+		mqtt_pub(topic, payload);
+	}
+
+	if(me_state.OSC_init_res==ESP_OK){
+		char msg_copy[strlen(tmpStr)+1];
+		if(tmpStr[0]!='/'){
+			strcpy(msg_copy+1, tmpStr);
+			msg_copy[0]='/';
+		}else{
+			strcpy(msg_copy, tmpStr);
+		}
+		char tmpString[strlen(msg_copy)+50];
+		char *rest;
+		char *tok = strtok_r(msg_copy, ":", &rest);
+		
+		int len=0;
+		if(strstr(rest, ".")!=NULL){
+			float tmp = atof(rest);
+			len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "f", tmp);
+			ESP_LOGD(TAG, "OSC f string%s float:%f", tmpString, tmp );
+		}else{
+			int tmp = atoi(rest);
+			len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "i", tmp);
+			ESP_LOGD(TAG, "OSC i string%s  tmp:%d", tmpString , tmp);
+		}
+		
+
+		//len = tosc_writeMessage(tmpString, strlen(tmpString), tok, "s", rest);
+		// Create an OSC message
+		struct sockaddr_in destAddr = {0};
+		destAddr.sin_addr.s_addr = inet_addr(me_config.oscServerAdress);
+		destAddr.sin_family = 2;
+		destAddr.sin_port = htons(me_config.oscServerPort);
+
+		int res = sendto(me_state.osc_socket, tmpString, len, 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
+		if (res < 0){
+			ESP_LOGE(TAG,"Failed to send osc errno: %d len:%d string:%s\n", errno, len, tmpString);
+			err++;
+			if(err>10){
+				esp_restart();
+			}
+			return;
+		}else{
+			err--;
+			if(err<0)err=0;
+			//ESP_LOGD(TAG,"send osc OK: \n");
+		}
+	}
+	if(me_state.UDP_init_res==ESP_OK){
+		struct sockaddr_in destAddr = {0};
+		destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
+		destAddr.sin_family = 2;
+		destAddr.sin_port = htons(me_config.udpServerPort);
+		int res = sendto(me_state.udp_socket, tmpStr, strlen(tmpStr), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
+		if (res < 0){
+			ESP_LOGE(TAG,"Failed to send osc errno: %d string:%s\n", errno, tmpStr);
+			err++;
+			if(err>10){
+				esp_restart();
+			}
+			return;
+		}else{
+			err--;
+			if(err<0)err=0;
+			//ESP_LOGD(TAG,"send osc OK: \n");
+		}
+	}
+}
+
 void reporter_task(void){
 	//char tmpStr[555];
 	reporter_message_t received_message;
@@ -255,82 +332,8 @@ void reporter_task(void){
 				sprintf(tmpStr,"%s:%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}
 			//ESP_LOGD(TAG, "Report: %s", tmpStr);
-			usbprint(tmpStr);
-
-			if(me_state.LAN_init_res==ESP_OK){
-				if(me_state.MQTT_init_res==ESP_OK){
-					char tmpString[strlen(tmpStr)];
-					strcpy(tmpString, tmpStr);
-					char *payload;
-					char *topic = strtok_r(tmpString, ":", &payload);
-					mqtt_pub(topic, payload);
-				}
-				if((me_state.osc_socket > 0)&&(me_config.oscServerPort>0)){
-					char msg_copy[strlen(tmpStr)+1];
-					if(tmpStr[0]!='/'){
-						strcpy(msg_copy+1, tmpStr);
-						msg_copy[0]='/';
-					}else{
-						strcpy(msg_copy, tmpStr);
-					}
-					char tmpString[strlen(msg_copy)+50];
-					char *rest;
-					char *tok = strtok_r(msg_copy, ":", &rest);
-					
-					int len=0;
-					if(strstr(rest, ".")!=NULL){
-						float tmp = atof(rest);
-						len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "f", tmp);
-						ESP_LOGD(TAG, "OSC f string%s float:%f", tmpString, tmp );
-					}else{
-						int tmp = atoi(rest);
-						len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "i", tmp);
-						ESP_LOGD(TAG, "OSC i string%s  tmp:%d", tmpString , tmp);
-					}
-					
-
-					//len = tosc_writeMessage(tmpString, strlen(tmpString), tok, "s", rest);
-					// Create an OSC message
-					struct sockaddr_in destAddr = {0};
-					destAddr.sin_addr.s_addr = inet_addr(me_config.oscServerAdress);
-					destAddr.sin_family = 2;
-					destAddr.sin_port = htons(me_config.oscServerPort);
-
-					int res = sendto(me_state.osc_socket, tmpString, len, 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
-					if (res < 0){
-						ESP_LOGE(TAG,"Failed to send osc errno: %d len:%d string:%s\n", errno, len, tmpString);
-						err++;
-						if(err>10){
-							esp_restart();
-						}
-						return;
-					}else{
-						err--;
-						if(err<0)err=0;
-						//ESP_LOGD(TAG,"send osc OK: \n");
-					}
-				}
-				if((me_state.udp_socket > 0)&&(me_config.udpServerPort>0)){
-					struct sockaddr_in destAddr = {0};
-					destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
-					destAddr.sin_family = 2;
-					destAddr.sin_port = htons(me_config.udpServerPort);
-					int res = sendto(me_state.udp_socket, tmpStr, strlen(tmpStr), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
-					if (res < 0){
-						ESP_LOGE(TAG,"Failed to send osc errno: %d len:%d string:%s\n", errno, len, tmpStr);
-						err++;
-						if(err>10){
-							esp_restart();
-						}
-						return;
-					}else{
-						err--;
-						if(err<0)err=0;
-						//ESP_LOGD(TAG,"send osc OK: \n");
-					}
-				}
-
-			}
+			
+			send_report(tmpStr);
 			
 			crosslinker(tmpStr);
 			heap_caps_free(received_message.str);
@@ -368,3 +371,47 @@ void report(char *msg, int slot_num){
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 
 }
+
+void reportState(){
+	char tmpStr[512];  // Increased buffer size for JSON
+    
+	sprintf(tmpStr, "{");
+
+    sprintf(tmpStr+ strlen(tmpStr), "\"freeRAM\":%d,", xPortGetFreeHeapSize());
+
+    // Add WIFI network info if initialized successfully
+    sprintf(tmpStr+ strlen(tmpStr), "\"WIFI_init_res\":%d," , me_state.WIFI_init_res);
+	if (me_state.WIFI_init_res == ESP_OK) {
+        sprintf(tmpStr + strlen(tmpStr), 
+            "\"WIFI_SSID\":\"%s\",\"WIFI_ipAdress\":\"%s\",\"WIFI_netMask\":\"%s\",\"WIFI_gateWay\":\"%s\",",
+			me_config.WIFI_ssid,
+            me_config.WIFI_ipAdress,
+            me_config.WIFI_netMask, 
+            me_config.WIFI_gateWay
+        );
+    }
+
+	sprintf(tmpStr+ strlen(tmpStr), "\"LAN_init_res\":%d," , me_state.LAN_init_res);
+	if (me_state.LAN_init_res == ESP_OK) {
+        sprintf(tmpStr + strlen(tmpStr), 
+            "\"LAN_ipAdress\":\"%s\",\"LAN_netMask\":\"%s\",\"LAN_gateWay\":\"%s\",",
+            me_config.LAN_ipAdress,
+            me_config.LAN_netMask, 
+            me_config.LAN_gateWay
+        );
+    }
+    // Add other initialization states
+    sprintf(tmpStr + strlen(tmpStr),
+        "\"MQTT_init_res\":%d,"
+        "\"UDP_init_res\":%d,"
+        "\"OSC_init_res\":%d,"
+        "\"FTP_init_res\":%d}",
+        me_state.MQTT_init_res,
+        me_state.UDP_init_res,
+        me_state.OSC_init_res,
+        me_state.FTP_init_res
+    );
+
+	send_report(tmpStr);
+}
+

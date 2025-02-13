@@ -48,29 +48,45 @@ static int handler(void *user, const char *section, const char *name, const char
 		}
 	}
 
-	if (MATCH("SYSTEM", "deviceName")) {
+	if (MATCH("SYSTEM", "deviceName")) {//-----------------------------------------------
 		pconfig->deviceName = strdup(value);
 	} else if (MATCH("SYSTEM", "USB_debug")) {
 		pconfig->USB_debug = atoi(value);
-	}  else if (MATCH("LAN", "LAN_enable")) {
+	}  else if (MATCH("LAN", "LAN_enable")) {//-----------------------------------------------
 		pconfig->LAN_enable = atoi(value);
 	} else if (MATCH("LAN", "ipAdress")) {
-		pconfig->ipAdress = strdup(value);
+		pconfig->LAN_ipAdress = strdup(value);
 	} else if (MATCH("LAN", "netMask")) {
-		pconfig->netMask = strdup(value);
+		pconfig->LAN_netMask = strdup(value);
 	} else if (MATCH("LAN", "gateWay")) {
-		pconfig->gateWay = strdup(value);
+		pconfig->LAN_gateWay = strdup(value);
 	} else if (MATCH("LAN", "DHCP")) {
-		pconfig->DHCP = atoi(value);
-	} else if (MATCH("MDNS", "MDNS_enable")) {
+		pconfig->LAN_DHCP = atoi(value);
+	} else if (MATCH("WIFI", "WIFI_enable")) {//-----------------------------------------------
+		pconfig->WIFI_enable = atoi(value);
+	} else if (MATCH("WIFI", "SSID")) {
+		pconfig->WIFI_ssid = strdup(value);
+	} else if (MATCH("WIFI", "pass")) {
+		pconfig->WIFI_pass = strdup(value);
+	} else if (MATCH("WIFI", "DHCP")) {
+		pconfig->WIFI_DHCP = atoi(value);
+	} else if (MATCH("WIFI", "ipAdress")) {
+		pconfig->WIFI_ipAdress = strdup(value);
+	} else if (MATCH("WIFI", "netMask")) {
+		pconfig->WIFI_netMask = strdup(value);
+	} else if (MATCH("WIFI", "gateWay")) {
+		pconfig->WIFI_gateWay = strdup(value);
+	} else if (MATCH("WIFI", "channel")) {
+		pconfig->WIFI_channel = atoi(value);
+	} else if (MATCH("MDNS", "MDNS_enable")) {//-----------------------------------------------
 		pconfig->MDNS_enable = atoi(value);
-	} else if (MATCH("FTP", "FTP_enable")) {
+	} else if (MATCH("FTP", "FTP_enable")) {//-----------------------------------------------
 		pconfig->FTP_enable = atoi(value);
 	} else if (MATCH("FTP", "FTP_login")) {
 		pconfig->FTP_login = strdup(value);
 	} else if (MATCH("FTP", "FTP_pass")) {
 		pconfig->FTP_pass = strdup(value);
-	} else if (MATCH("UDP", "udpServerAdress")){
+	} else if (MATCH("UDP", "udpServerAdress")){//-----------------------------------------------
 		pconfig->udpServerAdress = strdup(value);
 	} else if (MATCH("UDP", "udpServerPort")) {
 		pconfig->udpServerPort = atoi(value);
@@ -78,16 +94,14 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->udpMyPort = atoi(value);
 	} else if (MATCH("UDP", "udp_cross_link")) {
 		pconfig->udp_cross_link = strdup(value);
-	} else if (MATCH("OSC", "oscServerAdress")) {
+	} else if (MATCH("OSC", "oscServerAdress")) {//-----------------------------------------------
 		pconfig->oscServerAdress = strdup(value);
 	} else if (MATCH("OSC", "oscServerPort")) {
 		pconfig->oscServerPort = atoi(value);
 	} else if (MATCH("OSC", "oscMyPort")) {
 		pconfig->oscMyPort = atoi(value);
-	} else if (MATCH("MQTT", "mqttBrokerAdress")) {
+	} else if (MATCH("MQTT", "mqttBrokerAdress")) {//-----------------------------------------------
 		pconfig->mqttBrokerAdress = strdup(value);
-	} else if (MATCH("STARTUP", "cross_link")) {
-		pconfig->startup_cross_link = strdup(value);
 	}else {
 		return 0; /* unknown section/name, error */
 	}
@@ -121,25 +135,31 @@ void load_Default_Config(void) {
 	me_config.deviceName = strdup("moduleBox");
 	me_config.USB_debug = 0;
 
-	me_config.LAN_enable = 0;
 	
-	me_config.WIFI_mode = 0; // disable
-
+	
+	me_config.WIFI_enable = 0; // disable
+	me_config.WIFI_DHCP = 1;
+	me_config.WIFI_ipAdress = strdup("192.168.88.33");
+	me_config.WIFI_netMask = strdup("255.255.255.0");
+	me_config.WIFI_gateWay = strdup("192.168.88.1");
 	me_config.WIFI_ssid = strdup("");
-	me_config.WIFI_pass = strdup("monofonpass");
+	me_config.WIFI_pass = strdup("");
 	me_config.WIFI_channel = 6;
+	me_state.WIFI_init_res = ESP_FAIL;
 
-	me_config.DHCP = 0;
-
-	me_config.ipAdress = strdup("192.168.88.33");
-	me_config.netMask = strdup("255.255.255.0");
-	me_config.gateWay = strdup("192.168.88.1");
+	me_config.LAN_enable = 0;
+	me_config.LAN_DHCP = 1;
+	me_config.LAN_ipAdress = strdup("192.168.88.33");
+	me_config.LAN_netMask = strdup("255.255.255.0");
+	me_config.LAN_gateWay = strdup("192.168.88.1");
+	me_state.LAN_init_res = ESP_FAIL;
 
 	me_config.MDNS_enable=1;
 
 	me_config.FTP_enable = 1;
 	me_config.FTP_login = strdup("user");
 	me_config.FTP_pass = strdup("pass");
+	me_state.FTP_init_res = ESP_FAIL;
 
 	me_config.mqttBrokerAdress = strdup("");
 	
@@ -147,17 +167,23 @@ void load_Default_Config(void) {
 	me_config.udpServerPort = 0;
 	me_config.udpMyPort = 0;
 	me_config.udp_cross_link = strdup("");
+	me_state.UDP_init_res = ESP_FAIL;
 	
 	me_config.oscServerAdress = strdup("");
 	me_config.oscServerPort = 0;
 	me_config.oscMyPort = 0;
+	me_state.OSC_init_res = ESP_FAIL;
 
 	me_state.numOfTrack = 0;
-	me_state.MQTT_init_res = -1;
+	
+	me_state.MQTT_init_res = ESP_FAIL;
 
 	me_state.udp_socket = -1;
 	me_state.osc_socket = -1;
 
+
+	me_state.slot_init_res = ESP_FAIL;
+	
 	me_state.ledc_chennelCounter = 0;
 
 	for (int i = 0; i < NUM_OF_SLOTS; i++) {
@@ -220,7 +246,7 @@ int saveConfig(void) {
 		return ESP_FAIL;
 	}
 
-	sprintf(tmp, ";config file moduleBox. Ver:%s \r\n", VERSION);
+	sprintf(tmp, "  ;config file moduleBox. Ver:%s \r\n", VERSION);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
@@ -238,18 +264,19 @@ int saveConfig(void) {
 	sprintf(tmp, "LAN_enable = %d ;0-disable, 1-enable \r\n", me_config.LAN_enable);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "DHCP = %d ;0-disable, 1-enable \r\n", me_config.DHCP);
+	sprintf(tmp, "DHCP = %d ;0-disable, 1-enable \r\n", me_config.LAN_DHCP);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "ipAdress = %s \r\n", me_config.ipAdress);
+	sprintf(tmp, "ipAdress = %s \r\n", me_config.LAN_ipAdress);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "netMask = %s \r\n", me_config.netMask);
+	sprintf(tmp, "netMask = %s \r\n", me_config.LAN_netMask);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "gateWay = %s \r\n", me_config.gateWay);
+	sprintf(tmp, "gateWay = %s \r\n", me_config.LAN_gateWay);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
+
 	sprintf(tmp, "\r\n[UDP] \r\n");
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));

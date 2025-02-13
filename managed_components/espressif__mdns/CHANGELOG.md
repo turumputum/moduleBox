@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.3](https://github.com/espressif/esp-protocols/commits/mdns-v1.4.3)
+
+### Features
+
+- support zero item when update subtype ([5bd82c01](https://github.com/espressif/esp-protocols/commit/5bd82c01))
+
+## [1.4.2](https://github.com/espressif/esp-protocols/commits/mdns-v1.4.2)
+
+### Features
+
+- support update subtype ([062b8dca](https://github.com/espressif/esp-protocols/commit/062b8dca))
+
+### Updated
+
+- chore(mdns): Add more info to idf_component.yml ([4a1cb65c](https://github.com/espressif/esp-protocols/commit/4a1cb65c))
+
+## [1.4.1](https://github.com/espressif/esp-protocols/commits/mdns-v1.4.1)
+
+### Features
+
+- Send PTR query for mdns browse when interface is ready ([010a404a](https://github.com/espressif/esp-protocols/commit/010a404a))
+
+### Bug Fixes
+
+- Prevent deadlock when deleting a browse request ([3f48f9ea](https://github.com/espressif/esp-protocols/commit/3f48f9ea))
+- Fix use after free reported by coverity ([25b3d5fd](https://github.com/espressif/esp-protocols/commit/25b3d5fd))
+- Fixed dead-code reported by coverity ([11846c7d](https://github.com/espressif/esp-protocols/commit/11846c7d))
+
 ## [1.4.0](https://github.com/espressif/esp-protocols/commits/mdns-v1.4.0)
 
 ### Major changes

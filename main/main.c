@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
+
 #include "esp_peripherals.h"
 #include "periph_sdcard.h"
 #include "periph_touch.h"
@@ -52,7 +53,7 @@
 
 #include "LAN.h"
 #include "inttypes.h"
-//#include "mdns.h"
+#include "WIFI.h"
 
 #include "ftp.h"
 
@@ -266,7 +267,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("PPM", level);
 	esp_log_level_set("CRSF", level);
 	esp_log_level_set("RGB|HSV", level);
-	esp_log_level_set("rmt", ESP_LOG_WARN);
+	esp_log_level_set("rmt", level);
 	}
 
 
@@ -420,6 +421,8 @@ void app_main(void)
 	
 	set_usb_debug();
 
+	ESP_LOGD(TAG, "Free SPIRAM: %d bytes",heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
 	me_state.slot_init_res = init_slots();
 
 	//start_dwinUart_task(1);
@@ -438,6 +441,15 @@ void app_main(void)
 	if (me_config.LAN_enable == 1)	{
 		LAN_init();	
 	}
+	if(me_config.WIFI_enable == 1){
+		wifiInit();
+	}
+	start_udp_recive_task();
+	start_osc_recive_task();
+	start_ftp_task();
+	start_mdns_task();
+	start_mqtt_task();
+
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
@@ -462,6 +474,13 @@ void app_main(void)
         //     printf("Error getting real time stats: %s\n", esp_err_to_name(ret));
         // }
         // vTaskDelay(pdMS_TO_TICKS(1000));
+		// char task_list[1024];
+		// vTaskList(task_list);
+		// ESP_LOGI(TAG, "Task list:\n%s", task_list);
+
+		// UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
+        // ESP_LOGI(TAG, "Stack remaining: %u", stack_remaining);
+
 		vTaskDelay(pdMS_TO_TICKS(1000));
 
 	}

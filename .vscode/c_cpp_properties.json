@@ -2,9 +2,7 @@
     "configurations": [
         {
             "name": "ESP-IDF",
-            "compilerPath": "c:\\Users\\Yac\\.espressif\\tools\\tools\\xtensa-esp32s3-elf\\esp-12.2.0_20230208\\xtensa-esp32s3-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
             "includePath": [
-                "${config:idf.espIdfPath}/components/**",
                 "${config:idf.espIdfPathWin}/components/**",
                 "${config:idf.espAdfPath}/components/**",
                 "${config:idf.espAdfPathWin}/components/**",
@@ -12,7 +10,6 @@
             ],
             "browse": {
                 "path": [
-                    "${config:idf.espIdfPath}/components",
                     "${config:idf.espIdfPathWin}/components",
                     "${config:idf.espAdfPath}/components/**",
                     "${config:idf.espAdfPathWin}/components/**",

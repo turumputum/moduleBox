@@ -145,7 +145,7 @@ uint8_t modeToEnum(char* str){
 }
 
 
-uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, uint8_t *currentBright, uint8_t *targetBright, uint8_t fade_increment){
+uint8_t checkColorAndBright(RgbColor *currentRGB, RgbColor *targetRGB, int16_t *currentBright, int16_t *targetBright, int16_t fade_increment){
     //ESP_LOGD(TAG,"currentRGB:%d %d %d", currentRGB->r, currentRGB->g, currentRGB->b);
 	//ESP_LOGD(TAG,"targetRGB:%d %d %d", targetRGB->r, targetRGB->g, targetRGB->b);
 	//ESP_LOGD(TAG,"currentBright:%d targetBright:%d increment:%d", *currentBright, *targetBright, fade_increment);

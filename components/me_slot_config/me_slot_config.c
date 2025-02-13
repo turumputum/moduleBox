@@ -100,9 +100,9 @@ int init_slots(void){
 			start_in_2ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);
-		}else if(!memcmp(me_config.slot_mode[i], "encoderPWM", 10)){
-			start_encoderPWM_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "encoder_inc", 10)){
+		}else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
+			start_encoderPPM_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "encoderInc", 10)){
 			start_encoder_inc_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "benewakeTOF", 12)){
 			start_benewakeTOF_task(i);
@@ -112,8 +112,8 @@ int init_slots(void){
 			start_tachometer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
 			start_analog_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
-			start_stepper_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 7)){
+			start_stepperSpeed_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
 			start_out_task(i);
 			start_in_task(i);
@@ -123,7 +123,8 @@ int init_slots(void){
 			start_tenzo_button_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){
 			start_flywheel_task(i);
-			start_led_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "scaler", 6)){
+			start_scaler_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "swiper", 6)){
 			start_swiper_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "rfid", 4)){
@@ -140,10 +141,6 @@ int init_slots(void){
 			start_watchdog_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "uartLogger", 3)){
 			start_uartLogger_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "disp_hd44780", 12)){
-			start_disp_hd44780_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "disp_max7219", 12)){
-			start_max7219_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "buttonMatrix", 13)){
 			start_buttonMatrix_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dwin", 4)){
@@ -158,8 +155,6 @@ int init_slots(void){
 			start_collector_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
 			start_ds18b20_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "MPU9250_kick", 7)){
-			start_MPU9250_kick_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "cybergear", 9)){
 			start_cybergear_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "steadywinGIM", 12)){

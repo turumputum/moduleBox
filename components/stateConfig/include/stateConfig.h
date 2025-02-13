@@ -48,9 +48,14 @@ typedef struct {
 	int8_t config_init_res;
 	int8_t content_search_res;
 	int8_t slot_init_res;
+
 	int8_t WIFI_init_res;
 	int8_t LAN_init_res;
 	int8_t MQTT_init_res;
+	int8_t UDP_init_res;
+	int8_t OSC_init_res;
+	int8_t FTP_init_res;
+
 
 	int8_t udp_socket;
 	int8_t osc_socket;
@@ -83,18 +88,20 @@ typedef struct {
 typedef TCHAR file_t[FILE_NAME_LEGHT];
 
 typedef struct {
-	uint8_t WIFI_mode; 
+	uint8_t WIFI_enable; 
 	char * WIFI_ssid;
 	char * WIFI_pass;
+	uint8_t WIFI_DHCP;
+	char *WIFI_ipAdress;
+	char *WIFI_netMask;
+	char *WIFI_gateWay;
 	uint8_t WIFI_channel;
 	
 	uint8_t LAN_enable;
-
-	uint8_t DHCP;
-
-	char *ipAdress;
-	char *netMask;
-	char *gateWay;
+	uint8_t LAN_DHCP;
+	char *LAN_ipAdress;
+	char *LAN_netMask;
+	char *LAN_gateWay;
 
 	char *deviceName;
 	uint8_t USB_debug;

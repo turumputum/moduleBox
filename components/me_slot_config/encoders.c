@@ -67,7 +67,7 @@ static void IRAM_ATTR fall_handler(void *args){
 }
 
 
-void encoderPWM_task(void *arg)
+void encoderPPM_task(void *arg)
 {
 	int slot_num = *(int *)arg;
 
@@ -110,6 +110,12 @@ void encoderPWM_task(void *arg)
 		ESP_LOGD(TAG, "float_output mode: %d", slot_num);
 	}
 
+	uint8_t dirInverse = 0;
+	if (strstr(me_config.slot_options[slot_num], "dirInverse") != NULL){
+		dirInverse = 1;
+		ESP_LOGD(TAG, "dirInverse slot: %d", slot_num);
+	}
+
 	uint8_t zero_shift = 0;
 	if (strstr(me_config.slot_options[slot_num], "zeroShift") != NULL){
 		zero_shift = get_option_int_val(slot_num, "zeroShift");
@@ -122,7 +128,7 @@ void encoderPWM_task(void *arg)
 		ESP_LOGD(TAG, "calibrationFlag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}
 
-    uint16_t MIN_VAL = 4;
+    uint16_t MIN_VAL = 0;
 	// if (strstr(me_config.slot_options[slot_num], "pwmMinVal") != NULL){
 	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMinVal");
 	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
@@ -207,6 +213,7 @@ void encoderPWM_task(void *arg)
 		vTaskDelay(pdMS_TO_TICKS(10));
 		if (tickVals.flag){
 			raw_val = tickVals.dTime + offset + pos_length/2;
+			//raw_val = tickVals.dTime + offset;
 		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
 			raw_val = 0;
 		}
@@ -229,13 +236,23 @@ void encoderPWM_task(void *arg)
 			}
 		}
 		if (sum >= (ANTI_DEBOUNCE_INERATIONS - 1)){
-			current_pos = (raw_val / pos_length)+zero_shift;
+			current_pos = 0;
+			float tmpVal = raw_val;
+			while(tmpVal > pos_length){
+				current_pos++;
+				tmpVal -= pos_length;
+			}
+			//current_pos = ((raw_val- pos_length/2)/ pos_length)+zero_shift;
 			while(current_pos>=num_of_pos){
 				current_pos -= num_of_pos;
 			}
+
+			if(dirInverse){
+				current_pos = num_of_pos-current_pos;
+			}
 		}
 
-		//ESP_LOGD(TAG, "raw_val:%d center:%d", raw_val, (int)(current_pos*pos_length) );
+		//ESP_LOGD(TAG, "raw_val:%d center:%d delta:%d", raw_val, (int)(current_pos*pos_length+pos_length/2), abs(raw_val-(current_pos*pos_length+pos_length/2)) );
 
 		if (current_pos != prev_pos){
 			//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);
@@ -271,13 +288,13 @@ void encoderPWM_task(void *arg)
 	}
 }
 
-void start_encoderPWM_task(int slot_num)
+void start_encoderPPM_task(int slot_num)
 {
 
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
 	// int slot_num = *(int*) arg;
-	xTaskCreate(encoderPWM_task, "encoderCalc", 1024 * 4, &t_slot_num, 1, NULL);
+	xTaskCreate(encoderPPM_task, "encoderCalc", 1024 * 4, &t_slot_num, 1, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "pwmEncoder init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

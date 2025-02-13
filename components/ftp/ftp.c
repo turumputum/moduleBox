@@ -68,6 +68,7 @@ extern int FTP_TASK_FINISH_BIT;
 extern EventGroupHandle_t xEventTask;
 
 extern configuration me_config;
+extern stateStruct me_state;
 
 esp_netif_t *net_if[MAX_ACTIVE_INTERFACES];
 
@@ -77,6 +78,7 @@ const char *FTP_TAG = "[Ftp]";
 static const char *MOUNT_POINT = "/sdcard";
 
 ftp_state_t ftp_state;
+
 
 static uint8_t ftp_stop = 0;
 char ftp_user[FTP_USER_PASS_LEN_MAX + 1];
@@ -1462,6 +1464,7 @@ void ftp_task(void *pvParameters) {
 	time_ms = mp_hal_ticks_ms();
 
 	ESP_LOGD("[Ftp]", "FTP init complite. Duration: %ld ms. Heap usage: %lu", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
+	me_state.FTP_init_res = ESP_OK;
 	while (1) {
 		// Calculate time between two ftp_run() calls
 		elapsed = mp_hal_ticks_ms() - time_ms;
@@ -1488,7 +1491,7 @@ void ftp_task(void *pvParameters) {
 			ftp_state = ftp_getstate();
 		}
 		if (ftp_state == E_FTP_STE_READY) {
-			vTaskDelay(pdMS_TO_TICKS(10));
+			vTaskDelay(pdMS_TO_TICKS(20));
 		}else{
 			vTaskDelay(1);
 		}

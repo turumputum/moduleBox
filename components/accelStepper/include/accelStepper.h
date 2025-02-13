@@ -69,7 +69,7 @@ typedef struct
 	/// The last step time in microseconds.
 	unsigned long _lastStepTime;
 
-	/// The minimum allowed pulse width in microseconds.
+	/// The minimum allowed pulse width in nanoseconds.
 	unsigned int _minPulseWidth;
 
 	/// Is the direction pin inverted?
@@ -87,13 +87,13 @@ typedef struct
 	/// The step counter for speed calculations.
 	long _n;
 
-	/// Initial step size in microseconds.
+	/// Initial step size in nanoseconds.
 	int32_t _c0;
 
-	/// Last step size in microseconds.
+	/// Last step size in nanoseconds.
 	int32_t _cn;
 
-	/// Min step size in microseconds based on maxSpeed.
+	/// Min step size in nanoseconds based on maxSpeed.
 	int32_t _cmin; // at max speed
 
 	/// Current direction motor is spinning in.
@@ -130,7 +130,8 @@ typedef struct
 
 
 //Constrains a number to be within a range defined by minimum and maximum.
-extern float constrain(float value, float minimum, float maximum);
+//extern float constrain(float value, float minimum, float maximum);
+int32_t constrain(int32_t value, int32_t minimum, int32_t maximum);
 
 
 /// Initialization. You can have multiple simultaneous steppers, all moving

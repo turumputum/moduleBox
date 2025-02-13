@@ -158,7 +158,7 @@ void computeNewSpeed(Stepper_t* motor){
 	}else{
 		// Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
 		motor->_cn = motor->_cn - ((2.0 * motor->_cn) / ((4.0 * motor->_n) + 1)); // Equation 13
-		motor->_cn = (motor->_cn > motor->_cmin) ? motor->_cn : motor->_cmin; //max(motor->_cn, motor->_cmin);
+		motor->_cn = (motor->_cn> motor->_cmin) ? motor->_cn : motor->_cmin; //max(motor->_cn, motor->_cmin);
 	}
 
 	motor->_n++;
@@ -264,9 +264,9 @@ void InitStepper(Stepper_t* motor, uint8_t interface, uint16_t pin1, uint16_t pi
 	
     // NEW
 	motor->_n = 0;
-	motor->_c0 = 25;
+	motor->_c0 = 100000000;
     motor->_cn = 0;
-    motor->_cmin = 1;
+    motor->_cmin = 10000;
     motor->_direction = DIRECTION_CCW;
 
 	motor->init_state=-1;
@@ -363,12 +363,10 @@ void set_stepper_sensor(Stepper_t* motor,int8_t pin_down, uint8_t inverse_down, 
 }
 
 
-void setMaxSpeed(Stepper_t* motor, int32_t speed)
-{
-    if (motor->_maxSpeed != speed)
-    {
+void setMaxSpeed(Stepper_t* motor, int32_t speed){
+    if (motor->_maxSpeed != speed){
     	motor->_maxSpeed = speed;
-    	motor->_cmin = 1000000000.0 / speed;
+    	motor->_cmin = 1000000000.0 / speed; //1000000000.0
 		// Recompute _n from current speed and adjust speed if accelerating or cruising
 		if (motor->_n > 0)
 		{
@@ -378,8 +376,7 @@ void setMaxSpeed(Stepper_t* motor, int32_t speed)
     }
 }
 
-int32_t maxSpeed(Stepper_t* motor)
-{
+int32_t maxSpeed(Stepper_t* motor){
     return motor->_maxSpeed;
 }
 
@@ -398,12 +395,19 @@ void setAcceleration(Stepper_t* motor, int32_t acceleration)
     }
 }
 
-float constrain(float value, float minimum, float maximum)
+int32_t constrain(int32_t value, int32_t minimum, int32_t maximum)
 {
 	if(value < minimum) return minimum;
 	else if(value > maximum) return maximum;
 	else return value;
 }
+
+// float constrain(float value, float minimum, float maximum)
+// {
+// 	if(value < minimum) return minimum;
+// 	else if(value > maximum) return maximum;
+// 	else return value;
+// }
 
 void setSpeed(Stepper_t* motor, int32_t speed)
 {
@@ -412,19 +416,18 @@ void setSpeed(Stepper_t* motor, int32_t speed)
 
     speed = constrain(speed, -motor->_maxSpeed, motor->_maxSpeed);
 
-    if (speed == 0.0) {
+    if (speed == 0) {
     	motor->_stepInterval = 0;
     }
     else  {
-    	motor->_stepInterval = fabs(1000000000.0 / speed);
-    	motor->_direction = (speed > 0.0) ? DIRECTION_CW : DIRECTION_CCW;
+    	motor->_stepInterval = abs(1000000000 / speed);
+    	motor->_direction = (speed > 0) ? DIRECTION_CW : DIRECTION_CCW;
     }
 
     motor->_speed = speed;
 }
 
-int32_t speed(Stepper_t* motor)
-{
+int32_t speed(Stepper_t* motor){
     return motor->_speed;
 }
 
@@ -432,20 +435,15 @@ int32_t speed(Stepper_t* motor)
 // bit 0 of the mask corresponds to _pin[0]
 // bit 1 of the mask corresponds to _pin[1]
 // ....
-void setOutputPins(Stepper_t* motor, uint8_t mask)
-{
+void setOutputPins(Stepper_t* motor, uint8_t mask){
     uint8_t numpins = 2;
 	uint8_t i;
-	for (i = 0; i < numpins; i++)
-	{
+	for (i = 0; i < numpins; i++){
 		//Arduino: digitalWrite(motor->_pin[i], (mask & (1 << i)) ? (HIGH ^ motor->_pinInverted[i]) : (LOW ^ motor->_pinInverted[i]));
-		if(mask & (1 << i))
-		{
+		if(mask & (1 << i))	{
 			if (0x11 ^ motor->_pinInverted[i]) gpio_set_level(motor->_pin[i], 1);
 			else gpio_set_level(motor->_pin[i], 0);
-		}
-		else
-		{
+		}else{
 			if (0x00 ^ motor->_pinInverted[i]) gpio_set_level(motor->_pin[i], 1);
 			else gpio_set_level(motor->_pin[i], 0);
 		}
@@ -538,13 +536,11 @@ void setMinPulseWidth(Stepper_t* motor, unsigned int minWidth)
 	motor->_minPulseWidth = minWidth;
 }
 
-void setEnablePin(Stepper_t* motor, uint16_t enablePin)
-{
+void setEnablePin(Stepper_t* motor, uint16_t enablePin){
 	motor->_enablePin = enablePin;
 
     // This happens after construction, so init pin now.
-    if (motor->_enablePin != 0xff)
-    {
+    if (motor->_enablePin != 0xff)    {
         //Arduino: pinMode(motor->_enablePin, OUTPUT);
 		gpio_config_t io_conf ={
 			.intr_type = GPIO_INTR_DISABLE,
@@ -602,22 +598,20 @@ void runToNewPosition(Stepper_t* motor, long position)
     runToPosition(motor);
 }
 
-void stop(Stepper_t* motor)
-{
-    if (motor->_speed != 0)
-    {
+void stop(Stepper_t* motor){
+    //ESP_LOGD(TAG, "stop! speed: %ld", motor->_speed);
+	if (motor->_speed != 0){
+		
 		long stepsToStop = (long)((motor->_speed * motor->_speed) / (2 * motor->_acceleration)) + 1; // Equation 16 (+integer rounding)
-
+		ESP_LOGD(TAG, "stop! strepsToStop: %ld", stepsToStop);
 		if (motor->_speed > 0)
 			move(motor, stepsToStop);
-
 		else
 			move(motor, -stepsToStop);
     }
 }
 
-uint8_t isRunning(Stepper_t* motor)
-{
+uint8_t isRunning(Stepper_t* motor){
     return !(motor->_speed == 0 && motor->_targetPos == motor->_currentPos);
 }
 

@@ -67,6 +67,7 @@ void start_startup_task(int slot_num) {
 	xTaskCreatePinnedToCore(startup_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "startup_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+
 //---------------------------------COUNTER---------------------------------
 void counter_task(void *arg) {
     int slot_num = *(int*) arg;
@@ -266,6 +267,136 @@ void start_timer_task(int slot_num) {
 	sprintf(tmpString, "timer_task_%d", slot_num);
 	xTaskCreatePinnedToCore(timer_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "timer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+//---------------------------------FLYWHEEL--------------------------------
+void flywheel_task(void *arg){
+	int slot_num = *(int*) arg;
+
+	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
+
+    float decrement=0.1;
+    if (strstr(me_config.slot_options[slot_num], "decrement") != NULL) {
+		decrement = get_option_float_val(slot_num, "decrement");
+		ESP_LOGD(TAG, "Set decrement:%f for slot:%d",decrement, slot_num);
+	}
+
+    uint16_t period = 100;
+    if (strstr(me_config.slot_options[slot_num], "period") != NULL) {
+		period = get_option_int_val(slot_num, "period");
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",period, slot_num);
+	}
+
+    uint16_t threshold = 0;
+    if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
+        threshold = get_option_int_val(slot_num, "threshold");
+        if (threshold <= 0){
+            ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
+            threshold = 0; // default val
+        }else{
+            ESP_LOGD(TAG, "threshold:%d. Slot:%d", threshold, slot_num);
+        }
+    }
+
+	int32_t maxVal = 20;
+	if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
+		maxVal = get_option_int_val(slot_num, "maxVal");
+		ESP_LOGD(TAG, "Set max_counter:%ld for slot:%d", maxVal, slot_num);
+	}
+
+    int32_t minVal = 0;
+	if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
+		minVal = get_option_int_val(slot_num, "minVal");
+		ESP_LOGD(TAG, "Set min_counter:%ld for slot:%d", minVal, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/flywheel_0")+3];
+		sprintf(t_str, "%s/flywheel_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+    float flywheelCount=0;
+    float _flywheelCount=0;
+    uint8_t flywheel_state=0;
+    uint8_t _flywheel_state=0;
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    for(;;) {
+        flywheelCount-=decrement;
+        if(flywheelCount<minVal){
+            flywheelCount=minVal;
+        }
+
+        if(threshold>0){
+            if(flywheelCount>threshold){
+                flywheel_state=1;
+            }else{
+                flywheel_state=0;
+            }
+
+            if(flywheel_state!= _flywheel_state){
+                _flywheel_state=flywheel_state;
+                //ESP_LOGD(TAG, "Flywheel_state:%d", flywheel_state);
+                char str[3];
+                memset(str, 0, strlen(str));
+                sprintf(str, "%d", flywheel_state);
+                report(str, slot_num);
+            }
+        }else{
+            if((int)flywheelCount!=(int)_flywheelCount){
+                _flywheelCount=flywheelCount;
+                //ESP_LOGD(TAG, "Flywheel_state:%d", flywheel_state);
+                char str[10];
+                memset(str, 0, strlen(str));
+                sprintf(str, "/count:%d", (int)flywheelCount);
+                report(str, slot_num);
+            }
+        }
+
+        //----------------------CHEKING COMMAND QUEUE----------------------------
+        command_message_t msg;
+        uint8_t recv_state=0;
+
+        while(xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS) {
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
+            if(strstr(cmd, "setCount")!=NULL){
+                if(strstr(payload, "+")!=NULL){
+                    flywheelCount+=atoi(payload);
+                }else if(strstr(payload, "-")!=NULL){
+                    flywheelCount-=atoi(payload);
+                }else{
+                    flywheelCount=atoi(payload);
+                }
+                if(flywheelCount>maxVal) flywheelCount=maxVal;
+                if(flywheelCount<minVal) flywheelCount=minVal;
+                ESP_LOGD(TAG, "Set flywheelCount:%f for slot:%d", flywheelCount, slot_num);
+            }
+        }
+        vTaskDelayUntil(&lastWakeTime, period);
+    }
+
+}
+
+void start_flywheel_task(int slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "flywheel_task_%d", slot_num);
+	xTaskCreate(flywheel_task, tmpString, 1024*4, &t_slot_num,12, NULL);
+
+	ESP_LOGD(TAG,"flywheel_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 
@@ -558,6 +689,103 @@ void start_collector_task(int slot_num) {
 }
 
 
+//------------------------SCALER-------------------------
+//------------------------tankControl----------------------
+void scaler_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
+
+    int16_t zeroDeadZone = 50;
+	if (strstr(me_config.slot_options[slot_num], "zeroDeadZone") != NULL) {
+		zeroDeadZone = get_option_int_val(slot_num, "zeroDeadZone");
+		ESP_LOGD(TAG, "Set zeroDeadZone:%d for slot:%d",zeroDeadZone, slot_num);
+	}
+    
+
+    int32_t inputMinVal = 0;
+	if (strstr(me_config.slot_options[slot_num], "inputMinVal") != NULL) {
+		inputMinVal = get_option_int_val(slot_num, "inputMinVal");
+		ESP_LOGD(TAG, "Set inputMinVal:%ld for slot:%d",inputMinVal, slot_num);
+	}
+    int32_t inputMaxVal = 255;
+	if (strstr(me_config.slot_options[slot_num], "inputMaxVal") != NULL) {
+		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal");
+		ESP_LOGD(TAG, "Set inputMaxVal:%ld for slot:%d",inputMaxVal, slot_num);
+	}
+    // uint16_t inputMidlVal = (inputMaxVal-inputMinVal)/2+inputMinVal;
+    // ESP_LOGD(TAG, "Set inputMidlVal:%d for slot:%d",inputMidlVal, slot_num);
+
+    int32_t outputMinVal = 0;
+	if (strstr(me_config.slot_options[slot_num], "outputMinVal") != NULL) {
+		outputMinVal = get_option_int_val(slot_num, "outputMinVal");
+		ESP_LOGD(TAG, "Set outputMinVal:%ld for slot:%d",outputMinVal, slot_num);
+	}
+
+    int32_t outputMaxVal = 255;
+	if (strstr(me_config.slot_options[slot_num], "outputMaxVal") != NULL) {
+		outputMaxVal = get_option_int_val(slot_num, "outputMaxVal");
+		ESP_LOGD(TAG, "Set outputMaxVal:%ld for slot:%d",outputMaxVal, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/scaler_0")+3];
+		sprintf(t_str, "%s/scaler_%d",me_config.deviceName, slot_num);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
+	}
+
+    while(1){
+        command_message_t cmd;
+        if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
+            char *command=cmd.str+strlen(me_state.action_topic_list[slot_num]);
+            if(strstr(command, ":")==NULL){
+                ESP_LOGE(TAG, "No arguments found. EXIT"); 
+            }else{
+                char *cmd_arg = strstr(command, ":")+1;
+                int32_t inputVal = atoi(cmd_arg);
+                if(inputVal<inputMinVal){
+                    inputVal = inputMinVal;
+                }else if(inputVal>inputMaxVal){
+                    inputVal = inputMaxVal;
+                }
+                float inputFloat = (float)(inputVal-inputMinVal)/(inputMaxVal-inputMinVal);
+                float outputVal = inputFloat*(outputMaxVal-outputMinVal)+outputMinVal;
+                if(outputVal<outputMinVal){
+                    outputVal = outputMinVal;
+                }else if(outputVal>outputMaxVal){
+                    outputVal = outputMaxVal;
+                }
+                if(abs(outputVal)<zeroDeadZone){
+                    outputVal = 0;
+                }
+                //ESP_LOGD(TAG, "inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
+                char str[50];
+                memset(str, 0, sizeof(str));
+                sprintf(str, "%ld", (int32_t)outputVal);
+                report(str, slot_num);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+void start_scaler_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "scaler_task_%d", slot_num);
+	xTaskCreatePinnedToCore(scaler_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+    ESP_LOGD(TAG, "scaler_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
 //------------------------tankControl----------------------
 void tankControl_task(void* arg) {
     int slot_num = *(int*)arg;
@@ -666,7 +894,6 @@ void tankControl_task(void* arg) {
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
-
 
 void start_tankControl_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();

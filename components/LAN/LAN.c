@@ -90,9 +90,40 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t
 	ESP_LOGI(TAG, "~~~~~~~~~~~");
 }
 
+//-----------------------OSC-----------------------------------
 void osc_recive_task(){
+	if((strlen(me_config.oscServerAdress) < 7)||(me_config.oscMyPort < 1)){
+		ESP_LOGD(TAG, "wrong OSC config");
+		vTaskDelay(pdMS_TO_TICKS(200));
+		vTaskDelete(NULL);
+	}
+
+	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
+		//ESP_LOGD(TAG, "LAN not ready");
+		vTaskDelay(pdMS_TO_TICKS(200));
+	}
+
+	me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (me_state.osc_socket < 0) {
+		printf("Failed to create socket for OSC: %d\n", errno);
+		writeErrorTxt("Failed to create socket for OSC");
+		vTaskDelete(NULL);
+	}else{
+		ESP_LOGD(TAG,"OSC socket OK num:%d", me_state.osc_socket);
+	}
+
+	// struct timeval timeout;
+	// timeout.tv_sec = 10;
+	// timeout.tv_usec = 0;
+	// setsockopt (me_state.osc_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+
 	int buff_size=250;
-	char buff[buff_size];
+	//char buff[buff_size];
+	//char *buffForRecive=(char*)malloc(buff_size);
+	char *buffForRecive=heap_caps_calloc(1,buff_size,MALLOC_CAP_SPIRAM);
+	//char *sringForReport=(char*)malloc(buff_size);
+	char *sringForReport=heap_caps_calloc(1,buff_size,MALLOC_CAP_SPIRAM);
+	//calloc(buff,buff_size);
 
 	tosc_message osc;
 
@@ -110,39 +141,76 @@ void osc_recive_task(){
 	}
 
 	ESP_LOGD(TAG, "OSC revive task STARTED, on port:%d",me_config.oscMyPort);
+	me_state.OSC_init_res = ESP_OK;
 	while(1){
-		int len=recvfrom(me_state.osc_socket, buff, buff_size-1, 0,(struct sockaddr *)&source_addr, &socklen);
+		int len=recvfrom(me_state.osc_socket, buffForRecive, buff_size-1, 0,(struct sockaddr *)&source_addr, &socklen);
 		if(len<0){
 			//ESP_LOGD(TAG, "OSC incoming fail(");
 		}else{
-			ESP_LOGD(TAG, "OSC incoming:%s", buff);
-			if (!tosc_parseMessage(&osc, buff, len)) {
+			//ESP_LOGD(TAG, "OSC incoming:%s", buffForRecive);
+			if (!tosc_parseMessage(&osc, buffForRecive, len)) {
 				//printf("Received OSC message: [%i bytes] %s %s ",
 					//len, // the number of bytes in the OSC message
 					//tosc_getAddress(&osc), // the OSC address string, e.g. "/button1"
+					
 					tosc_getFormat(&osc); // the OSC format string, e.g. "f"
 				for (int i = 0; osc.format[i] != '\0'; i++) {
 					if(osc.format[i]== 'i'){
 						
-						char strT[255];
-						sprintf(strT, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
-						execute(strT);
+						//char strT[255];
+						sprintf(sringForReport, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
+						char *temp = sringForReport;
+						if (strstr(temp, me_config.deviceName) != NULL) {
+							temp += 1;
+						}
+						execute(temp);
+						
 					} 
 					if(osc.format[i]== 'f'){
 						//printf("%i ", ); break;
-						char strT[255];
-						sprintf(strT, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
-						execute(strT);
+						//char strT[255];
+						sprintf(sringForReport, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
+						char *temp = sringForReport;
+						if (strstr(temp, me_config.deviceName) != NULL) {
+							temp += 1;
+						}
+						execute(temp);
 					} 
 				}
 			}
 		}
-		vTaskDelay(pdMS_TO_TICKS(20));
+		// UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
+        // ESP_LOGI(TAG, "Stack remaining: %u", stack_remaining);
+		vTaskDelay(pdMS_TO_TICKS(25));
 	}
 }
 
+void start_osc_recive_task(){
+	xTaskCreatePinnedToCore(osc_recive_task, "osc_recive_task", 1024 * 6, NULL, configMAX_PRIORITIES - 10, NULL,0);
+}
 
+//------------------------------UDP----------------------------------------------
 void udp_recive_task(){
+	if((strlen(me_config.udpServerAdress) < 7)||(me_config.udpMyPort < 1)){
+		ESP_LOGD(TAG, "wrong UDP config");
+		vTaskDelay(pdMS_TO_TICKS(200));
+		vTaskDelete(NULL);
+	}
+
+	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
+		//ESP_LOGD(TAG, "LAN not ready");
+		vTaskDelay(pdMS_TO_TICKS(200));
+	}
+
+	me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (me_state.udp_socket < 0) {
+		printf("Failed to create socket for UDP: %d\n", errno);
+		writeErrorTxt("Failed to create socket for UDP");
+		vTaskDelete(NULL);
+	}else{
+		ESP_LOGD(TAG,"UDP socket OK num:%d", me_state.udp_socket);
+	}
+	
 	int buff_size=250;
 	char buff[buff_size];
 
@@ -160,6 +228,7 @@ void udp_recive_task(){
 	}
 
 	ESP_LOGD(TAG, "UDP revive task STARTED, on port:%d",me_config.udpMyPort);
+	me_state.UDP_init_res = ESP_OK;
 	while(1){
 		int len=recvfrom(me_state.udp_socket, buff, buff_size-1, 0,(struct sockaddr *)&source_addr, &socklen);
 		if(len<0){
@@ -169,22 +238,37 @@ void udp_recive_task(){
 			char strT[255];
 			sprintf(strT, "%.*s", len, buff);
 			execute(strT);
-			//to-do add to queue
-
-			// buff[len]='\0';
-			// execute(buff);
-			// if(strlen(me_config.udp_cross_link)>3){
-			// 	crosslinks_process(me_config.udp_cross_link,buff);
-			// }
 		}
 		vTaskDelay(pdMS_TO_TICKS(20));
 	}
 }
 
-void wait_lan(){
-	while (me_state.LAN_init_res != ESP_OK)
-	{
-		vTaskDelay(pdMS_TO_TICKS(100));
+void start_udp_recive_task(){
+	xTaskCreatePinnedToCore(udp_recive_task, "udp_recive_task", 1024 * 6, NULL, configMAX_PRIORITIES - 10, NULL,0);
+}
+
+
+//------------------------------FTP----------------------------------------------
+void start_ftp_task(){
+	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
+		//ESP_LOGD(TAG, "LAN not ready");
+		vTaskDelay(pdMS_TO_TICKS(200));
+	}
+
+	if(me_config.FTP_enable){
+		uint32_t startTick = xTaskGetTickCount();
+		uint32_t heapBefore = xPortGetFreeHeapSize();
+		xTaskCreatePinnedToCore(ftp_task, "FTP", 1024 * 6, NULL, 4, NULL, 0);
+		ESP_LOGD(TAG, "FTP task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	}
+}
+
+
+//------------------------------MDNS----------------------------------------------
+void start_mdns_task(){
+	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
+		//ESP_LOGD(TAG, "LAN not ready");
+		vTaskDelay(pdMS_TO_TICKS(200));
 	}
 
 	if(me_config.MDNS_enable){
@@ -208,30 +292,22 @@ void wait_lan(){
 		ESP_LOGD(TAG, "mDNS task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 		
 	}
+}
 
+
+//------------------------------MQTT----------------------------------------------
+void start_mqtt_task(){
+	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
+		//ESP_LOGD(TAG, "LAN not ready");
+		vTaskDelay(pdMS_TO_TICKS(200));
+	}
 	if (strlen(me_config.mqttBrokerAdress) > 3)	{
 		mqtt_app_start();
-
+	}else{
+		ESP_LOGD(TAG, "MQTT wrong config");
 	}
-
-	if((me_state.osc_socket >= 0)&&(me_config.oscMyPort>0)){
-		xTaskCreatePinnedToCore(osc_recive_task, "osc_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL,0);
-		//xTaskCreate(osc_recive_task, "osc_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
-	}
-
-	if((me_state.udp_socket >= 0)&&(me_config.udpMyPort>0)){
-		xTaskCreatePinnedToCore(udp_recive_task, "udp_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL,0);
-		//xTaskCreate(udp_recive_task, "udp_recive_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
-	}
-
-	if(me_config.FTP_enable){
-		uint32_t startTick = xTaskGetTickCount();
-		uint32_t heapBefore = xPortGetFreeHeapSize();
-		xTaskCreatePinnedToCore(ftp_task, "FTP", 1024 * 6, NULL, 2, NULL, 0);
-		ESP_LOGD(TAG, "FTP task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-	}
-	vTaskDelete(NULL);
 }
+
 
 int LAN_init(void) {
 	me_state.LAN_init_res = -1;
@@ -339,39 +415,22 @@ int LAN_init(void) {
 	ESP_ERROR_CHECK(esp_eth_start(eth_handle));
 
 	esp_netif_ip_info_t info_t;
-	if (me_config.DHCP == 0) {
-		ip4addr_aton((const char*) me_config.ipAdress, &info_t.ip);
-		ip4addr_aton((const char*) me_config.gateWay, &info_t.gw);
-		ip4addr_aton((const char*) me_config.netMask, &info_t.netmask);
+	if (me_config.LAN_DHCP == 0) {
+		ip4addr_aton((const char*) me_config.LAN_ipAdress, &info_t.ip);
+		ip4addr_aton((const char*) me_config.LAN_gateWay, &info_t.gw);
+		ip4addr_aton((const char*) me_config.LAN_netMask, &info_t.netmask);
 		esp_netif_dhcpc_stop(eth_netif);
 		esp_netif_set_ip_info(eth_netif, &info_t);
 	}
 
 
-	me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (me_state.udp_socket < 0) {
-		printf("Failed to create socket for UDP: %d\n", errno);
-		return -1;
-	}else{
-		ESP_LOGD(TAG,"UDP socket OK num:%d", me_state.udp_socket);
-	}
+	
 
 
 
-	me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (me_state.osc_socket < 0) {
-		printf("Failed to create socket for OSC: %d\n", errno);
-		return -1;
-	}else{
-		ESP_LOGD(TAG,"OSC socket OK num:%d", me_state.osc_socket);
-	}
 
-	struct timeval timeout;
-	timeout.tv_sec = 10;
-	timeout.tv_usec = 0;
-	setsockopt (me_state.osc_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
 
-	xTaskCreatePinnedToCore(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL, 0);
+	//xTaskCreatePinnedToCore(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL, 0);
 	//xTaskCreate(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	vTaskDelay(pdMS_TO_TICKS(1000));
 

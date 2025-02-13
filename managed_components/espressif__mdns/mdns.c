@@ -25,7 +25,7 @@ static esp_err_t _mdns_sync_browse_action(mdns_action_type_t type, mdns_browse_s
 static void _mdns_browse_sync(mdns_browse_sync_t *browse_sync);
 static void _mdns_browse_finish(mdns_browse_t *browse);
 static void _mdns_browse_add(mdns_browse_t *browse);
-static void _mdns_browse_send(mdns_browse_t *browse);
+static void _mdns_browse_send(mdns_browse_t *browse, mdns_if_t interface);
 
 #if CONFIG_ETH_ENABLED && CONFIG_MDNS_PREDEF_NETIF_ETH
 #include "esp_eth.h"
@@ -2794,6 +2794,16 @@ static void _mdns_remove_scheduled_service_packets(mdns_service_t *service)
     }
 }
 
+static void _mdns_free_service_subtype(mdns_service_t *service)
+{
+    while (service->subtype) {
+        mdns_subtype_t *next = service->subtype->next;
+        free((char *)service->subtype->subtype);
+        free(service->subtype);
+        service->subtype = next;
+    }
+}
+
 /**
  * @brief  free service memory
  *
@@ -2815,12 +2825,7 @@ static void _mdns_free_service(mdns_service_t *service)
         free((char *)s->value);
         free(s);
     }
-    while (service->subtype) {
-        mdns_subtype_t *next = service->subtype->next;
-        free((char *)service->subtype->subtype);
-        free(service->subtype);
-        service->subtype = next;
-    }
+    _mdns_free_service_subtype(service);
     free(service);
 }
 
@@ -4476,7 +4481,11 @@ void mdns_preset_if_handle_system_event(void *arg, esp_event_base_t event_base,
                         post_mdns_enable_pcb(mdns_if, MDNS_IP_PROTOCOL_V6);
                         post_mdns_announce_pcb(mdns_if, MDNS_IP_PROTOCOL_V4);
                     }
-
+                    mdns_browse_t *browse = _mdns_server->browse;
+                    while (browse) {
+                        _mdns_browse_send(browse, mdns_if);
+                        browse = browse->next;
+                    }
                 }
                 break;
                 default:
@@ -5956,11 +5965,6 @@ static mdns_txt_item_t *_copy_mdns_txt_items(mdns_txt_linked_item_t *items, uint
     for (mdns_txt_linked_item_t *tmp = items; tmp != NULL; tmp = tmp->next) {
         ret_index++;
     }
-    if (ret_index == 0) {
-        *txt_count = 0;
-        *txt_value_len = NULL;
-        return NULL;
-    }
     *txt_count = ret_index;
     if (ret_index == 0) {   // handle empty TXT
         *txt_value_len = NULL;
@@ -6300,7 +6304,36 @@ esp_err_t mdns_service_txt_item_remove(const char *service, const char *proto, c
     return mdns_service_txt_item_remove_for_host(NULL, service, proto, NULL, key);
 }
 
-esp_err_t mdns_service_subtype_add_for_host(const char *instance_name, const char *service, const char *proto,
+static esp_err_t _mdns_service_subtype_remove_for_host(mdns_srv_item_t *service, const char *subtype)
+{
+    esp_err_t ret = ESP_ERR_NOT_FOUND;
+    mdns_subtype_t *srv_subtype = service->service->subtype;
+    mdns_subtype_t *pre = service->service->subtype;
+    while (srv_subtype) {
+        if (strcmp(srv_subtype->subtype, subtype) == 0) {
+            // Target subtype is found.
+            if (srv_subtype == service->service->subtype) {
+                // The first node needs to be removed
+                service->service->subtype = service->service->subtype->next;
+            } else {
+                pre->next = srv_subtype->next;
+            }
+            free((char *)srv_subtype->subtype);
+            free(srv_subtype);
+            ret = ESP_OK;
+            break;
+        }
+        pre = srv_subtype;
+        srv_subtype = srv_subtype->next;
+    }
+    if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "Subtype : %s doesn't exist", subtype);
+    }
+
+    return ret;
+}
+
+esp_err_t mdns_service_subtype_remove_for_host(const char *instance_name, const char *service, const char *proto,
         const char *hostname, const char *subtype)
 {
     MDNS_SERVICE_LOCK();
@@ -6311,27 +6344,123 @@ esp_err_t mdns_service_subtype_add_for_host(const char *instance_name, const cha
     mdns_srv_item_t *s = _mdns_get_service_item_instance(instance_name, service, proto, hostname);
     ESP_GOTO_ON_FALSE(s, ESP_ERR_NOT_FOUND, err, TAG, "Service doesn't exist");
 
-    mdns_subtype_t *srv_subtype = s->service->subtype;
+    ret = _mdns_service_subtype_remove_for_host(s, subtype);
+    ESP_GOTO_ON_ERROR(ret, err, TAG, "Failed to remove the subtype: %s", subtype);
+
+    // TODO: Need to transmit a sendbye message for the removed subtype.
+    // TODO: Need to remove this subtype answer from the scheduled answer list.
+err:
+    MDNS_SERVICE_UNLOCK();
+    return ret;
+}
+
+static esp_err_t _mdns_service_subtype_add_for_host(mdns_srv_item_t *service, const char *subtype)
+{
+    esp_err_t ret = ESP_OK;
+    mdns_subtype_t *srv_subtype = service->service->subtype;
     while (srv_subtype) {
-        ESP_GOTO_ON_FALSE(strcmp(srv_subtype->subtype, subtype) != 0, ESP_ERR_INVALID_ARG, err, TAG, "The same subtype has already been added");
+        ESP_GOTO_ON_FALSE(strcmp(srv_subtype->subtype, subtype) != 0, ESP_ERR_INVALID_ARG, err, TAG, "Subtype: %s has already been added", subtype);
         srv_subtype = srv_subtype->next;
     }
 
-    mdns_service_t *srv = s->service;
     mdns_subtype_t *subtype_item = (mdns_subtype_t *)malloc(sizeof(mdns_subtype_t));
     ESP_GOTO_ON_FALSE(subtype_item, ESP_ERR_NO_MEM, out_of_mem, TAG, "Out of memory");
     subtype_item->subtype = strdup(subtype);
     ESP_GOTO_ON_FALSE(subtype_item->subtype, ESP_ERR_NO_MEM, out_of_mem, TAG, "Out of memory");
-    subtype_item->next = srv->subtype;
-    srv->subtype = subtype_item;
+    subtype_item->next = service->service->subtype;
+    service->service->subtype = subtype_item;
 
 err:
-    MDNS_SERVICE_UNLOCK();
     return ret;
 out_of_mem:
-    MDNS_SERVICE_UNLOCK();
     HOOK_MALLOC_FAILED;
     free(subtype_item);
+    return ret;
+}
+
+esp_err_t mdns_service_subtype_add_multiple_items_for_host(const char *instance_name, const char *service, const char *proto,
+        const char *hostname, mdns_subtype_item_t subtype[], uint8_t num_items)
+{
+    MDNS_SERVICE_LOCK();
+    esp_err_t ret = ESP_OK;
+    int cur_index = 0;
+    ESP_GOTO_ON_FALSE(_mdns_server && _mdns_server->services && !_str_null_or_empty(service) && !_str_null_or_empty(proto) &&
+                      (num_items > 0), ESP_ERR_INVALID_ARG, err, TAG, "Invalid state or arguments");
+
+    mdns_srv_item_t *s = _mdns_get_service_item_instance(instance_name, service, proto, hostname);
+    ESP_GOTO_ON_FALSE(s, ESP_ERR_NOT_FOUND, err, TAG, "Service doesn't exist");
+
+    for (; cur_index < num_items; cur_index++) {
+        ret = _mdns_service_subtype_add_for_host(s, subtype[cur_index].subtype);
+        if (ret == ESP_OK) {
+            continue;
+        } else if (ret == ESP_ERR_NO_MEM) {
+            ESP_LOGE(TAG, "Out of memory");
+            goto err;
+        } else {
+            ESP_LOGE(TAG, "Failed to add subtype: %s", subtype[cur_index].subtype);
+            goto exit;
+        }
+    }
+
+    _mdns_announce_all_pcbs(&s, 1, false);
+err:
+    if (ret == ESP_ERR_NO_MEM) {
+        for (int idx = 0; idx < cur_index; idx++) {
+            _mdns_service_subtype_remove_for_host(s, subtype[idx].subtype);
+        }
+    }
+exit:
+    MDNS_SERVICE_UNLOCK();
+    return ret;
+}
+
+esp_err_t mdns_service_subtype_add_for_host(const char *instance_name, const char *service_type, const char *proto,
+        const char *hostname, const char *subtype)
+{
+    mdns_subtype_item_t _subtype[1];
+    _subtype[0].subtype = subtype;
+    return mdns_service_subtype_add_multiple_items_for_host(instance_name, service_type, proto, hostname, _subtype, 1);
+}
+
+esp_err_t mdns_service_subtype_update_multiple_items_for_host(const char *instance_name, const char *service_type, const char *proto,
+        const char *hostname, mdns_subtype_item_t subtype[], uint8_t num_items)
+{
+    MDNS_SERVICE_LOCK();
+    esp_err_t ret = ESP_OK;
+    int cur_index = 0;
+    ESP_GOTO_ON_FALSE(_mdns_server && _mdns_server->services && !_str_null_or_empty(service_type) && !_str_null_or_empty(proto),
+                      ESP_ERR_INVALID_ARG, err, TAG, "Invalid state or arguments");
+
+    mdns_srv_item_t *s = _mdns_get_service_item_instance(instance_name, service_type, proto, hostname);
+    ESP_GOTO_ON_FALSE(s, ESP_ERR_NOT_FOUND, err, TAG, "Service doesn't exist");
+
+    // TODO: find subtype needs to say sendbye
+    _mdns_free_service_subtype(s->service);
+
+    for (; cur_index < num_items; cur_index++) {
+        ret = _mdns_service_subtype_add_for_host(s, subtype[cur_index].subtype);
+        if (ret == ESP_OK) {
+            continue;
+        } else if (ret == ESP_ERR_NO_MEM) {
+            ESP_LOGE(TAG, "Out of memory");
+            goto err;
+        } else {
+            ESP_LOGE(TAG, "Failed to add subtype: %s", subtype[cur_index].subtype);
+            goto exit;
+        }
+    }
+    if (num_items) {
+        _mdns_announce_all_pcbs(&s, 1, false);
+    }
+err:
+    if (ret == ESP_ERR_NO_MEM) {
+        for (int idx = 0; idx < cur_index; idx++) {
+            _mdns_service_subtype_remove_for_host(s, subtype[idx].subtype);
+        }
+    }
+exit:
+    MDNS_SERVICE_UNLOCK();
     return ret;
 }
 
@@ -6403,22 +6532,14 @@ esp_err_t mdns_service_remove_for_host(const char *instance, const char *service
             if (_mdns_service_match(a->service, service, proto, hostname)) {
                 if (_mdns_server->services != a) {
                     b->next = a->next;
-                    _mdns_send_bye(&a, 1, false);
-                    _mdns_remove_scheduled_service_packets(a->service);
-                    _mdns_free_service(a->service);
-                    free(a);
-                    a = b->next;
-                    continue;
                 } else {
                     _mdns_server->services = a->next;
-                    _mdns_send_bye(&a, 1, false);
-                    _mdns_remove_scheduled_service_packets(a->service);
-                    _mdns_free_service(a->service);
-                    free(a);
-                    a = _mdns_server->services;
-                    b = a;
-                    continue;
                 }
+                _mdns_send_bye(&a, 1, false);
+                _mdns_remove_scheduled_service_packets(a->service);
+                _mdns_free_service(a->service);
+                free(a);
+                break;
             }
             b = a;
             a = a->next;
@@ -7009,7 +7130,7 @@ static void _mdns_browse_item_free(mdns_browse_t *browse)
     free(browse->service);
     free(browse->proto);
     if (browse->result) {
-        mdns_query_results_free(browse->result);
+        _mdns_query_results_free(browse->result);
     }
     free(browse);
 }
@@ -7132,7 +7253,9 @@ static void _mdns_browse_add(mdns_browse_t *browse)
         browse->next = _mdns_server->browse;
         _mdns_server->browse = browse;
     }
-    _mdns_browse_send(browse);
+    for (uint8_t interface_idx = 0; interface_idx < MDNS_MAX_INTERFACES; interface_idx++) {
+        _mdns_browse_send(browse, (mdns_if_t)interface_idx);
+    }
     if (found) {
         _mdns_browse_item_free(browse);
     }
@@ -7141,7 +7264,7 @@ static void _mdns_browse_add(mdns_browse_t *browse)
 /**
  * @brief  Send PTR query packet to all available interfaces for browsing.
  */
-static void _mdns_browse_send(mdns_browse_t *browse)
+static void _mdns_browse_send(mdns_browse_t *browse, mdns_if_t interface)
 {
     // Using search once for sending the PTR query
     mdns_search_once_t search = {0};
@@ -7154,11 +7277,8 @@ static void _mdns_browse_send(mdns_browse_t *browse)
     search.result = NULL;
     search.next = NULL;
 
-    uint8_t i, j;
-    for (i = 0; i < MDNS_MAX_INTERFACES; i++) {
-        for (j = 0; j < MDNS_IP_PROTOCOL_MAX; j++) {
-            _mdns_search_send_pcb(&search, (mdns_if_t)i, (mdns_ip_protocol_t)j);
-        }
+    for (uint8_t protocol_idx = 0; protocol_idx < MDNS_IP_PROTOCOL_MAX; protocol_idx++) {
+        _mdns_search_send_pcb(&search, interface, (mdns_ip_protocol_t)protocol_idx);
     }
 }
 

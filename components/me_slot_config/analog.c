@@ -124,6 +124,11 @@ void analog_task(void *arg)
 	uint8_t divPin_2 = SLOTS_PIN_MAP[slot_num][1];
 	esp_rom_gpio_pad_select_gpio(divPin_2);
 	gpio_set_direction(divPin_2, GPIO_MODE_OUTPUT);
+
+	gpio_set_level(divPin_1, 1);
+	gpio_set_level(divPin_2, 0);
+	ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
+
     if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
         char *dividerModeStr = get_option_string_val(slot_num, "dividerMode");
 		if(strcmp(dividerModeStr, "3V3")==0){
@@ -134,10 +139,6 @@ void analog_task(void *arg)
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 1);
 			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
-		}else{
-			gpio_set_level(divPin_1, 1);
-			gpio_set_level(divPin_2, 0);
-			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
 		}
 	}
 

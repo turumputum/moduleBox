@@ -95,11 +95,11 @@ void rgb_ledc_task(void *arg){
     };
     HsvColor HSV;
     if (strstr(me_config.slot_options[slot_num], "RGBcolor") != NULL) {
-        char *tmpPtr = strstr(me_config.slot_options[slot_num], "RGBcolor");
-        char strDup[strlen(tmpPtr)+1];
-        strcpy(strDup, tmpPtr);
+        char strDup[strlen(me_config.slot_options[slot_num])];
+        strcpy(strDup, me_config.slot_options[slot_num]);
         char* payload=NULL;
-        char* cmd = strtok_r(strDup, ":", &payload);
+        char* cmd = strstr(strDup, "RGBcolor");
+        cmd = strtok_r(cmd, ":", &payload);
         ESP_LOGD(TAG, "Set cmd:%s RGB_color:%s for slot:%d", cmd,payload, slot_num);
         if(strstr(payload, ",")!= NULL) {
             payload = strtok(payload, ",");

@@ -30,7 +30,7 @@
 #include "me_slot_config.h"
 
 #include "board.h"
-
+#include "audio_sonic.h"
 #include "esp_audio.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -96,6 +96,30 @@ void trackShift(char* cmd_arg){
 	}
 }
 
+void fill_equalizer_gains(int low_gain, int mid_gain, int high_gain, int *set_gain) {
+    // Fill 20 bands with smooth transitions
+    set_gain[0] = low_gain;    // Low start
+    set_gain[10] = low_gain;
+	set_gain[1] = low_gain + (mid_gain - low_gain)/3;
+	set_gain[11] = low_gain + (mid_gain - low_gain)/3;
+    set_gain[2] = low_gain + ((mid_gain - low_gain)*2)/3;
+	set_gain[12] = low_gain + ((mid_gain - low_gain)*2)/3;
+    set_gain[3] = mid_gain;    // Mid start
+	set_gain[13] = mid_gain;    // Mid start
+    set_gain[4] = mid_gain;
+	set_gain[14] = mid_gain;
+    set_gain[5] = mid_gain;
+	set_gain[15] = mid_gain;
+    set_gain[6] = mid_gain + (high_gain - mid_gain)/3;
+	set_gain[16] = mid_gain + (high_gain - mid_gain)/3;
+    set_gain[7] = mid_gain + ((high_gain - mid_gain)*2)/3;
+	set_gain[17] = mid_gain + ((high_gain - mid_gain)*2)/3;
+    set_gain[8] = high_gain;   // High start
+	set_gain[18] = high_gain;   // High start
+    set_gain[9] = high_gain;
+	set_gain[19] = high_gain;
+}
+
 void audio_task(void *arg) {
 	
 	int slot_num = *(int*) arg;
@@ -109,32 +133,64 @@ void audio_task(void *arg) {
 
 	int16_t currentTrack=0;
 
-	uint8_t volume=70;
-	if (strstr(me_config.slot_options[0], "volume")!=NULL){
-		float tmp = get_option_float_val(slot_num, "volume");
-		volume = (int)(100*tmp);
+	int8_t volume=70;
+	if (strstr(me_config.slot_options[slot_num], "volume")!=NULL){
+		volume = get_option_int_val(slot_num, "volume");
+		if(volume>100){volume=100;}
+		if(volume<0){volume=0;}
 		ESP_LOGD(TAG, "Set volume:%d", volume);
 	}
 
-	
+	float speed=1.09;
+	if (strstr(me_config.slot_options[slot_num], "speed")!=NULL){
+		speed = get_option_float_val(slot_num, "speed");
+		ESP_LOGD(TAG, "Set speed:%f", speed);
+	}
+
+	float tone=1.0;
+	if (strstr(me_config.slot_options[slot_num], "tone")!=NULL){
+		tone = get_option_float_val(slot_num, "tone");
+		ESP_LOGD(TAG, "Set tone:%f", tone);
+	}
+
+	uint8_t eqFlag=0;
+	int8_t eqLow=0;
+	if (strstr(me_config.slot_options[slot_num], "eqLow")!=NULL){
+		eqLow = get_option_int_val(slot_num, "eqLow");
+		eqFlag = 1;
+		ESP_LOGD(TAG, "Set eqLow:%d", eqLow);
+	}
+
+	int8_t eqMid=0;
+	if (strstr(me_config.slot_options[slot_num], "eqMid")!=NULL){
+		eqMid = get_option_int_val(slot_num, "eqMid");
+		eqFlag = 1;
+		ESP_LOGD(TAG, "Set eqMid:%d", eqMid);
+	}
+
+	int8_t eqHigh=0;
+	if (strstr(me_config.slot_options[slot_num], "eqHigh")!=NULL){
+		eqHigh = get_option_int_val(slot_num, "eqHigh");
+		eqFlag = 1;
+		ESP_LOGD(TAG, "Set eqMid:%d", eqMid);
+	}
 
 	int attenuation=0;
-	if (strstr(me_config.slot_options[0], "attenuation")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "attenuation")!=NULL){
 		attenuation = 1;
 		if (attenuation != 0) {
 			ESP_LOGD(TAG, "Enable attenuation");
 		}
 	}
 	
-
 	uint16_t play_delay=0;
-	if (strstr(me_config.slot_options[0], "playDelay")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "playDelay")!=NULL){
 		play_delay = get_option_int_val(slot_num, "playDelay");
 		ESP_LOGD(TAG, "Set play_delay:%d", play_delay);
 	}
 
 	uint8_t play_to_end=0;
-	if (strstr(me_config.slot_options[0], "playToEnd")!=NULL){
+	if (strstr(me_config.slot_options[slot_num], "playToEnd")!=NULL){
 		play_to_end = 1;
 		ESP_LOGD(TAG, "Set play_to_end:%d", play_to_end);
 	}
@@ -178,35 +234,61 @@ void audio_task(void *arg) {
 	//i2s_cfg.task_prio = configMAX_PRIORITIES-1; //23
 	i2s_cfg.use_alc = true;
 	i2s_cfg.volume = -34 + (volume / 3);
+	i2s_cfg.stack_in_ext = true;
 	i2s_stream_writer = i2s_stream_init(&i2s_cfg);
 
+	//ESP_LOGD(TAG, "Create fatfs stream to read data from sdcard");
 	fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
 	fatfs_cfg.type = AUDIO_STREAM_READER;
+	fatfs_cfg.ext_stack = true;
 	//fatfs_cfg.task_prio = 22; //22
 	fatfs_stream_reader = fatfs_stream_init(&fatfs_cfg);
 
 	//ESP_LOGD(TAG, "Create mp3 decoder to decode mp3 file");
 	mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
+	mp3_cfg.stack_in_ext = false;
 	//mp3_cfg.task_prio = 22; //22
 	//mp3_cfg.out_rb_size = 3 * 1024;
 	mp3_decoder = mp3_decoder_init(&mp3_cfg);
 
 	//ESP_LOGD(TAG, "Create resample filter");
 	rsp_filter_cfg_t rsp_cfg = DEFAULT_RESAMPLE_FILTER_CONFIG();
+	rsp_cfg.stack_in_ext = false;
 	//rsp_cfg.task_prio = 22; //22
 	rsp_cfg.prefer_flag = 1;
 	rsp_handle = rsp_filter_init(&rsp_cfg);
+
+	sonic_cfg_t sonic_cfg = DEFAULT_SONIC_CONFIG();
+    sonic_cfg.sonic_info.samplerate = 48000;
+    sonic_cfg.sonic_info.channel = 2;
+    sonic_cfg.sonic_info.resample_linear_interpolate = 1;
+    audio_element_handle_t sonic_el = sonic_init(&sonic_cfg);
+	sonic_set_pitch_and_speed_info(sonic_el, tone, speed);
+
+	equalizer_cfg_t eq_cfg = DEFAULT_EQUALIZER_CONFIG();
+    int set_gain[] = { -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13};
+    fill_equalizer_gains(eqLow, eqMid, eqHigh, set_gain);
+	eq_cfg.channel = 2;
+	eq_cfg.set_gain = set_gain; // The size of gain array should be the multiplication of NUMBER_BAND and number channels of audio stream data. The minimum of gain is -13 dB.
+    equalizer = equalizer_init(&eq_cfg);
 
 	//ESP_LOGD(TAG, "Register all elements to audio pipeline");
 	audio_pipeline_register(pipeline, fatfs_stream_reader, "file");
 	audio_pipeline_register(pipeline, mp3_decoder, "mp3");
 	audio_pipeline_register(pipeline, rsp_handle, "filter");
-
+	audio_pipeline_register(pipeline, sonic_el, "sonic");//-----
+	audio_pipeline_register(pipeline, equalizer, "equalizer");//-----
 	audio_pipeline_register(pipeline, i2s_stream_writer, "i2s");
 
 	//ESP_LOGD(TAG, "Link it together [sdcard]-->fatfs_stream-->mp3_decoder-->resample-->i2s_stream-->[codec_chip]");
-	const char *link_tag[4] = { "file", "mp3", "filter", "i2s" };
-	audio_pipeline_link(pipeline, &link_tag[0], 4);
+	//const char *link_tag[4] = { "file", "mp3", "filter", "i2s" };
+	//const char *link_tag[5] = { "file", "mp3", "filter", "sonic", "i2s" };
+	const char *link_tag[6] = { "file", "mp3", "filter", "sonic", "equalizer", "i2s"};
+	// audio_pipeline_link(pipeline, &link_tag[0], 4);
+	//audio_pipeline_link(pipeline, &link_tag[0], 5);
+	audio_pipeline_link(pipeline, &link_tag[0], 6);
+
+	
 
 	//ESP_LOGD(TAG, "Set up  event listener");
 	audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
@@ -301,7 +383,7 @@ void audio_task(void *arg) {
 
 		if(att_flag==1){
 			att_vol-=1;
-			ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
+			//ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
 			setVolume_num(att_vol);
 			if(att_vol==0){
 				audioStop();
@@ -383,6 +465,8 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	audio_element_info_t music_info = { 0 };
 	audio_element_set_uri(fatfs_stream_reader, me_config.soundTracks[truckNum]);
 	audio_element_getinfo(mp3_decoder, &music_info);
+	audio_element_setinfo(i2s_stream_writer, &music_info); 
+ 	i2s_stream_set_clk(i2s_stream_writer, music_info.sample_rates, music_info.bits, music_info.channels); 
 
 	ESP_ERROR_CHECK(audio_pipeline_reset_ringbuffer(pipeline));
 	ESP_ERROR_CHECK(audio_pipeline_reset_elements(pipeline));
@@ -393,9 +477,10 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	//audio_element_setinfo(i2s_stream_writer, &music_info);
 	//rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
 
-	return audio_pipeline_run(pipeline);
+	ESP_ERROR_CHECK(audio_pipeline_run(pipeline));
+	return ESP_OK;
 
-	ESP_LOGD(TAG, "Start playing file:%s Heap usage:%lu, Free heap:%u", me_config.soundTracks[truckNum], heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	//ESP_LOGD(TAG, "Start playing file:%s Heap usage:%lu, Free heap:%u", me_config.soundTracks[truckNum], heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 void audioStop(void) {

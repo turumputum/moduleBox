@@ -1,6 +1,7 @@
 void reporter_init(void);
 void report(char *msg, int num_of_slot);
 void crosslinker_task(void *parameter);
+void reportState();
 
 //void startup_crosslinks_exec(void);
 void crosslinks_process(char *crosslinks_str, char *event);
