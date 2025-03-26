@@ -86,16 +86,16 @@ void button_task(void *arg){
 	}
 
 
-	uint8_t button_state=0;
-	int prev_state=0;
+	int8_t button_state=0;
+	int prev_state=-1;
 	if(gpio_get_level(pin_num)){
 		button_state=button_inverse ? 0 : 1;
 	}else{
 		button_state=button_inverse ? 1 : 0;
 	}
-	memset(str, 0, strlen(str));
-	sprintf(str, "%d", button_state);
-	report(str, slot_num);
+	// memset(str, 0, strlen(str));
+	// sprintf(str, "%d", button_state);
+	// report(str, slot_num);
 
 	uint32_t tick=xTaskGetTickCount();
 
@@ -109,6 +109,23 @@ void button_task(void *arg){
 
 	
     for(;;) {
+		
+		if(button_state != prev_state){
+			prev_state = button_state;
+
+			memset(str, 0, strlen(str));
+			sprintf(str, "%d", button_state);
+			report(str, slot_num);
+			
+			//vTaskDelay(pdMS_TO_TICKS(5));
+			//ESP_LOGD(TAG,"report String:%s", str);
+			tick = xTaskGetTickCount();
+			if(debounce_gap!=0){
+				esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);
+			}
+
+		}
+
 		uint8_t tmp;
 		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
 			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
@@ -124,23 +141,6 @@ void button_task(void *arg){
 					//ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
 					goto exit;
 				}
-			}
-
-			if(button_state != prev_state){
-				prev_state = button_state;
-
-				memset(str, 0, strlen(str));
-				sprintf(str, "%d", button_state);
-				report(str, slot_num);
-				
-				//vTaskDelay(pdMS_TO_TICKS(5));
-				//ESP_LOGD(TAG,"String:%s", str);
-				tick = xTaskGetTickCount();
-				if(debounce_gap!=0){
-
-					esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);
-				}
-
 			}
 		}
 		exit:

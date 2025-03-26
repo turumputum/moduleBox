@@ -156,3 +156,255 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
     }
 }
 
+
+
+
+//+++++++++++++++++++++++++++++++++stepper++++++++++++++++++++++++++++++++++++++++
+
+#define STATE_ACCEL 0
+#define STATE_RUN 1
+#define STATE_DECEL 2
+#define STATE_STOP 3
+
+void stepper_getCurrentPos(stepper_t *stepper){
+    int32_t pos=0;
+    pcnt_unit_get_count(stepper->pcntUnit, &pos);
+    stepper->currentPos = stepper->currentPos + (pos- stepper->pcnt_prevPos);
+    //ESP_LOGD(TAG, "currentPos: %ld pos:%ld prevPos:%ld", stepper->currentPos, pos, stepper->pcnt_prevPos);
+    stepper->pcnt_prevPos = pos;
+}
+
+void stepper_stop(stepper_t *stepper) {
+    stepper->targetPos = stepper->currentPos;
+    stepper->currentSpeed = 0;
+    stepper->targetSpeed = 0;
+    ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL));
+}
+
+
+static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_data) {
+    stepper_t* stepper = (stepper_t*) user_data;
+    stepper_getCurrentPos(stepper);
+    //ESP_LOGD(TAG, "currentPos: %ld", stepper->currentPos);
+    // pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->currentPos);
+    //stepper->state++;
+    if(stepper->currentPos == stepper->targetPos){
+        // Останавливаем двигатель
+        stepper_stop(stepper);
+        pcnt_unit_clear_count(stepper->pcntUnit);
+        stepper->pcnt_prevPos = 0;
+    }
+    int32_t tmpCnt = 0;
+    pcnt_unit_get_count(stepper->pcntUnit, &tmpCnt);
+    if(tmpCnt!=stepper->pcnt_watchPoint){
+        pcnt_unit_clear_count(stepper->pcntUnit);
+        stepper->pcnt_prevPos = 0;
+    }
+    // else if(stepper->currentPos == stepper->breakPoint){
+    //     stepper->targetSpeed = 0;
+    // }
+    //pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->currentPos);
+    return true;
+}
+
+
+void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth){
+	stepper->stepPin = step_pin;
+    stepper->dirPin = dir_pin;
+
+    //-----------------------pcnt init------------------------------
+    pcnt_unit_config_t unit_config = {
+        .high_limit = INT16_MAX,
+        .low_limit = INT16_MIN,
+        .flags.accum_count = true, // accumulate the counter value
+    };
+    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &stepper->pcntUnit));
+
+    // PCNT channel configuration
+    pcnt_chan_config_t chan_config = {
+        .edge_gpio_num = stepper->stepPin,
+        .level_gpio_num = stepper->dirPin, // No level GPIO
+    };
+    ESP_ERROR_CHECK(pcnt_new_channel(stepper->pcntUnit, &chan_config, &stepper->pcntChan));
+    
+        //Настраиваем счет в зависимости от DIR
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(stepper->pcntChan,
+                                                  PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                                  PCNT_CHANNEL_EDGE_ACTION_HOLD));
+    
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(stepper->pcntChan,
+                                                  PCNT_CHANNEL_LEVEL_ACTION_KEEP,
+                                                  PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
+    // Set initial counter value
+    //ESP_RETURN_ON_ERROR(pcnt_unit_set_glitch_filter(pcnt, &(pcnt_glitch_filter_config_t){.max_glitch_ns = 1000}), TAG, "Set glitch filter failed");
+    
+    // Register event callbacks
+    pcnt_event_callbacks_t cbs = {
+        .on_reach = pcnt_on_target_reached,
+    };
+    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(stepper->pcntUnit, &cbs, stepper));
+    //ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX-1));
+    //ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN+1));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
+
+    ESP_ERROR_CHECK(pcnt_unit_enable(stepper->pcntUnit));
+    ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
+    ESP_ERROR_CHECK(pcnt_unit_start(stepper->pcntUnit));
+
+    //----------------dir config--------------------------------
+    gpio_config_t en_dir_gpio_config = {
+        .mode = GPIO_MODE_INPUT_OUTPUT,
+        .intr_type = GPIO_INTR_DISABLE,
+        .pin_bit_mask = 1ULL << stepper->stepPin | 1ULL << stepper->dirPin,
+    };
+    ESP_ERROR_CHECK(gpio_config(&en_dir_gpio_config));
+
+    //-----------------------mcpwm init------------------------------
+    mcpwm_timer_config_t timer_config = {
+        .group_id = 0,
+        .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
+        .resolution_hz = stepper->resolution,  // 1MHz
+        .period_ticks = 100,      // 1KHz
+        .count_mode = MCPWM_TIMER_COUNT_MODE_UP,
+        .flags.update_period_on_empty = true,
+    }; 
+    ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config, &stepper->mcpwmTimer));
+
+    mcpwm_operator_config_t operator_config = {
+        .group_id = 0,
+    };
+    ESP_ERROR_CHECK(mcpwm_new_operator(&operator_config, &stepper->mcpwmOper));
+    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(stepper->mcpwmOper, stepper->mcpwmTimer));
+
+    mcpwm_comparator_config_t comparator_config = {
+        .flags.update_cmp_on_tez = true,
+    };
+    ESP_ERROR_CHECK(mcpwm_new_comparator(stepper->mcpwmOper, &comparator_config, &stepper->mcpwmComparator));
+    
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(stepper->mcpwmComparator, pulseWidth));
+
+    mcpwm_generator_config_t generator_config = {
+        .gen_gpio_num = stepper->stepPin,
+        .flags.io_loop_back = true,
+    };
+    ESP_ERROR_CHECK(mcpwm_new_generator(stepper->mcpwmOper, &generator_config, &stepper->mcpwmGenerator));
+
+    // go high on counter empty
+    ESP_ERROR_CHECK(mcpwm_generator_set_action_on_timer_event(stepper->mcpwmGenerator,MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH)));
+    // go low on compare threshold
+    ESP_ERROR_CHECK(mcpwm_generator_set_action_on_compare_event(stepper->mcpwmGenerator,MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, stepper->mcpwmComparator, MCPWM_GEN_ACTION_LOW)));
+
+
+    // Запуск таймера
+    ESP_ERROR_CHECK(mcpwm_timer_enable(stepper->mcpwmTimer));
+    ESP_LOGD(TAG, "init speedStepper end");
+}
+
+
+void stepper_moveTo(stepper_t *stepper, int32_t pos){
+    stepper_getCurrentPos(stepper);
+    stepper->targetPos = pos;
+
+    int64_t distance = stepper->targetPos - stepper->currentPos;
+    if(distance==0){
+        return;
+    }
+
+    stepper->dir = distance > 0 ? DIR_CW : DIR_CCW;
+    gpio_set_level(stepper->dirPin, stepper->dir==DIR_CW ? !stepper->dirInverse : stepper->dirInverse);
+    ESP_LOGD(TAG, "dir:%d dirInverse:%d", stepper->dir, stepper->dirInverse);
+
+    //pcnt_unit_stop(stepper->pcntUnit);
+    
+    pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint);
+    pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MAX);
+    pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MIN);
+    int32_t watchPoint = distance;
+
+    if(stepper->dir==DIR_CW){
+        while(watchPoint>INT16_MAX){
+            watchPoint-=INT16_MAX;
+        }
+    }else if(stepper->dir==DIR_CCW){
+        while(watchPoint<INT16_MIN){
+            watchPoint+=INT16_MIN;
+        }
+    }
+    stepper->pcnt_watchPoint = watchPoint;
+
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
+    if(stepper->dir==DIR_CW){
+        ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX));
+    }else if(stepper->dir==DIR_CCW){
+        ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN));
+    }
+    //ESP_LOGD(TAG, "add watch point %d", stepper->pcnt_watchPoint);
+
+    ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
+    stepper->pcnt_prevPos = 0;
+    
+    
+    //pcnt_unit_start(stepper->pcntUnit);
+    int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
+    float znam = 2 * stepper->accel;
+    float accel_distance = chisl / znam;
+    //ESP_LOGD(TAG, "chisl:%lld znam:%f accel_distance: %f maxSpeed: %ld currentSpeed: %ld", chisl, znam, accel_distance, stepper->maxSpeed, stepper->currentSpeed);
+    if(accel_distance>abs(distance/2)){
+        accel_distance = abs(distance/2);
+    }
+    stepper->breakPoint = stepper->targetPos-(accel_distance * stepper->dir);
+
+    mcpwm_timer_set_period(stepper->mcpwmTimer, UINT16_MAX);
+    ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP));
+
+    ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, accel_distance, stepper->breakPoint);
+}
+
+void stepper_speedUpdate(stepper_t *stepper, int32_t period){  
+    
+    if(stepper->currentPos!=stepper->targetPos){
+        if(stepper->dir==DIR_CW){
+            if(stepper->currentPos<stepper->breakPoint){
+                stepper->targetSpeed=stepper->maxSpeed;
+            }else{
+                stepper->targetSpeed=0;
+            }
+        }else if(stepper->dir==DIR_CCW){
+            if(stepper->currentPos<stepper->breakPoint){
+                stepper->targetSpeed=0;
+            }else{
+                stepper->targetSpeed=stepper->maxSpeed;
+            }
+        }
+    }
+
+    //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld period: %ld", stepper->currentSpeed, stepper->targetSpeed, period);
+    
+    if(stepper->targetSpeed!=stepper->currentSpeed){
+        int32_t speedIncrement = (stepper->accel/1000)*period;
+        if (speedIncrement<1)speedIncrement=1;
+        
+        if(stepper->currentSpeed<stepper->targetSpeed){
+            stepper->currentSpeed += speedIncrement;
+        }else{
+            stepper->currentSpeed -= speedIncrement;
+        }
+        if(abs(stepper->currentSpeed)>0){
+            uint32_t period = abs(stepper->resolution/stepper->currentSpeed);
+            if(period>UINT16_MAX)period=UINT16_MAX;
+           // ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
+            mcpwm_timer_set_period(stepper->mcpwmTimer, period);
+        }else if(stepper->currentSpeed==0){
+            stepper_stop(stepper);
+        }
+    }
+        
+}
+
+
+
+void stepper_setZero(stepper_t *stepper) {
+    ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
+    stepper->pcnt_prevPos = 0;
+    stepper->currentPos = 0;
+}

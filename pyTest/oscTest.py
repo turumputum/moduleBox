@@ -3,7 +3,7 @@ import paho.mqtt.client as mqtt
 import time
 
 # Создание OSC клиента
-osc_client = udp_client.SimpleUDPClient("192.168.88.23", 8010)  # Замените IP и порт на конфигурацию вашего устройства
+osc_client = udp_client.SimpleUDPClient("10.0.10.29", 8023)  # Замените IP и порт на конфигурацию вашего устройства
 
 
 # Список OSC адресов для каждой группы светодиодов

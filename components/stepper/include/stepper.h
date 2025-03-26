@@ -144,4 +144,20 @@ void stepper_set_currentPos(int32_t val);
 void stepper_set_speed(int32_t speed);
 
 void stepper_stop_on_sensor(int8_t val);
-void stepper_stop(void);
+
+
+
+void start_sCurveStepper_task(int slot_num);
+
+
+
+// typedef struct {
+// 	int32_t currentSpeed;//steps per second
+// 	int32_t targetSpeed;//steps per second
+// 	int32_t maxSpeed;//steps per second
+// 	int32_t targetPos;//steps
+// 	int32_t currentPos;//steps
+	
+// 	int32_t accel;//steps per second per second
+
+// } stepper_t;

@@ -66,7 +66,7 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
     }
     if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
         distanceSens->minVal = get_option_int_val(slot_num, "minVal");
-        ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);//11111111111111
+        ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);//
     }
 
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
@@ -424,9 +424,7 @@ void hlk2410_task(void* arg) {
     gpio_reset_pin (tx_pin);
     gpio_reset_pin (rx_pin);
     uart_set_pin (uart_num, tx_pin, rx_pin, -1, -1);
-    uart_is_driver_installed (uart_num);
-    uart_driver_install (uart_num, 255, 255, 0, NULL, 0);
-
+    uart_driver_install (uart_num, 256, 256, 0, NULL, 0);
 
     distanceSens_t distanceSens=DISTANCE_SENS_DEFAULT();
     distanceSens.maxVal=800;

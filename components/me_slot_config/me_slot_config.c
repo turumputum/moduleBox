@@ -112,12 +112,14 @@ int init_slots(void){
 			start_tachometer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
 			start_analog_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 7)){
+		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 12)){
 			start_stepperSpeed_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
+			start_stepper_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
 			start_out_task(i);
 			start_in_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "out_3ch", 6)){
+		}else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
 			start_out_3ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
 			start_tenzo_button_task(i);
@@ -161,8 +163,8 @@ int init_slots(void){
 			start_GIM_motor_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ticketDispenser", 15)){
 			start_ticketDispenser_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "academKick", 10)){
-			start_academKick_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "volnaKolya", 10)){
+			start_volnaKolya_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "CRSF", 4)){
 			start_crsf_rx_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "VESC", 4)){

@@ -1,11 +1,15 @@
 
 #include <stdlib.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
 // #include "driver/mcpwm.h"
 // #include "soc/mcpwm_struct.h" 
 // #include "soc/mcpwm_reg.h"
 #include "driver/gpio.h"
 #include "driver/mcpwm_prelude.h"
 #include "driver/pulse_cnt.h"
+
 
 #define MCPWM_MIN_FREQUENCY 16
 #define MCPWM_DUTY_US 2
@@ -72,6 +76,69 @@ void speedStepper_stop(speedStepper_t *stepper);
 void speedStepper_start(speedStepper_t *stepper);
 void speedStepper_setSpeed(speedStepper_t *stepper, int32_t spd);
 void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise);
+
+
+typedef struct {
+  gpio_num_t stepPin;
+  gpio_num_t dirPin;
+  int8_t dirInverse;
+  //mcpwm_unit_t _mcpwmUnit;
+  //mcpwm_io_signals_t _mcpwmIoSignalsPwm;
+  mcpwm_timer_handle_t  mcpwmTimer;
+  mcpwm_oper_handle_t mcpwmOper;
+  mcpwm_cmpr_handle_t mcpwmComparator;
+  mcpwm_gen_handle_t mcpwmGenerator;
+  
+  pcnt_unit_handle_t pcntUnit;
+  pcnt_channel_handle_t pcntChan;
+  int16_t pcnt_watchPoint;
+  int32_t pcnt_prevPos;
+  
+  uint32_t resolution;
+
+  int32_t maxSpeed;
+  int32_t currentSpeed;
+  int32_t targetSpeed;
+
+  int32_t targetPos;
+  int32_t currentPos;
+  int32_t breakPoint;
+
+  int32_t accel;
+
+  int8_t dir;
+  int32_t state;
+}stepper_t;
+
+#define STEPPER_DEFAULT() {\
+	.stepPin = 0,\
+	.dirPin = 0,\
+  .dirInverse = 0,\
+	.mcpwmTimer = NULL,\
+  .mcpwmOper = NULL,\
+  .mcpwmComparator = NULL,\
+  .mcpwmGenerator = NULL,\
+  .pcntUnit = NULL,\
+  .pcntChan = NULL,\
+  .pcnt_prevPos = 0,\
+  .pcnt_watchPoint = 0,\
+  .resolution = 1000000,\
+  .maxSpeed = 100,\
+  .currentSpeed = 0,\
+  .targetSpeed = 0,\
+  .targetPos = 0,\
+  .currentPos = 0,\
+  .accel = 100,\
+	.dir = 0,\
+  .state = 0,\
+}
+
+void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);
+void stepper_getCurrentPos(stepper_t *stepper);
+void stepper_moveTo(stepper_t *stepper, int32_t pos);
+void stepper_speedUpdate(stepper_t *stepper, int32_t period);
+void stepper_stop(stepper_t *stepper);
+void stepper_setZero(stepper_t *stepper);
 // void setSpeed(asyncStepper_t *stepper, int32_t spd);
 // void startStepper(asyncStepper_t *stepper);
 

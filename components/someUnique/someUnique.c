@@ -560,4 +560,142 @@ void start_academKick_task(int slot_num) {
     ESP_LOGD(TAG, "academKick_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
+//-------------------academia-kick---------------------
+
+void volnaKolya_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    uint16_t period = 2000;//ms
+    if (strstr(me_config.slot_options[slot_num], "period") != NULL) {
+		period = get_option_int_val(slot_num, "period");
+		ESP_LOGD(TAG, "Set period:%d for slot:%d", period, slot_num);
+	}
+
+    uint32_t m1Dist = 10000;//ms
+    if (strstr(me_config.slot_options[slot_num], "m1Dist") != NULL) {
+		m1Dist = get_option_int_val(slot_num, "m1Dist");
+		ESP_LOGD(TAG, "Set m1Dist:%ld for slot:%d", m1Dist, slot_num);
+	}
+
+    uint32_t m2Dist = 10000;//ms
+    if (strstr(me_config.slot_options[slot_num], "m2Dist") != NULL) {
+		m2Dist = get_option_int_val(slot_num, "m2Dist");
+		ESP_LOGD(TAG, "Set m2Dist:%ld for slot:%d", m2Dist, slot_num);
+	}
+    
+    uint32_t m3Dist = 10000;//ms
+    if (strstr(me_config.slot_options[slot_num], "m3Dist") != NULL) {
+		m3Dist = get_option_int_val(slot_num, "m3Dist");
+		ESP_LOGD(TAG, "Set m3Dist:%ld for slot:%d", m3Dist, slot_num);
+	}
+
+    uint32_t startDelay = 10000;//ms
+    if (strstr(me_config.slot_options[slot_num], "startDelay") != NULL) {
+		startDelay = get_option_int_val(slot_num, "startDelay");
+		ESP_LOGD(TAG, "Set startDelay:%ld for slot:%d", startDelay, slot_num);
+	}
+
+
+    //---
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/volna_")+3];
+		sprintf(t_str, "%s/volna_%d",me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart volna topic:%s", me_state.action_topic_list[slot_num]);
+	}
+
+    //float p8q = ((float)period/8000)*((float)period/8000);
+    //float p8q = ((float)period/6000)*((float)period/6000);
+    float p4q = ((float)period/4000)*((float)period/4000);
+
+    uint32_t m1Accel = 2*((float)m1Dist/2)/p4q;
+    uint32_t m2Accel = 2*((float)m2Dist/2)/p4q;
+    uint32_t m3Accel = 2*((float)m3Dist/2)/p4q;
+
+    
+
+    vTaskDelay(pdMS_TO_TICKS(startDelay));
+    
+    char tmpStr[124];
+    sprintf(tmpStr,"moduleBox/stepper_0/setAccel:%ld",m1Accel);
+    execute(tmpStr);
+
+    sprintf(tmpStr,"moduleBox/stepper_2/setAccel:%ld",m2Accel);
+    execute(tmpStr);
+
+    sprintf(tmpStr,"moduleBox/stepper_4/setAccel:%ld",m3Accel);
+    execute(tmpStr);
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    while(1){
+        //---0---
+        lastWakeTime = xTaskGetTickCount();
+        sprintf(tmpStr,"moduleBox/stepper_4/moveTo:%ld",m3Dist);
+        execute(tmpStr);
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(period/4));
+        
+        //---1---
+        // lastWakeTime = xTaskGetTickCount();
+
+        // vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(period/4));
+
+        //---3---
+        lastWakeTime = xTaskGetTickCount();
+        sprintf(tmpStr,"moduleBox/stepper_0/moveTo:%d",0);
+        execute(tmpStr);
+        sprintf(tmpStr,"moduleBox/stepper_2/moveTo:%ld",m2Dist);
+        execute(tmpStr);
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(period/4));
+        
+        //---4---
+        lastWakeTime = xTaskGetTickCount();
+        sprintf(tmpStr,"moduleBox/stepper_4/moveTo:%d",0);
+        execute(tmpStr);
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(period/4));
+
+        // //---5---
+        // lastWakeTime = xTaskGetTickCount();
+       
+        // vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(period/4));
+
+        //---7---
+        lastWakeTime = xTaskGetTickCount();
+        sprintf(tmpStr,"moduleBox/stepper_0/moveTo:%ld",m1Dist);
+        execute(tmpStr);
+        sprintf(tmpStr,"moduleBox/stepper_2/moveTo:%d",0);
+        execute(tmpStr);
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(period/4));
+
+
+        command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload = NULL;
+            char* cmd = msg.str;
+            if(strstr(cmd, "stop")!=NULL){
+                while(1){
+                    vTaskDelay(1000);
+                }
+            }   
+        }
+    }
+
+
+}
+
+
+void start_volnaKolya_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    xTaskCreate(volnaKolya_task, "volnaKolya_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
+    ESP_LOGD(TAG, "volnaKolya_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
 

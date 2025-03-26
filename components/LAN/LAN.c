@@ -147,7 +147,7 @@ void osc_recive_task(){
 		if(len<0){
 			//ESP_LOGD(TAG, "OSC incoming fail(");
 		}else{
-			//ESP_LOGD(TAG, "OSC incoming:%s", buffForRecive);
+			ESP_LOGD(TAG, "OSC incoming:%s", buffForRecive);
 			if (!tosc_parseMessage(&osc, buffForRecive, len)) {
 				//printf("Received OSC message: [%i bytes] %s %s ",
 					//len, // the number of bytes in the OSC message

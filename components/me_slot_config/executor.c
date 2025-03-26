@@ -205,7 +205,7 @@ void executer_task(void){
 	exec_message_t msg;
 	me_state.executor_queue = xQueueCreate(150, sizeof(exec_message_t));
 
-	vTaskDelay(pdMS_TO_TICKS(1000));
+	vTaskDelay(pdMS_TO_TICKS(2000));
 
 	while(1){
 		if (xQueueReceive(me_state.executor_queue, &msg, portMAX_DELAY) == pdPASS){
@@ -231,7 +231,7 @@ void executer_task(void){
 			}
 			if(sum==0){
 				usbprint("Action not found!!!");
-				ESP_LOGE(TAG, "Action not found!!!");
+				ESP_LOGE(TAG, "Action not found: %s", msg.str);
 			}
 		}
 	}

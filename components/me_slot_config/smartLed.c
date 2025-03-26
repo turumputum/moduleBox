@@ -880,14 +880,14 @@ void calcRingBrightness(uint8_t *pixelMass, RgbColor color, uint16_t num_of_led,
             // Linear interpolation between maxBright and minBright
             float ratio =(1- distance / halfEffect) * (fMaxB - fMinB) + fMinB;
             //printf(" %f", ratio);
-            pixelMass[i*3] = gamma_8[(uint8_t)(color.r * ratio)];
-            pixelMass[i*3+1] = gamma_8[(uint8_t)(color.g * ratio)];
+            pixelMass[i*3] = gamma_8[(uint8_t)(color.g * ratio)];
+            pixelMass[i*3+1] = gamma_8[(uint8_t)(color.r * ratio)];
             pixelMass[i*3+2] = gamma_8[(uint8_t)(color.b * ratio)];
             //ESP_LOGD(TAG, "calcRingBrightness: i:%d distance:%f ratio:%f bright:%f", i, distance, ratio, brightArray[i]);
             
         } else {
-            pixelMass[i*3] = gamma_8[(uint8_t)(color.r * fMinB)];
-            pixelMass[i*3+1] = gamma_8[(uint8_t)(color.g * fMinB)];
+            pixelMass[i*3] = gamma_8[(uint8_t)(color.g * fMinB)];
+            pixelMass[i*3+1] = gamma_8[(uint8_t)(color.r * fMinB)];
             pixelMass[i*3+2] = gamma_8[(uint8_t)(color.b * fMinB)];
             //printf(" %f", fMinB);
         }
@@ -1003,6 +1003,7 @@ void ledRing_task(void *arg){
         parseRGB(&targetRGB, payload);
 		//HSV = RgbToHsv(targetRGB);
     }
+    //currentRGB=targetRGB;
     ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", targetRGB.r, targetRGB.g, targetRGB.b, slot_num);
 
     uint8_t current_pixels_mass[num_of_led * 3];
@@ -1083,8 +1084,8 @@ void ledRing_task(void *arg){
                 //float fMinB = (float)minBright/255;
                 float fMaxB = (float)maxBright/255;
                 for(int i = 0; i < num_of_led; i++) {
-                    target_pixels_mass[i*3] = gamma_8[(uint8_t)(targetRGB.r * fMaxB)];
-                    target_pixels_mass[i*3+1] = gamma_8[(uint8_t)(targetRGB.g * fMaxB)];
+                    target_pixels_mass[i*3] = gamma_8[(uint8_t)(targetRGB.g * fMaxB)];
+                    target_pixels_mass[i*3+1] = gamma_8[(uint8_t)(targetRGB.r * fMaxB)];
                     target_pixels_mass[i*3+2] = gamma_8[(uint8_t)(targetRGB.b * fMaxB)]; 
                 }
             }   
