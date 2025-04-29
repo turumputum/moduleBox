@@ -1,9 +1,16 @@
 dependencies:
+  cybergear-robotics/cybergear:
+    component_hash: 048afad07d01406dc08dd0b92a08c9e1902501f47319ab972036e1e803dba300
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.1.0
   espressif/ds18b20:
     component_hash: d676429d9f1f686b65ed895e418eb4b331477bcd5d63c27f43dc3d6a2de8f13b
     dependencies:
     - name: espressif/onewire_bus
-      registry_url: https://components.espressif.com/
+      registry_url: https://components.espressif.com
       require: private
       version: ^1.0.0
     source:
@@ -14,18 +21,26 @@ dependencies:
     component_hash: 3e7bbd487f1357a1d4944d0c85966d049501ea281b8a4c7f93f7cfedd5b7f23d
     dependencies:
     - name: idf
-      registry_url: https://components.espressif.com
       require: private
       version: '>=4.2'
     source:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.4.12
+  espressif/esp_websocket_client:
+    component_hash: f77326f0e1c38da4e9c97e17c5d649b0dd13027f2645e720e48db269638fd622
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.4.0
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
     - name: idf
-      registry_url: https://components.espressif.com
       require: private
       version: '>=4.3'
     source:
@@ -43,25 +58,23 @@ dependencies:
       type: service
     version: 1.4.3
   espressif/nghttp:
-    component_hash: c52b83cc3d1083ae669751534ea4f7445974b86d91d49a5273bdb0fbf87f34d6
+    component_hash: 32e513409ddce0000990ec74b0711f535462726236d72578cd70498e6bd66dc3
     dependencies:
     - name: idf
-      registry_url: https://components.espressif.com
       require: private
       version: '>=5.0'
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.62.1
+    version: 1.65.0
   espressif/onewire_bus:
     component_hash: c4c781940d8bd988432b47ac3ee68479c69e14e01fdfba0b61365b233a3ba5d6
     dependencies:
     - name: idf
-      registry_url: https://components.espressif.com
       require: private
       version: '>=5.0'
     source:
-      registry_url: https://components.espressif.com/
+      registry_url: https://components.espressif.com
       type: service
     version: 1.0.2
   espressif/zlib:
@@ -77,15 +90,17 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.3.1
+    version: 5.3.3
 direct_dependencies:
+- cybergear-robotics/cybergear
 - espressif/ds18b20
 - espressif/esp-dsp
+- espressif/esp_websocket_client
 - espressif/jsmn
 - espressif/mdns
 - espressif/nghttp
 - espressif/zlib
 - idf
-manifest_hash: 0e77a4e85cff9b9df0d97e83df04d08f289bec7d2f9b44be991e5597edb20a9b
+manifest_hash: b254b47920a489c3e3a4a7b82b2cf69dc269836eb9fc5362307d4859f19ae81b
 target: esp32s3
 version: 2.0.0

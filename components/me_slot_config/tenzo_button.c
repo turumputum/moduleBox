@@ -63,7 +63,7 @@ void tenzo_button_task(void *arg){
 		detThres = get_option_int_val(slot_num, "threshold")*1024;
 		ESP_LOGD(TAG, "Set threshold :%ld for slot:%d",detThres/1024, slot_num);
 	}
-
+    
     int integrMult = 50; // 1/moving_mass (20...100) inertia
     if (strstr(me_config.slot_options[slot_num], "inertia") != NULL) {
 		integrMult = get_option_int_val(slot_num, "inertia")*1024;

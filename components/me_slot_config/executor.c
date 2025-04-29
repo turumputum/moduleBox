@@ -215,6 +215,10 @@ void executer_task(void){
 				ESP_LOGD(TAG, "Get state");
 				reportState();
 				sum++;
+			}else if(strstr(msg.str, "restart")!=NULL){
+				ESP_LOGD(TAG, "restart");
+				esp_restart();
+				sum++;
 			}else{
 				for(int i=0; i<NUM_OF_SLOTS; i++){
 					//ESP_LOGD(TAG, "command_queue[%d]:%d",i,me_state.command_queue[i]==NULL);

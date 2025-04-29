@@ -118,12 +118,14 @@ void dwinUart_task(void* arg) {
         memset(rawByte,0,UART_MSG_SIZE);
         int  len_read = read_dwin_message(uart_num, rawByte);
         if (len_read > 0) {
-            ESP_LOG_BUFFER_HEX_LEVEL(TAG, rawByte, len_read, ESP_LOG_DEBUG);
+            //ESP_LOGD(TAG, "len_read: %d", len_read);
+            //ESP_LOG_BUFFER_HEX_LEVEL(TAG, rawByte, len_read, ESP_LOG_DEBUG);
+            
             if(rawByte[0]==0x83){
                 memset(str, 0, strlen(str));
                 uint16_t addr = (rawByte[1] << 8) | rawByte[2];
                 uint16_t value = (rawByte[4] << 8) | rawByte[5];
-				sprintf(str, "/%.2x%.2x:%x", rawByte[1],rawByte[2], value);
+				sprintf(str, "/VP_%.2x%.2x:%d", rawByte[1],rawByte[2], value);
 				report(str, slot_num);
             }
         }

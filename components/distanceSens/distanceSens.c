@@ -69,6 +69,11 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
         ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);//
     }
 
+    if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
+        distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap");
+        ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);//
+    }
+
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
         distanceSens->threshold = get_option_int_val(slot_num, "threshold");
         if (distanceSens->threshold <= 0){
@@ -133,43 +138,46 @@ void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
         distanceSens->currentPos=distanceSens->minVal;
     }
     // Apply threshold and inverse if configured
-    if (distanceSens->threshold > 0) {
-        
-        distanceSens->state = (distanceSens->currentPos > distanceSens->threshold) ? distanceSens->inverse : !distanceSens->inverse;
-        if(distanceSens->state!=distanceSens->prevState){
-            memset(str, 0, strlen(str));
-            sprintf(str, "%d", distanceSens->state);
-            report(str,slot_num);
-
-            ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, 254*distanceSens->state);
-            ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
-
-            distanceSens->prevState = distanceSens->state;
-            //distanceSens->prevPos = distanceSens->currentPos;
-        }
-    }else{
-        if(abs(distanceSens->currentPos-distanceSens->prevPos)> distanceSens->deadBand){
-            memset(str, 0, strlen(str));
-            float f_res =  (float)distanceSens->currentPos / (distanceSens->maxVal - distanceSens->minVal);
-            if(f_res > 1) f_res = 1;
-            if(f_res < 0) f_res = 0;
-            if (distanceSens->flag_float_output == 1) {     
-                sprintf(str, "%f", f_res);
-            }else{
-                sprintf(str, "%d", distanceSens->currentPos);
-            }
-
-            report(str,slot_num);
+    if(xTaskGetTickCount()- distanceSens->lastTick > distanceSens->debounceGap){
+        if (distanceSens->threshold > 0) {
             
-            uint8_t dutyVal = gamma_8[(int)(255-254*f_res)];
-            //ESP_LOGD(TAG, "dutyVal: %d", dutyVal);
-            ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, dutyVal);
-            ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+            distanceSens->state = (distanceSens->currentPos > distanceSens->threshold) ? distanceSens->inverse : !distanceSens->inverse;
+            if(distanceSens->state!=distanceSens->prevState){
+                memset(str, 0, strlen(str));
+                sprintf(str, "%d", distanceSens->state);
+                report(str,slot_num);
 
-            //distanceSens->prevPos = distanceSens->currentPos;
+                ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, 254*distanceSens->state);
+                ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+
+                distanceSens->prevState = distanceSens->state;
+                distanceSens->lastTick = xTaskGetTickCount();
+                //distanceSens->prevPos = distanceSens->currentPos;
+            }
+        }else{
+            if(abs(distanceSens->currentPos-distanceSens->prevPos)> distanceSens->deadBand){
+                memset(str, 0, strlen(str));
+                float f_res =  (float)distanceSens->currentPos / (distanceSens->maxVal - distanceSens->minVal);
+                if(f_res > 1) f_res = 1;
+                if(f_res < 0) f_res = 0;
+                if (distanceSens->flag_float_output == 1) {     
+                    sprintf(str, "%f", f_res);
+                }else{
+                    sprintf(str, "%d", distanceSens->currentPos);
+                }
+
+                report(str,slot_num);
+                distanceSens->lastTick = xTaskGetTickCount();
+                uint8_t dutyVal = gamma_8[(int)(255-254*f_res)];
+                //ESP_LOGD(TAG, "dutyVal: %d", dutyVal);
+                ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, dutyVal);
+                ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+
+                //distanceSens->prevPos = distanceSens->currentPos;
+            }
         }
+        distanceSens->prevPos = distanceSens->currentPos;
     }
-    distanceSens->prevPos = distanceSens->currentPos;
 }
 
 //---------VL53TOF_task--------------

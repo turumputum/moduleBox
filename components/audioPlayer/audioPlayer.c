@@ -240,7 +240,8 @@ void audio_task(void *arg) {
 	//ESP_LOGD(TAG, "Create fatfs stream to read data from sdcard");
 	fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
 	fatfs_cfg.type = AUDIO_STREAM_READER;
-	fatfs_cfg.ext_stack = true;
+	fatfs_cfg.ext_stack = false;
+	fatfs_cfg.task_stack = 4096; // Increase stack size
 	//fatfs_cfg.task_prio = 22; //22
 	fatfs_stream_reader = fatfs_stream_init(&fatfs_cfg);
 
@@ -375,7 +376,7 @@ void audio_task(void *arg) {
 					}
 				}
 			}else if(!memcmp(command, "setVolume", 9)){//------------------------------
-				setVolume_str(cmd_arg);
+				setVolume_num(atoi(cmd_arg));
 			}
 		}
 
@@ -427,7 +428,7 @@ void audioInit(uint8_t slot_num){
 	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_player_%d", slot_num);
-	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
+	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*8, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
 }
 
 void audioDeinit(void) {

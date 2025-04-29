@@ -118,7 +118,7 @@ void button_task(void *arg){
 			report(str, slot_num);
 			
 			//vTaskDelay(pdMS_TO_TICKS(5));
-			//ESP_LOGD(TAG,"report String:%s", str);
+			ESP_LOGD(TAG,"BUTTON report String:%s", str);
 			tick = xTaskGetTickCount();
 			if(debounce_gap!=0){
 				esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);
@@ -284,7 +284,7 @@ void led_task(void *arg){
 
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            ESP_LOGD(TAG, "LED Input command %s for slot:%d", msg.str, msg.slot_num);
 			int val = atoi(msg.str+strlen(me_state.action_topic_list[slot_num])+1);
 			if(val!=inverse){
 				targetBright = maxBright;

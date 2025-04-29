@@ -34,14 +34,14 @@ typedef struct {
 	uint8_t speed;
 }gesture_typeDef;
 
-#define DEBUG                  0
+#define DEBUG                  1
 
 /* APDS-9960 I2C address */
 #define APDS9960_I2C_ADDR       0x39
 
 /* Gesture parameters */
 #define GESTURE_ARRAY_SIZE 250
-#define GESTURE_THRESHOLD 60
+#define GESTURE_THRESHOLD 90
 
 
 /* Error code for returned values */
@@ -185,8 +185,8 @@ typedef struct {
 #define DEFAULT_POFFSET_DL      0       // 0 offset      
 #define DEFAULT_CONFIG1         0x60    // No 12x wait (WTIME) factor
 #define DEFAULT_LDRIVE          LED_DRIVE_100MA
-#define DEFAULT_PGAIN           PGAIN_4X
-#define DEFAULT_AGAIN           AGAIN_4X
+#define DEFAULT_PGAIN           PGAIN_4X//PGAIN_4X
+#define DEFAULT_AGAIN           AGAIN_4X//AGAIN_4X
 #define DEFAULT_PILT            0       // Low proximity threshold
 #define DEFAULT_PIHT            50      // High proximity threshold
 #define DEFAULT_AILT            0xFFFF  // Force interrupt for calibration
@@ -197,7 +197,7 @@ typedef struct {
 #define DEFAULT_GPENTH          0//40      // Threshold for entering gesture mode
 #define DEFAULT_GEXTH           0//30      // Threshold for exiting gesture mode
 #define DEFAULT_GCONF1          0x40//0x40    // 4 gesture events for int., 1 for exit
-#define DEFAULT_GGAIN           GGAIN_8X//GGAIN_4X
+#define DEFAULT_GGAIN           GGAIN_4X//GGAIN_4X
 #define DEFAULT_GLDRIVE         LED_DRIVE_100MA//LED_DRIVE_100MA
 #define DEFAULT_GWTIME          GWTIME_0MS
 #define DEFAULT_GOFFSET         0       // No offset scaling for gesture mode
@@ -334,6 +334,8 @@ esp_err_t setGestureMode(i2c_port_t i2c_port, uint8_t mode);
 // int apds9960ReadSensor(i2c_port_t i2c_port);
 
 esp_err_t processGesture(gesture_data_type *gData);
+
+esp_err_t disableVerticalAxis(i2c_port_t i2c_port);
 
 void sensor_start(i2c_port_t i2c_port);
 

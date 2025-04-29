@@ -111,6 +111,31 @@ uint8_t getProximity(i2c_port_t i2c_port) {
 }
 
 
+esp_err_t disableVerticalAxis(i2c_port_t i2c_port)
+{
+    esp_err_t ret;
+    uint8_t val;
+
+    // Считываем текущее значение регистра GCONF3
+    ret = i2c1_read(i2c_port, APDS9960_GCONF3, &val, 1);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    // Очищаем младшие два бита и устанавливаем GDIMS = 0b10 (только горизонтальные жесты)
+    val &= 0xFC;   // 0xFC = 11111100b — сбрасывает биты [1:0]
+    val |= 0x02;   // 0x02 = 00000010b — включает только L/R
+
+    // Записываем обновленное значение обратно в GCONF3
+    ret = i2c1_write(i2c_port, APDS9960_GCONF3, val);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    return ESP_OK;
+}
+
+
 
 /* ----------------------------------------------------------------------------*
  *

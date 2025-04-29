@@ -38,7 +38,7 @@ extern const uint8_t gamma_8[256];
 
 SemaphoreHandle_t rmt_semaphore=NULL;
 
-#define MAX_CHANNELS 4
+#define MAX_CHANNELS 3
 uint8_t rmt_chan_counter = 0;
 
 
@@ -806,9 +806,10 @@ void swiperLed_task(void *arg){
     
         if(swiperLed.state == LED_RUN){
             processLedEffect(&swiperLed);
+            rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
         }
           
-        rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
+        
         vTaskDelayUntil(&lastWakeTime, refreshPeriod);
         //vTaskDelay(pdMS_TO_TICKS(refreshPeriod));
     }

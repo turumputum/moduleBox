@@ -346,6 +346,161 @@ void exec_out(int slot_num, int payload) {
 
 }
 
+//--------------------out_2ch---------------------------
+void out_2ch_task(void *arg) {
+    int slot_num = *(int*) arg;
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+
+    //---init hardware---
+    uint8_t pin_map[2] = {0};
+    uint8_t inverse_map[2] = {0};
+
+    pin_map[0] = SLOTS_PIN_MAP[slot_num][0];
+    esp_rom_gpio_pad_select_gpio(pin_map[0]);
+    gpio_set_direction(pin_map[0], GPIO_MODE_OUTPUT);
+
+    pin_map[1] = SLOTS_PIN_MAP[slot_num][1];
+    esp_rom_gpio_pad_select_gpio(pin_map[1]);
+    gpio_set_direction(pin_map[1], GPIO_MODE_OUTPUT);
+
+    //---set inverse---
+    if (strstr(me_config.slot_options[slot_num], "inverse_0") != NULL) {
+        inverse_map[0] = 1;
+        ESP_LOGD(TAG, "Set inverse_0:%d for slot:%d", inverse_map[0], slot_num);
+    }
+    if (strstr(me_config.slot_options[slot_num], "inverse_1") != NULL) {
+        inverse_map[1] = 1;
+        ESP_LOGD(TAG, "Set inverse_1:%d for slot:%d", inverse_map[1], slot_num);
+    }
+
+    //---set delay---
+    uint16_t delay_ms = 0;
+    if (strstr(me_config.slot_options[slot_num], "outDelay") != NULL) {
+        delay_ms = get_option_int_val(slot_num, "outDelay");
+        ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d", delay_ms, slot_num);
+    }
+
+    //---set impulse---
+    uint16_t impulse_ms = 0;
+    if (strstr(me_config.slot_options[slot_num], "outImpulse") != NULL) {
+        impulse_ms = get_option_int_val(slot_num, "outImpulse");
+        ESP_LOGD(TAG, "Set impulse_ms:%d for slot:%d", impulse_ms, slot_num);
+    }
+
+    //---add action to topic list---
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+        char* custom_topic = NULL;
+        custom_topic = get_option_string_val(slot_num, "topic");
+        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
+    } else {
+        char t_str[strlen(me_config.deviceName) + strlen("/out_0") + 3];
+        sprintf(t_str, "%s/out_%d", me_config.deviceName, slot_num);
+        me_state.action_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
+    }
+
+    me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
+
+    //---set default state---
+    uint8_t state[2] = { inverse_map[0], inverse_map[1] };
+    vTaskDelay(pdTICKS_TO_MS(100));
+
+    if (strstr(me_config.slot_options[slot_num], "defState_0") != NULL) {
+        state[0] = get_option_int_val(slot_num, "defState_0");
+        if (inverse_map[0] == 1) {
+            state[0] = !state[0];
+        }
+    }
+    gpio_set_level(pin_map[0], (uint32_t)state[0]);
+
+    if (strstr(me_config.slot_options[slot_num], "defState_1") != NULL) {
+        state[1] = get_option_int_val(slot_num, "defState_1");
+        if (inverse_map[1] == 1) {
+            state[1] = !state[1];
+        }
+    }
+    gpio_set_level(pin_map[1], (uint32_t)state[1]);
+
+    while (1) {
+        command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, portMAX_DELAY) == pdPASS) {
+            char* payload;
+            char* cmd;
+            int val = 0;
+
+            if (strstr(msg.str, ":") != NULL) {
+                cmd = strtok_r(msg.str, ":", &payload);
+                val = atoi(payload);
+            } else {
+                cmd = strdup(msg.str);
+            }
+
+            int pin_index = 0;
+            if (strstr(msg.str, "ch_0") != NULL) {
+                pin_index = 0;
+            } else if (strstr(msg.str, "ch_1") != NULL) {
+                pin_index = 1;
+            }
+
+            if (strstr(msg.str, "toggle") != NULL) {
+                state[pin_index] = !state[pin_index];
+            } else {
+                state[pin_index] = inverse_map[pin_index] ? !val : val;
+            }
+
+            out_level_cmd_t port_cmd = {
+                .gpio_num = pin_map[pin_index],
+                .level    = state[pin_index],
+                .slot_num = slot_num
+            };
+
+            // Apply delay if needed
+            if (delay_ms <= 0) {
+                set_out_level(&port_cmd);
+            } else {
+                esp_timer_handle_t delay_timer;
+                const esp_timer_create_args_t delay_timer_args = {
+                    .callback = &set_out_level,
+                    .arg      = &port_cmd,
+                    .name     = "delay"
+                };
+                ESP_ERROR_CHECK(esp_timer_create(&delay_timer_args, &delay_timer));
+                ESP_ERROR_CHECK(esp_timer_start_once(delay_timer, delay_ms * 1000));
+            }
+
+            // Apply impulse if configured
+            if (impulse_ms > 0) {
+                esp_timer_handle_t impulse_timer;
+                // Flip state to restore after impulse
+                state[pin_index] = !state[pin_index];
+                out_level_cmd_t imp_cmd = {
+                    .gpio_num = pin_map[pin_index],
+                    .level    = state[pin_index],
+                    .slot_num = slot_num
+                };
+                const esp_timer_create_args_t impulse_timer_args = {
+                    .callback = &set_out_level,
+                    .arg      = &imp_cmd,
+                    .name     = "impulse"
+                };
+                ESP_ERROR_CHECK(esp_timer_create(&impulse_timer_args, &impulse_timer));
+                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (delay_ms + impulse_ms) * 1000));
+            }
+        }
+    }
+}
+
+void start_out_2ch_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num      = slot_num;
+    char tmpString[60];
+    sprintf(tmpString, "task_out_2ch_%d", slot_num);
+    xTaskCreatePinnedToCore(out_2ch_task, tmpString, 1024 * 4, &t_slot_num, 12, NULL, 1);
+
+    ESP_LOGD(TAG, "Out 2ch task created for slot: %d Heap usage: %lu free heap:%u",
+             slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
 
 
 //-----------------------------out_3ch-------------------------
@@ -398,9 +553,9 @@ void out_3ch_task(void *arg) {
 	}
 
 	//---add action to topic list---
-	if (strstr(me_config.slot_options[slot_num], "outTopic") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "outTopic");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{

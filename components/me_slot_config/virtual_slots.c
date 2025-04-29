@@ -696,7 +696,7 @@ void scaler_task(void* arg) {
 
     me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
 
-    int16_t zeroDeadZone = 50;
+    int16_t zeroDeadZone = 0;
 	if (strstr(me_config.slot_options[slot_num], "zeroDeadZone") != NULL) {
 		zeroDeadZone = get_option_int_val(slot_num, "zeroDeadZone");
 		ESP_LOGD(TAG, "Set zeroDeadZone:%d for slot:%d",zeroDeadZone, slot_num);
@@ -766,7 +766,7 @@ void scaler_task(void* arg) {
                 if(abs(outputVal)<zeroDeadZone){
                     outputVal = 0;
                 }
-                //ESP_LOGD(TAG, "inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
+                ESP_LOGD(TAG, "SCALER inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
                 char str[50];
                 memset(str, 0, sizeof(str));
                 sprintf(str, "%ld", (int32_t)outputVal);

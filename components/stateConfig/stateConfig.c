@@ -82,6 +82,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->MDNS_enable = atoi(value);
 	} else if (MATCH("FTP", "FTP_enable")) {//-----------------------------------------------
 		pconfig->FTP_enable = atoi(value);
+	} else if (MATCH("FTP", "FTP_anon")) {
+		pconfig->FTP_anon = atoi(value);
 	} else if (MATCH("FTP", "FTP_login")) {
 		pconfig->FTP_login = strdup(value);
 	} else if (MATCH("FTP", "FTP_pass")) {
@@ -157,6 +159,7 @@ void load_Default_Config(void) {
 	me_config.MDNS_enable=1;
 
 	me_config.FTP_enable = 1;
+	me_config.FTP_anon = 1;
 	me_config.FTP_login = strdup("user");
 	me_config.FTP_pass = strdup("pass");
 	me_state.FTP_init_res = ESP_FAIL;
@@ -289,6 +292,8 @@ int saveConfig(void) {
 	sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
+
+	
 	// sprintf(tmp, "udp_cross_link = %s \r\n", me_config.udp_cross_link);
 	// fprintf(configFile, tmp);
 	// memset(tmp, 0, strlen(tmp));

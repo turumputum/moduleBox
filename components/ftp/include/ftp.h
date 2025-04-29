@@ -82,6 +82,7 @@ typedef enum {
 } ftp_result_t;
 
 typedef struct {
+    bool            useranon  : 1;
     bool            uservalid : 1;
     bool            passvalid : 1;
 } ftp_loggin_t;
@@ -105,8 +106,8 @@ typedef struct {
         DIR         *dp;
         FILE        *fp;
     };
-    int32_t         lc_sd;
-    int32_t         ld_sd;
+//    int32_t         lc_sd;
+//    int32_t         ld_sd;
     int32_t         c_sd;
     int32_t         d_sd;
     int32_t         dtimeout;
@@ -155,6 +156,7 @@ typedef enum {
     E_FTP_CMD_APPE,
     E_FTP_CMD_NLST,
     E_FTP_CMD_AUTH,
+    E_FTP_CMD_PORT,
     E_FTP_NUM_FTP_CMDS
 } ftp_cmd_index_t;
 
@@ -200,15 +202,49 @@ extern int ftp_buff_size;
 extern int ftp_timeout;
 #endif
 
-bool ftp_init (void);
-void ftp_deinit (void);
-int ftp_run (uint32_t elapsed);
-bool ftp_enable (void);
-bool ftp_isenabled (void);
-bool ftp_disable (void);
-bool ftp_reset (void);
-int ftp_getstate();
-bool ftp_terminate (void);
+#define MAX_CLIENTS 		    5
+#define DEF_RESET_TIMEOUT       10000
+
+typedef struct __tag_CLIENTCOMMON
+{
+    int32_t         lc_sd;
+    int32_t         ld_sd;
+
+} CLIENTCOMMON, * PCLIENTCOMMON;
+
+
+typedef struct __tag_CLIENT
+{
+    unsigned        num;
+	bool 			inUse;
+	bool 			resetTrigger;
+    int             ftp_buff_size;
+
+    PCLIENTCOMMON   common;
+	ftp_data_t 		ftp_data;
+    uint8_t         listFlagAll;
+    uint8_t         listFlagLong;
+
+    char            *ftp_path;
+    char            *ftp_scratch_buffer;
+    char            *ftp_cmd_buffer;
+    uint8_t         ftp_nlist;
+
+    char            switchesBuff [ 128 ];
+
+} CLIENT, * PCLIENT;
+
+
+
+bool ftp_init (PCLIENT cl);
+void ftp_deinit (PCLIENT cl);
+int ftp_run (PCLIENT cl, uint32_t elapsed);
+bool ftp_enable (PCLIENT cl);
+bool ftp_isenabled (PCLIENT cl);
+bool ftp_disable (PCLIENT cl);
+bool ftp_reset (PCLIENT cl);
+int ftp_getstate(PCLIENT cl);
+bool ftp_terminate (PCLIENT cl);
 bool ftp_stop_requested();
 int32_t ftp_get_maxstack (void);
 

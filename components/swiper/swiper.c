@@ -43,7 +43,7 @@ void swiper_task(void *arg) {
     uint8_t scl_pin = SLOTS_PIN_MAP[slot_num][1];
 
     uint8_t up_down_disable = 0;
-    if (strstr(me_config.slot_options[slot_num], "up_down_disable")!=NULL){
+    if (strstr(me_config.slot_options[slot_num], "upDownDisable")!=NULL){
 		up_down_disable=1;
 	}
 
@@ -78,12 +78,16 @@ void swiper_task(void *arg) {
 
     sensor_start(i2c_port);
 
+    if(!up_down_disable){
+        disableVerticalAxis(i2c_port);
+    }
+
 
     gesture_data_type gData;
     gData.state = WAITING;
 
     while(1){
-        vTaskDelay(30 / portTICK_PERIOD_MS);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
         if (readSensor(i2c_port, &gData) != ESP_OK){
             ESP_LOGE(TAG, "Error reading sensor");
             continue;

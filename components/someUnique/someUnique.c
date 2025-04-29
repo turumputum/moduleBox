@@ -271,7 +271,7 @@ void uartLogger_task(void* arg) {
     gpio_reset_pin (rx_pin);
     uart_set_pin (uart_num, tx_pin, rx_pin, -1, -1);
     uart_is_driver_installed (uart_num);
-    uart_driver_install (uart_num, 255, 255, 0, NULL, 0);
+    uart_driver_install (uart_num, 256, 256, 0, NULL, 0);
     
     #define BUF_SIZE 1024
     //char data[BUF_SIZE];
@@ -340,20 +340,7 @@ void dialer_task(void* arg) {
 
 	me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
 
-	gpio_reset_pin(pulse_pin);
-	esp_rom_gpio_pad_select_gpio(pulse_pin);
-    gpio_config_t in_conf = {};
-    in_conf.pull_up_en = 0;
-    in_conf.pull_down_en =1;
-   	in_conf.intr_type = GPIO_INTR_NEGEDGE;
-    in_conf.pin_bit_mask = (1ULL<<pulse_pin);
-    in_conf.mode = GPIO_MODE_INPUT;
-    gpio_config(&in_conf);
-	gpio_set_intr_type(pulse_pin, GPIO_INTR_NEGEDGE);
-    //gpio_install_isr_service(ESP_INTR_FLAG_LOWMED);
-	gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)slot_num);
-
-    gpio_config_t io_conf = {};
+	gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = 1ULL<<ena_pin;
@@ -369,8 +356,14 @@ void dialer_task(void* arg) {
 
     uint8_t enaInverse = 0;
     if (strstr(me_config.slot_options[slot_num], "enaInverse") != NULL) {
-		enaInverse = get_option_int_val(slot_num, "enaInverse");
+		enaInverse = 1;
 		ESP_LOGD(TAG, "Set enaInverse:%d for slot:%d", enaInverse, slot_num);
+	}
+
+    uint8_t pulseInverse = 0;
+    if (strstr(me_config.slot_options[slot_num], "pulseInverse") != NULL) {
+		pulseInverse = 1;
+		ESP_LOGD(TAG, "Set pulseInverse:%d for slot:%d", pulseInverse, slot_num);
 	}
 
     uint8_t numberMaxLenght = 7;
@@ -396,6 +389,19 @@ void dialer_task(void* arg) {
 		ESP_LOGD(TAG, "Standart dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 
+    gpio_reset_pin(pulse_pin);
+	esp_rom_gpio_pad_select_gpio(pulse_pin);
+    gpio_config_t in_conf = {};
+    in_conf.pull_up_en = 0;
+    in_conf.pull_down_en =0;
+   	in_conf.pin_bit_mask = (1ULL<<pulse_pin);
+    in_conf.mode = GPIO_MODE_INPUT;
+    in_conf.intr_type = pulseInverse?GPIO_INTR_POSEDGE:GPIO_INTR_NEGEDGE;
+    gpio_config(&in_conf);
+	gpio_set_intr_type(pulse_pin, pulseInverse?GPIO_INTR_POSEDGE:GPIO_INTR_NEGEDGE);
+    //gpio_install_isr_service(ESP_INTR_FLAG_LOWMED);
+	gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)slot_num);
+
 
     uint8_t counter=0;
     char number_str[numberMaxLenght];
@@ -408,51 +414,55 @@ void dialer_task(void* arg) {
     uint32_t tick=xTaskGetTickCount();
 
     while(1){
-        vTaskDelay(pdMS_TO_TICKS(30));      
+        //vTaskDelay();      
         
-        uint8_t ena_state = gpio_get_level(ena_pin)?!enaInverse:enaInverse;
+        uint8_t ena_state = gpio_get_level(ena_pin)?enaInverse:!enaInverse;
         if(ena_state!= prev_ena_state){
             prev_ena_state = ena_state;
             dial_start_time =pdTICKS_TO_MS(xTaskGetTickCount());
-            if((ena_state == 1)&&(state_flag == 0)){
+            if((ena_state == !enaInverse)&&(state_flag == 0)){
                 state_flag = 1;
                 counter = 0;
-                //ESP_LOGD(TAG, "Lets input number: %s strlen:%d dial_start_time:%ld", number_str, strlen(number_str), dial_start_time);
-            }else if(ena_state == 0){
+                ESP_LOGD(TAG, "Lets input number: %s strlen:%d dial_start_time:%ld", number_str, strlen(number_str), dial_start_time);
+            }else if(ena_state == enaInverse){
                 if(counter>=10)counter=0;
                 number_str[string_lenght]=(char)counter+48;
                 string_lenght++;
                 number_str[string_lenght]='\0';
-                //ESP_LOGD(TAG, "update number_str: %s counter:%d strlen:%d", number_str, counter, strlen(number_str));
+                ESP_LOGD(TAG, "update number_str: %s counter:%d strlen:%d", number_str, counter, strlen(number_str));
                 counter = 0;
             }
         }
 
         if(state_flag == 1){
             if(((pdTICKS_TO_MS(xTaskGetTickCount())-dial_start_time)>=waitingTime)||(string_lenght>=numberMaxLenght)){
-                if(ena_state == 0){
-                    //ESP_LOGD(TAG, "Input end, report number: %s", number_str);
+                if(ena_state == enaInverse){
+                    ESP_LOGD(TAG, "Input end, report number: %s", number_str);
                     report(number_str, slot_num);
                     memset(number_str, 0, numberMaxLenght);
                     state_flag = 0;
                     string_lenght = 0;
+                    vTaskDelay(50);
                 }
             }
         }
 
         uint8_t tmp;
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
-            vTaskDelay(debounceGap);
-            if(gpio_get_level(pulse_pin) == 0){
-                // if(debounceGap!=0){
-                //     if((xTaskGetTickCount()-tick)<debounceGap){
-                //         //ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
-                //         goto exit;
-                //     }
-                // }
+		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, pdMS_TO_TICKS(15)) == pdPASS){
+            if(gpio_get_level(pulse_pin) == pulseInverse){
+                
+                // if(gpio_get_level(pulse_pin) == pulseInverse){
+                    // if(debounceGap!=0){
+                    //     if((xTaskGetTickCount()-tick)<debounceGap){
+                    //         //ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
+                    //         goto exit;
+                    //     }
+                    // }
 
-                tick = xTaskGetTickCount();
-                counter++;
+                    tick = xTaskGetTickCount();
+                    counter++;
+                    vTaskDelay(debounceGap);
+                // }
             }
         }
         // exit:
@@ -698,4 +708,95 @@ void start_volnaKolya_task(int slot_num) {
     xTaskCreate(volnaKolya_task, "volnaKolya_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
     ESP_LOGD(TAG, "volnaKolya_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+
+//---------------------furbyEye----------------
+
+void furbyEye_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    int uart_num = UART_NUM_1; // Начинаем с минимального порта
+    while (uart_is_driver_installed(uart_num)) {
+        uart_num++;
+        if (uart_num >= UART_NUM_MAX) {
+            ESP_LOGE(TAG, "slot num:%d ___ No free UART driver", slot_num);
+            vTaskDelete(NULL);
+        }
+    }
+
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][1];
+
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    uart_param_config (uart_num, &uart_config);
+    gpio_reset_pin (tx_pin);
+    gpio_reset_pin (rx_pin);
+    uart_set_pin (uart_num, tx_pin, rx_pin, -1, -1);
+    uart_is_driver_installed (uart_num);
+    uart_driver_install (uart_num, 256, 256, 0, NULL, 0);
+    
+    #define BUF_SIZE 1024
+    //char data[BUF_SIZE];
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/eye_0")+3];
+		sprintf(t_str, "%s/eye_%d",me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
+	} 
+
+
+    int val;
+    TickType_t lastWakeTime = xTaskGetTickCount(); 
+    while(1){
+        command_message_t temp_msg;
+        command_message_t msg;
+        uint8_t recv_state=0;
+
+        while(xQueueReceive(me_state.command_queue[slot_num], &temp_msg, 0) == pdPASS) {
+            msg = temp_msg;
+            recv_state=1;
+        }
+        if(recv_state==1){
+            ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, slot_num);
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
+            if(strstr(cmd, "setPic")!=NULL){
+                val = atoi(payload);
+                if(uart_write_bytes(uart_num, &val, 1)==1){
+                    ESP_LOGD(TAG, "setPic to:%d", val);
+                }else{
+                    ESP_LOGE(TAG, "setPic failed");
+                }
+            }
+        }
+        vTaskDelayUntil(&lastWakeTime, 10);
+    }
+}
+
+void start_furbyEye_task(int slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "furbyEye_task_%d", slot_num);
+	xTaskCreatePinnedToCore(furbyEye_task, tmpString, 1024*8, &t_slot_num,12, NULL, 1);
+
+	ESP_LOGD(TAG,"furbyEye_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
 

@@ -78,11 +78,10 @@
 #include "p9813.h"
 
 #include "3n_mosfet.h"
-#include "max7219_task.h"
 #include "swiper.h"
 #include "smartLed.h"
 #include "someUnique.h"
-#include "disp_hd44780.h"
+
 
 
 
@@ -217,10 +216,9 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("RSP_FILTER", ESP_LOG_ERROR);
 	esp_log_level_set("WIFI", level);
 	esp_log_level_set("esp_netif_handlers", level);
-	esp_log_level_set("[Ftp]", level);
+	esp_log_level_set("[FTP]", level);
 	esp_log_level_set("system_api", level);
 	esp_log_level_set("MDNS", level);
-	esp_log_level_set("[Ftp]", level);
 	esp_log_level_set("mqtt", level);
 	esp_log_level_set("leds", level);
 	esp_log_level_set("ST7789", level);
@@ -252,24 +250,21 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("VIRTUAL_SLOTS", level);
 	esp_log_level_set("myHID", level);
 	esp_log_level_set("DWIN_UART", level);
-	esp_log_level_set("MAX7219", level);
 	esp_log_level_set("SWIPER", level);
 	esp_log_level_set("SOME_UNIQUE", level);
-	esp_log_level_set("DISP_HD44780", level);
 	esp_log_level_set("AUDIO_LAN", level);
 	esp_log_level_set("RTP_STREAM", level);
 	esp_log_level_set("ONE_WIRE", level);
 	esp_log_level_set("ACCEL", level);
-	esp_log_level_set("CYBERGEAR", level);
 	esp_log_level_set("STEADYWIN", level);
-	esp_log_level_set("TICKETDISPENSER", level);
 	esp_log_level_set("VESC", level);
 	esp_log_level_set("PPM", level);
 	esp_log_level_set("CRSF", level);
 	esp_log_level_set("RGB|HSV", level);
 	esp_log_level_set("rmt", level);
+	esp_log_level_set("servoDev", level);
+	esp_log_level_set("CyberGear", level);
 	}
-
 
 
 void heap_report(){

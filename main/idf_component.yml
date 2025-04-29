@@ -1,5 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  cybergear-robotics/cybergear: "^0.1.0"
   espressif/mdns: "^1.2.2"
   espressif/jsmn: "^1.1.0"
   ds18b20: "^0.1.0"

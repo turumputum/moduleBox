@@ -107,6 +107,7 @@ typedef struct {
 	uint8_t USB_debug;
 
 	uint8_t FTP_enable;
+	uint8_t FTP_anon;
 	char *FTP_login;
 	char *FTP_pass;
 

@@ -30,15 +30,13 @@
 #include "myHID.h"
 #include "swiper.h"
 #include "rfid.h"
-#include "disp_hd44780.h"
 #include "someUnique.h"
-#include "max7219_task.h"
 #include "dwin.h"
 
 #include "distanceSens.h"
 #include "mb_oneWire.h"
 #include "accel.h"
-#include "cybergear.h"
+#include "servoDev.h"
 #include "steadywin.h"
 #include "ticketDispenser.h"
 #include "VESC.h"
@@ -108,6 +106,8 @@ int init_slots(void){
 			start_benewakeTOF_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "VL53TOF", 7)){
 			start_VL53TOF_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
+			start_hlk2410_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
@@ -121,6 +121,8 @@ int init_slots(void){
 			start_in_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
 			start_out_3ch_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
+			start_out_2ch_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
 			start_tenzo_button_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){
@@ -147,8 +149,6 @@ int init_slots(void){
 			start_buttonMatrix_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dwin", 4)){
 			start_dwinUart_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
-			start_hlk2410_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "dialer", 7)){
 			start_dialer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "whitelist", 9)){
@@ -157,8 +157,8 @@ int init_slots(void){
 			start_collector_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
 			start_ds18b20_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "cybergear", 9)){
-			start_cybergear_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "servoRod", 9)){
+			start_servoRod_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "steadywinGIM", 12)){
 			start_GIM_motor_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "ticketDispenser", 15)){
@@ -169,12 +169,14 @@ int init_slots(void){
 			start_crsf_rx_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "VESC", 4)){
 			start_CAN_VESC_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "PPM", 4)){
+		}else if(!memcmp(me_config.slot_mode[i], "PPM", 3)){
 			start_ppm_generator_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "tankControl", 4)){
+		}else if(!memcmp(me_config.slot_mode[i], "tankControl", 11)){
 			start_tankControl_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "furbyEye", 8)){
+			start_furbyEye_task(i);
 		}
-
+		
 	}
 
 	ESP_LOGD(TAG, "Load config complite. Duration: %ld ms. Heap usage: %lu",

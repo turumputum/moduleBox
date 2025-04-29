@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "driver/ledc.h"
+#include "freertos/FreeRTOS.h"
 
 typedef struct {
 //	uint8_t changeTrack;
@@ -21,6 +22,9 @@ typedef struct {
 
     uint8_t flag_float_output;
 
+    TickType_t lastTick;
+    TickType_t debounceGap;
+
     ledc_channel_config_t ledc_chan;
 } distanceSens_t;
 
@@ -37,8 +41,9 @@ typedef struct {
     .k = 1.0,\
     .fall_lag = 3000*1000,\
     .flag_float_output=0,\
+    .lastTick=0,\
+    .debounceGap=0,\
 }
-
 
 void start_VL53TOF_task(int slot_num);
 void start_benewakeTOF_task(int slot_num);
