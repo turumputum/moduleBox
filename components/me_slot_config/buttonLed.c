@@ -118,7 +118,7 @@ void button_task(void *arg){
 			report(str, slot_num);
 			
 			//vTaskDelay(pdMS_TO_TICKS(5));
-			ESP_LOGD(TAG,"BUTTON report String:%s", str);
+			//ESP_LOGD(TAG,"BUTTON report String:%s", str);
 			tick = xTaskGetTickCount();
 			if(debounce_gap!=0){
 				esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);

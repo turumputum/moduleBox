@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "moduleBox",
-    "project_version":    "update-15-gae98f28-dirty",
+    "project_version":    "update-16-gd406d6e-dirty",
     "project_path":       "C:/Users/user/Desktop/moduleBox",
     "idf_path":           "C:/Users/user/esp/v5.3.3/esp-idf",
     "build_dir":          "C:/Users/user/Desktop/moduleBox/build",

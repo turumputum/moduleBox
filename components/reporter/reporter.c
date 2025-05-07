@@ -331,7 +331,7 @@ void reporter_task(void){
 			}else{
 				sprintf(tmpStr,"%s:%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}
-			//ESP_LOGD(TAG, "Report: %s", tmpStr);
+			//ESP_LOGD(TAG, "get message Report: %s", tmpStr);
 			
 			send_report(tmpStr);
 			
@@ -344,7 +344,7 @@ void reporter_task(void){
 
 void reporter_init(void){
 	me_state.reporter_queue=xQueueCreate(150, sizeof(reporter_message_t));
-	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
+	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 6, NULL, 0);
 	//xTaskCreate (reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 }
 
@@ -366,9 +366,8 @@ void report(char *msg, int slot_num){
 		ESP_LOGE(TAG, "QueueSend error:%d", ret);
 	}
 	
-
 	//free(send_message.str);
-	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
+	ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 
 }
 
