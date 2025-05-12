@@ -511,3 +511,108 @@ void start_hlk2410_task(int slot_num) {
     xTaskCreate(hlk2410_task, "hlk2410_task", 1024 * 4, &slot_num, 5, NULL);
     ESP_LOGD(TAG, "hlk2410_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+
+
+//--------------------ULTRASONIC_AJ-SR04M----------------------------
+
+typedef struct {
+    uint32_t level : 1;
+    int64_t time;
+} interrupt_data_t;
+
+static QueueHandle_t interrupt_queue;
+
+
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+    interrupt_data_t interrupt_data;
+    interrupt_data.level = gpio_get_level((gpio_num_t)arg);
+    interrupt_data.time = esp_timer_get_time();
+    xQueueSendFromISR(interrupt_queue, &interrupt_data, NULL);
+}
+
+
+void ultrasonic_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    distanceSens_t distanceSens = DISTANCE_SENS_DEFAULT();
+    distanceSens.maxVal = 400; // Set a reasonable maximum value
+    distanceSens_config(&distanceSens, slot_num);
+
+    gpio_num_t trigger_pin = (gpio_num_t)SLOTS_PIN_MAP[slot_num][1];
+    gpio_num_t echo_pin = (gpio_num_t)SLOTS_PIN_MAP[slot_num][0];
+
+    gpio_config_t trigger_conf = {
+        .pin_bit_mask = (1ULL << trigger_pin),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&trigger_conf);
+
+    gpio_config_t echo_conf = {
+        .pin_bit_mask = (1ULL << echo_pin),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE
+    };
+    gpio_config(&echo_conf);
+
+    interrupt_queue = xQueueCreate(50, sizeof(interrupt_data_t));
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(echo_pin, gpio_isr_handler, (void*)echo_pin);
+
+
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/ultrasonic_0")+3];
+		sprintf(t_str, "%s/ultrasonic_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+
+
+    interrupt_data_t interrupt_data;
+    int64_t start_time = 0;
+    int64_t end_time = 0;
+
+    int64_t last_trigger_time = 0;
+
+    while (1) {
+        // Trigger the sensor
+        if(esp_timer_get_time()-last_trigger_time>100000){
+            gpio_set_level(trigger_pin, 1);
+            esp_rom_delay_us(10);
+            last_trigger_time=esp_timer_get_time();
+        }
+        
+        gpio_set_level(trigger_pin, 0);
+
+        // Wait for the echo
+        if (xQueueReceive(interrupt_queue, &interrupt_data, pdMS_TO_TICKS(0)) == pdTRUE) {  // Timeout after 50ms
+            if (interrupt_data.level == 0) {
+                start_time = interrupt_data.time;
+                //ESP_LOGD(TAG,"data level null, time:%lld", start_time);
+            } else if (interrupt_data.level == 1 && start_time > 0) {
+                end_time = interrupt_data.time;
+                distanceSens.currentPos = (end_time - start_time) / 58; // Calculate distance in cm
+                //ESP_LOGD(TAG,"data level high, time:%lld", end_time);
+                distanceSens_report(&distanceSens, slot_num);
+                start_time = 0; // Reset for next measurement
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(25)); // Delay between measurements
+    }
+}
+
+void start_ultrasonic_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    xTaskCreate(ultrasonic_task, "ultrasonic_task", 1024 * 4, &slot_num, 5, NULL);
+    ESP_LOGD(TAG, "ultrasonic_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}

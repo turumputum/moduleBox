@@ -4,7 +4,7 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.portWin": "COM6",
+    "idf.portWin": "COM21",
     "files.associations": {
         "esp_eth_mac.h": "c",
         "esp_efuse.h": "c",
@@ -110,7 +110,8 @@
         "gpio_struct.h": "c",
         "esp_cache.h": "c",
         "cstdint": "c",
-        "cybergear.h": "c"
+        "cybergear.h": "c",
+        "esp_rom_sys.h": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",

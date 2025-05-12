@@ -107,7 +107,8 @@ typedef struct {
   int32_t accel;
 
   int8_t dir;
-  int32_t state;
+  int8_t runSpeedFlag;
+
 }stepper_t;
 
 #define STEPPER_DEFAULT() {\
@@ -130,7 +131,7 @@ typedef struct {
   .currentPos = 0,\
   .accel = 100,\
 	.dir = 0,\
-  .state = 0,\
+  .runSpeedFlag = 0,\
 }
 
 void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);

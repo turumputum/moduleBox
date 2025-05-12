@@ -50,3 +50,5 @@ void start_benewakeTOF_task(int slot_num);
 
 
 void start_hlk2410_task(int slot_num);
+
+void start_ultrasonic_task(int slot_num);

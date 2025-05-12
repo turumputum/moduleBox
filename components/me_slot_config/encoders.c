@@ -13,12 +13,12 @@
 
 #include "reporter.h"
 #include "stateConfig.h"
-#include "rotary_encoder.h"
-
+#include "driver/pcnt.h"
+#include "driver/pulse_cnt.h"
 #include "esp_system.h"
 #include "esp_log.h"
 #include "me_slot_config.h"
-
+#include "executor.h"
 #include "esp_rom_sys.h"
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -301,72 +301,245 @@ void start_encoderPPM_task(int slot_num)
 }
 
 //-------------------incremental encoder secttion--------------------------
-void encoder_inc_task(void *arg){
-	int slot_num = *(int *)arg;
-	uint8_t a_pin_num = SLOTS_PIN_MAP[slot_num][0];
-	uint8_t b_pin_num = SLOTS_PIN_MAP[slot_num][1];
+// void encoder_inc_task(void *arg){
+// 	int slot_num = *(int *)arg;
+// 	uint8_t a_pin_num = SLOTS_PIN_MAP[slot_num][0];
+// 	uint8_t b_pin_num = SLOTS_PIN_MAP[slot_num][1];
 
-	gpio_install_isr_service(0);
-	rotary_encoder_info_t info = {0};
+// 	gpio_install_isr_service(0);
+// 	rotary_encoder_info_t info = {0};
+
+// 	uint8_t inverse  = 0;
+// 	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
+// 		inverse=1;
+// 	}
+// 	if(inverse){
+// 		ESP_ERROR_CHECK(rotary_encoder_init(&info, b_pin_num, a_pin_num));
+// 	}else{
+// 		ESP_ERROR_CHECK(rotary_encoder_init(&info, a_pin_num, b_pin_num));
+// 	}
+
+// 	uint8_t absolute  = 0;
+// 	if (strstr(me_config.slot_options[slot_num], "absolute")!=NULL){
+// 		absolute=1;
+// 	}
+	
+// 	uint8_t flag_custom_topic = 0;
+// 	char *custom_topic=NULL;
+// 	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
+// 		custom_topic = get_option_string_val(slot_num,"topic");
+// 		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
+// 		flag_custom_topic=1;
+// 	}
+
+//     if(flag_custom_topic==0){
+// 		char *str = calloc(strlen(me_config.deviceName)+strlen("/encoder_")+4, sizeof(char));
+// 		sprintf(str, "%s/encoder_%d",me_config.deviceName, slot_num);
+// 		me_state.trigger_topic_list[slot_num]=str;
+// 	}else{
+// 		me_state.trigger_topic_list[slot_num]=custom_topic;
+// 	}
+
+
+
+// 	//QueueHandle_t event_queue = rotary_encoder_create_queue();
+// 	//ESP_ERROR_CHECK(rotary_encoder_set_queue(&info, event_queue));
+
+// 	int32_t pos, prev_pos=0;
+
+// 	while (1)
+// 	{
+// 		// Wait for incoming events on the event queue.
+// 		pos = info.state.position;
+
+// 		char str[40];
+// 		if(pos!=prev_pos){
+
+// 			if(absolute){
+// 				sprintf(str,"%ld", pos);
+// 			}else{
+// 				sprintf(str,"%ld",prev_pos - pos);
+// 			}
+
+// 			report(str, slot_num);
+// 			//vPortFree(str);
+// 			prev_pos = pos;
+// 		}
+// 		vTaskDelay(pdMS_TO_TICKS(20));
+// 	}
+// }
+
+void encoder_inc_task(void *arg){
+    int slot_num = *(int *)arg;
+
+	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    uint8_t a_pin_num = SLOTS_PIN_MAP[slot_num][0];
+    uint8_t b_pin_num = SLOTS_PIN_MAP[slot_num][1];
 
 	uint8_t inverse  = 0;
-	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-		inverse=1;
-	}
-	if(inverse){
-		ESP_ERROR_CHECK(rotary_encoder_init(&info, b_pin_num, a_pin_num));
+    if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
+        inverse=1;
+		ESP_LOGD(TAG, "Set inverse slot_num: %d",slot_num);
+    }
+
+    //ESP_LOGD(TAG, "encoder_inc_task slot_num: %d, a_pin_num: %d, b_pin_num: %d", slot_num, a_pin_num, b_pin_num);
+
+    pcnt_unit_config_t unit_config = {
+        .high_limit = INT16_MAX,
+        .low_limit = INT16_MIN,
+    };
+    pcnt_unit_handle_t pcnt_unit = NULL;
+    esp_err_t err = pcnt_new_unit(&unit_config, &pcnt_unit);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "pcnt_new_unit failed: %d", err);
+        return;
+    }
+
+	//ESP_LOGI(TAG, "set glitch filter");
+    pcnt_glitch_filter_config_t filter_config = {
+        .max_glitch_ns = 1000,
+    };
+    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcnt_unit, &filter_config));
+
+    pcnt_chan_config_t chan_a_config = {
+        .edge_gpio_num = a_pin_num,
+        .level_gpio_num = b_pin_num,
+    };
+
+	pcnt_channel_handle_t pcnt_chan_a = NULL;
+    ESP_ERROR_CHECK(pcnt_new_channel(pcnt_unit, &chan_a_config, &pcnt_chan_a));
+
+	pcnt_chan_config_t chan_b_config = {
+        .edge_gpio_num = b_pin_num,
+        .level_gpio_num = a_pin_num,
+    };
+    pcnt_channel_handle_t pcnt_chan_b = NULL;
+    ESP_ERROR_CHECK(pcnt_new_channel(pcnt_unit, &chan_b_config, &pcnt_chan_b));
+
+	//ESP_LOGI(TAG, "set edge and level actions for pcnt channels");
+	if(!inverse){
+		ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));
+		ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_b, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE));
+		ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
+    	ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_b, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
 	}else{
-		ESP_ERROR_CHECK(rotary_encoder_init(&info, a_pin_num, b_pin_num));
+		ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_a, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE));
+		ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_b, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));
+		ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_a, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+    	ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_b, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+	}
+	ESP_LOGI(TAG, "enable pcnt unit");
+    ESP_ERROR_CHECK(pcnt_unit_enable(pcnt_unit));
+    ESP_LOGI(TAG, "clear pcnt unit");
+    ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt_unit));
+    ESP_LOGI(TAG, "start pcnt unit");
+    ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit));
+
+
+    uint8_t absolute  = 0;
+    if (strstr(me_config.slot_options[slot_num], "absolute")!=NULL){
+        absolute=1;
+		ESP_LOGD(TAG, "Set absolute for slot:%d", slot_num);
+    }
+
+    uint16_t refreshPeriod = 10;
+    if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
+		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod"));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
-	uint8_t absolute  = 0;
-	if (strstr(me_config.slot_options[slot_num], "absolute")!=NULL){
-		absolute=1;
+	int16_t divider = 1;
+    if (strstr(me_config.slot_options[slot_num], "divider") != NULL) {
+		divider = (get_option_int_val(slot_num, "divider"));
+		if(divider<=0) divider=1;
+		ESP_LOGD(TAG, "Set divider:%d for slot:%d",divider, slot_num);
 	}
+	int16_t offset = 0;
+    if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
+		offset = (get_option_int_val(slot_num, "offset"));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
+	}
+
+	int32_t minVal = INT32_MIN;
+    if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
+		minVal = (get_option_int_val(slot_num, "minVal"));
+		ESP_LOGD(TAG, "Set minVal:%ld for slot:%d",minVal, slot_num);
+	}
+	int32_t maxVal = INT32_MAX;
+    if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
+		maxVal = (get_option_int_val(slot_num, "maxVal"));
+		ESP_LOGD(TAG, "Set maxVal:%ld for slot:%d",maxVal, slot_num);
+	}
+
+	int32_t range = maxVal - minVal+1;
+	ESP_LOGD(TAG, "Set encoder range:%ld for slot:%d",range, slot_num);
+
 	
-	uint8_t flag_custom_topic = 0;
-	char *custom_topic=NULL;
-	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
-		custom_topic = get_option_string_val(slot_num,"topic");
-		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
-		flag_custom_topic=1;
+
+    //---
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/encoder_")+3];
+		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart encoder_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
-    if(flag_custom_topic==0){
-		char *str = calloc(strlen(me_config.deviceName)+strlen("/encoder_")+4, sizeof(char));
-		sprintf(str, "%s/encoder_%d",me_config.deviceName, slot_num);
-		me_state.trigger_topic_list[slot_num]=str;
-	}else{
-		me_state.trigger_topic_list[slot_num]=custom_topic;
-	}
+    int32_t rawCount = 0;
+    int32_t count = 0;
+	int32_t prev_count = -1;
 
+	TickType_t lastWakeTime = xTaskGetTickCount();
 
-
-	//QueueHandle_t event_queue = rotary_encoder_create_queue();
-	//ESP_ERROR_CHECK(rotary_encoder_set_queue(&info, event_queue));
-
-	int32_t pos, prev_pos=0;
-
-	while (1)
-	{
-		// Wait for incoming events on the event queue.
-		pos = info.state.position;
-
-		char str[40];
-		if(pos!=prev_pos){
-
-			if(absolute){
-				sprintf(str,"%ld", pos);
-			}else{
-				sprintf(str,"%ld",prev_pos - pos);
-			}
-
-			report(str, slot_num);
-			//vPortFree(str);
-			prev_pos = pos;
+    while (1)
+    {
+		command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload = NULL;
+            char* cmd = msg.str;
+            if(strstr(cmd, "reset")!=NULL){
+				pcnt_unit_clear_count(pcnt_unit);
+            }
 		}
-		vTaskDelay(pdMS_TO_TICKS(20));
-	}
+
+        err = pcnt_unit_get_count(pcnt_unit, &rawCount);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "pcnt_get_counter_value failed: %d", err);
+            return;
+		}
+		count = (rawCount+offset)/divider;
+		while(count<minVal){
+			count=count+range;
+		}
+		while(count>maxVal){
+			count=count-range;
+		}
+
+        if (count != prev_count) {
+            char str[40];
+
+            if (absolute) {
+				
+                sprintf(str, "%ld", count);
+            } else {
+				int32_t diff = count - prev_count;
+                sprintf(str, "%ld", diff);
+            }
+
+            report(str, slot_num);
+            prev_count = count;
+        }
+
+        vTaskDelayUntil(&lastWakeTime, refreshPeriod);
+    }
 }
 
 

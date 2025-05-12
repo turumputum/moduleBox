@@ -176,11 +176,21 @@ void stepper_getCurrentPos(stepper_t *stepper){
 
 void stepper_stop(stepper_t *stepper) {
     stepper->targetPos = stepper->currentPos;
+    stepper->runSpeedFlag = 0;
     stepper->currentSpeed = 0;
     stepper->targetSpeed = 0;
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL));
 }
 
+void stepper_break(stepper_t *stepper) {
+    stepper_getCurrentPos(stepper);
+    int64_t chisl = (((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
+    float znam = 2 * stepper->accel;
+    float accel_distance = chisl / znam;
+    int64_t target =accel_distance*stepper->dir; 
+    stepper_moveTo(stepper, stepper->currentPos+target);
+    ESP_LOGD(TAG, "accel_distance: %f stopPoint: %lld", accel_distance, target);
+}
 
 static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_data) {
     stepper_t* stepper = (stepper_t*) user_data;
@@ -361,7 +371,10 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
 }
 
 void stepper_speedUpdate(stepper_t *stepper, int32_t period){  
-    
+    if(stepper->runSpeedFlag==1){
+        stepper->currentPos=0;
+    }
+
     if(stepper->currentPos!=stepper->targetPos){
         if(stepper->dir==DIR_CW){
             if(stepper->currentPos<stepper->breakPoint){
@@ -390,9 +403,9 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
             stepper->currentSpeed -= speedIncrement;
         }
         if(abs(stepper->currentSpeed)>0){
-            uint32_t period = abs(stepper->resolution/stepper->currentSpeed);
+            uint32_t period = abs((int32_t)stepper->resolution/stepper->currentSpeed);
             if(period>UINT16_MAX)period=UINT16_MAX;
-           // ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
+           ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
             mcpwm_timer_set_period(stepper->mcpwmTimer, period);
         }else if(stepper->currentSpeed==0){
             stepper_stop(stepper);

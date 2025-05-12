@@ -351,6 +351,11 @@ void stepper_task(void *arg){
                 if(strstr(cmd, "moveTo")!=NULL){
                     int32_t val = atoi(payload);
                     stepper_moveTo(&stepper, val);
+                }else if(strstr(cmd, "runSpeed")!=NULL){
+                    stepper.maxSpeed = atoi(payload);
+                    stepper_moveTo(&stepper, stepper.maxSpeed>0?(INT32_MAX-1):(INT32_MIN+1));
+                    stepper.runSpeedFlag = 1;
+                    ESP_LOGD(TAG, "Run speed:%ld", stepper.maxSpeed);
                 }else if(strstr(cmd, "setAccel")!=NULL){
                     stepper.accel = atoi(payload);
                     ESP_LOGD(TAG, "Set accel:%ld", stepper.accel);

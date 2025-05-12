@@ -108,6 +108,8 @@ int init_slots(void){
 			start_VL53TOF_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
 			start_hlk2410_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "sr04m", 5)){
+			start_ultrasonic_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
