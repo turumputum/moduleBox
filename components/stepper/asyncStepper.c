@@ -18,9 +18,6 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "STEPPER";
 
-#define DIR_CW 1
-#define DIR_CCW -1
-
 // static IRAM_ATTR bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *arg) {
 //     asyncStepper_t* stepper = (asyncStepper_t*) arg;
 //     stepper->_motorStatus = STEPPER_MOTOR_STOPPED;
@@ -169,8 +166,10 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 void stepper_getCurrentPos(stepper_t *stepper){
     int32_t pos=0;
     pcnt_unit_get_count(stepper->pcntUnit, &pos);
-    stepper->currentPos = stepper->currentPos + (pos- stepper->pcnt_prevPos);
-    //ESP_LOGD(TAG, "currentPos: %ld pos:%ld prevPos:%ld", stepper->currentPos, pos, stepper->pcnt_prevPos);
+    int16_t delta = pos- stepper->pcnt_prevPos;
+    
+    stepper->currentPos = stepper->currentPos + delta;
+    ESP_LOGD(TAG, "currentPos: %ld pos:%ld prevPos:%ld delta:%d", stepper->currentPos, pos, stepper->pcnt_prevPos, delta);
     stepper->pcnt_prevPos = pos;
 }
 
@@ -180,6 +179,8 @@ void stepper_stop(stepper_t *stepper) {
     stepper->currentSpeed = 0;
     stepper->targetSpeed = 0;
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL));
+    stepper->state=STOP;
+    //ESP_LOGD(TAG, "stopped");
 }
 
 void stepper_break(stepper_t *stepper) {
@@ -311,18 +312,43 @@ void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, u
 }
 
 
+void stepper_checkDir(stepper_t *stepper){
+    if((stepper->dir==DIR_CW)&&(stepper->currentPos > stepper->targetPos)){
+        //надо менять направление вращения
+        ESP_LOGD(TAG, "Dir change needed, CW");
+        stepper->targetSpeed = 0;
+    }else if((stepper->dir==DIR_CCW)&&(stepper->currentPos < stepper->targetPos)){
+        //надо менять направление вращения
+        ESP_LOGD(TAG, "Dir change needed, CCW");
+        stepper->targetSpeed = 0;
+    }
+
+    if(stepper->currentSpeed==0){
+        int8_t dir = stepper->targetPos > stepper->currentPos ? DIR_CW : DIR_CCW;
+        if(dir!=stepper->dir){
+            stepper->dir=dir;
+            gpio_set_level(stepper->dirPin, dir==DIR_CW ? !stepper->dirInverse : stepper->dirInverse);
+            ESP_LOGD(TAG, "Dir changed, newDir:%s dirInverse:%d", stepper->dir==DIR_CW?"CW":"CCW", stepper->dirInverse);
+            stepper->targetSpeed = stepper->maxSpeed;
+        }
+        
+    }
+}
+
 void stepper_moveTo(stepper_t *stepper, int32_t pos){
     stepper_getCurrentPos(stepper);
     stepper->targetPos = pos;
-
+    stepper->targetSpeed = stepper->maxSpeed;
+    
     int64_t distance = stepper->targetPos - stepper->currentPos;
     if(distance==0){
         return;
     }
 
-    stepper->dir = distance > 0 ? DIR_CW : DIR_CCW;
-    gpio_set_level(stepper->dirPin, stepper->dir==DIR_CW ? !stepper->dirInverse : stepper->dirInverse);
-    ESP_LOGD(TAG, "dir:%d dirInverse:%d", stepper->dir, stepper->dirInverse);
+    //!!! убери меня если checkDir заработает
+    // stepper->dir = distance > 0 ? DIR_CW : DIR_CCW;
+    // gpio_set_level(stepper->dirPin, stepper->dir==DIR_CW ? !stepper->dirInverse : stepper->dirInverse);
+    // ESP_LOGD(TAG, "dir:%d dirInverse:%d", stepper->dir, stepper->dirInverse);
 
     //pcnt_unit_stop(stepper->pcntUnit);
     
@@ -344,16 +370,17 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
 
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
     if(stepper->dir==DIR_CW){
-        ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX));
+        pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX);
     }else if(stepper->dir==DIR_CCW){
-        ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN));
+        pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
     }
     //ESP_LOGD(TAG, "add watch point %d", stepper->pcnt_watchPoint);
 
     ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
     stepper->pcnt_prevPos = 0;
     
-    
+    stepper_checkDir(stepper);
+
     //pcnt_unit_start(stepper->pcntUnit);
     int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
     float znam = 2 * stepper->accel;
@@ -362,12 +389,22 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     if(accel_distance>abs(distance/2)){
         accel_distance = abs(distance/2);
     }
+    int8_t dir;
+    if(stepper->currentPos > stepper->targetPos){
+        dir=1;
+    }else if(stepper->currentPos < stepper->targetPos){
+        dir=-1;
+    }
     stepper->breakPoint = stepper->targetPos-(accel_distance * stepper->dir);
+    
+    if(stepper->state==STOP){
+        mcpwm_timer_set_period(stepper->mcpwmTimer, UINT16_MAX);
+        ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP));
+        stepper->state=RUN;
+    }
 
-    mcpwm_timer_set_period(stepper->mcpwmTimer, UINT16_MAX);
-    ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP));
-
-    ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, accel_distance, stepper->breakPoint);
+    ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld  state:%s", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, accel_distance, stepper->breakPoint, stepper->state==STOP?"STOP":"RUN");
+    ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld dir:%s", stepper->currentSpeed, stepper->targetSpeed, stepper->dir==DIR_CW?"CW":"CCW");
 }
 
 void stepper_speedUpdate(stepper_t *stepper, int32_t period){  
@@ -376,40 +413,47 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
     }
 
     if(stepper->currentPos!=stepper->targetPos){
-        if(stepper->dir==DIR_CW){
-            if(stepper->currentPos<stepper->breakPoint){
-                stepper->targetSpeed=stepper->maxSpeed;
-            }else{
-                stepper->targetSpeed=0;
-            }
-        }else if(stepper->dir==DIR_CCW){
-            if(stepper->currentPos<stepper->breakPoint){
-                stepper->targetSpeed=0;
-            }else{
-                stepper->targetSpeed=stepper->maxSpeed;
-            }
-        }
-    }
+        if((stepper->dir==DIR_CW)&&(stepper->currentPos>=stepper->breakPoint)){
+            //если достигли точки торможения при вращении по часовой стрелке    
+            stepper->targetSpeed=0;
+            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_CW?"CW":"CCW");
+        }else if((stepper->dir==DIR_CCW)&&(stepper->currentPos<=stepper->breakPoint)){
+            //если достигли точки торможения при вращении против часовой стрелке    
+            stepper->targetSpeed=0;
+            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_CW?"CW":"CCW");
 
-    //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld period: %ld", stepper->currentSpeed, stepper->targetSpeed, period);
-    
-    if(stepper->targetSpeed!=stepper->currentSpeed){
-        int32_t speedIncrement = (stepper->accel/1000)*period;
-        if (speedIncrement<1)speedIncrement=1;
+        }
         
-        if(stepper->currentSpeed<stepper->targetSpeed){
-            stepper->currentSpeed += speedIncrement;
-        }else{
-            stepper->currentSpeed -= speedIncrement;
+
+        stepper_checkDir(stepper);
+
+        //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld period: %ld", stepper->currentSpeed, stepper->targetSpeed, period);
+    
+        if(stepper->targetSpeed!=stepper->currentSpeed){
+            int32_t speedIncrement = (stepper->accel/1000)*period;
+            if (speedIncrement<1)speedIncrement=1;
+            
+            if(stepper->currentSpeed<stepper->targetSpeed){
+                stepper->currentSpeed += speedIncrement;
+                if(stepper->currentSpeed>stepper->targetSpeed){
+                    stepper->currentSpeed = stepper->targetSpeed;
+                }
+            }else{
+                stepper->currentSpeed -= speedIncrement;
+                if(stepper->currentSpeed<stepper->targetSpeed){
+                    stepper->currentSpeed = stepper->targetSpeed;
+                }
+            }
+            if(abs(stepper->currentSpeed)>0){
+                uint32_t period = abs((int32_t)stepper->resolution/stepper->currentSpeed);
+                if(period>UINT16_MAX)period=UINT16_MAX;
+                //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
+                mcpwm_timer_set_period(stepper->mcpwmTimer, period);
+            }else if((stepper->currentPos==stepper->targetPos)&&(stepper->state!=STOP)){
+                stepper_stop(stepper);
+            }
         }
-        if(abs(stepper->currentSpeed)>0){
-            uint32_t period = abs((int32_t)stepper->resolution/stepper->currentSpeed);
-            if(period>UINT16_MAX)period=UINT16_MAX;
-           ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
-            mcpwm_timer_set_period(stepper->mcpwmTimer, period);
-        }else if(stepper->currentSpeed==0){
-            stepper_stop(stepper);
-        }
+
     }
         
 }

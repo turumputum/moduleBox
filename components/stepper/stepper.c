@@ -252,7 +252,7 @@ void stepper_task(void *arg){
 	}
     ESP_LOGD(TAG, "Set maxSpeed:%ld Slot:%d", stepper.maxSpeed, slot_num);
 
-    uint16_t refreshPeriod = 10;
+    uint16_t refreshPeriod = 15;
     if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
 		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod"));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
@@ -351,6 +351,7 @@ void stepper_task(void *arg){
                 if(strstr(cmd, "moveTo")!=NULL){
                     int32_t val = atoi(payload);
                     stepper_moveTo(&stepper, val);
+                    stepper.runSpeedFlag = 0;
                 }else if(strstr(cmd, "runSpeed")!=NULL){
                     stepper.maxSpeed = atoi(payload);
                     stepper_moveTo(&stepper, stepper.maxSpeed>0?(INT32_MAX-1):(INT32_MIN+1));

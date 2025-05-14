@@ -11,14 +11,6 @@
 #include "driver/pulse_cnt.h"
 
 
-#define MCPWM_MIN_FREQUENCY 16
-#define MCPWM_DUTY_US 2
-
-#define PROCESS_MOVEMENT_PERIOD 10
-#if PROCESS_MOVEMENT_PERIOD < 1
-  #error PROCESS_MOVEMENT_PERIOD "PROCESS_MOVEMENT_PERIOD CAN'T BE LESS THAN 1"
-#endif
-
 typedef enum {
   STEPPER_MOTOR_STOPPED,
   STEPPER_MOTOR_ACCELERATING,
@@ -108,8 +100,15 @@ typedef struct {
 
   int8_t dir;
   int8_t runSpeedFlag;
+  int8_t state;
 
 }stepper_t;
+
+#define RUN 1
+#define STOP 0
+
+#define DIR_CW 1
+#define DIR_CCW -1
 
 #define STEPPER_DEFAULT() {\
 	.stepPin = 0,\
@@ -132,6 +131,7 @@ typedef struct {
   .accel = 100,\
 	.dir = 0,\
   .runSpeedFlag = 0,\
+  .state = STOP,\
 }
 
 void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);
