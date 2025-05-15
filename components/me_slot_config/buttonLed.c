@@ -33,13 +33,21 @@ enum animation{
 	GLITCH
 };
 
-static void IRAM_ATTR gpio_isr_handler(void* arg){
+static void IRAM_ATTR timer_isr_handler(void* arg){
     int slot_num = (int) arg;
 	uint8_t tmp=1;
+	me_state.counters[slot_num].flag = 1;
     xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
 }
 
-void button_task(void *arg){
+static void IRAM_ATTR gpio_isr_handler(void* arg){
+    int slot_num = (int) arg;
+	uint8_t tmp=1;
+	xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+}
+
+void button_task(void *arg)
+{
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
 
@@ -66,13 +74,12 @@ void button_task(void *arg){
 		button_inverse=1;
 	}
 
-
 	int debounce_gap = 20;
 	if (strstr(me_config.slot_options[slot_num], "buttonDebounceGap") != NULL) {
 		debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap");
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
-    
+
     if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "buttonTopic");
@@ -93,57 +100,99 @@ void button_task(void *arg){
 	}else{
 		button_state=button_inverse ? 1 : 0;
 	}
+
+	me_state.counters[slot_num].pin_num = pin_num;
+
 	// memset(str, 0, strlen(str));
 	// sprintf(str, "%d", button_state);
 	// report(str, slot_num);
 
-	uint32_t tick=xTaskGetTickCount();
-
 	esp_timer_handle_t debounce_gap_timer;
 	const esp_timer_create_args_t delay_timer_args = {
-		.callback = &gpio_isr_handler,
+		.callback = &timer_isr_handler,
 		.arg = (void*)slot_num,
 		.name = "debounce_gap_timer"
 	};
-	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
 
+	if (debounce_gap)
+	{
+		esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+		esp_timer_start_periodic(debounce_gap_timer, debounce_gap*1000);
+	}
 	
-    for(;;) {
-		
-		if(button_state != prev_state){
+    while (true)
+	{
+		if (button_state != prev_state) // Если состояние кнопки таки изменилось
+		{
+			// фиксируем состояние
 			prev_state = button_state;
 
+			// отчёт
 			memset(str, 0, strlen(str));
 			sprintf(str, "%d", button_state);
 			report(str, slot_num);
 			
 			//vTaskDelay(pdMS_TO_TICKS(5));
-			//ESP_LOGD(TAG,"BUTTON report String:%s", str);
-			tick = xTaskGetTickCount();
-			if(debounce_gap!=0){
-				esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);
-			}
-
+			ESP_LOGD(TAG,"BUTTON report String:%s", str);
 		}
 
+		// Получаем сигнал от GPIO или таймера
 		uint8_t tmp;
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
-			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS)
+		{
+			debounceStat_t * st = &me_state.counters[slot_num];
 
-			if(gpio_get_level(pin_num)){
-				button_state=button_inverse ? 0 : 1;
-			}else{
-				button_state=button_inverse ? 1 : 0;
+			if (gpio_get_level(pin_num))
+			{
+				st->ones++;
 			}
 
-			if(debounce_gap!=0){
-				if((xTaskGetTickCount()-tick)<debounce_gap){
-					//ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
-					goto exit;
+			st->total++;
+
+			int newState = -1;
+
+			if (debounce_gap)	// Если таймер активен
+			{
+				if (st->flag) 	// Если сигнал был от таймера
+				{
+					//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+
+					// Фильтрация дребезга заключается в следующем: 
+					// читаем состояния за фиксированный промежуток времени и если единиц было считаено >= 50%,
+					// то состояние считается "1" (кнопку определённо давили), иначе "0" 
+
+					if (st->total > 0) // Если вообще есть отчёты
+					{
+						if (st->ones > 0) // Если вообще есть единицы
+						{
+							// Если единиц больше или равно половине
+							if (st->ones >= (st->total >> 1))
+							{
+								newState = 1;
+							}
+						}
+						else	
+							newState = 0;
+					}
+
+					st->flag = 0;
 				}
 			}
+			else	// Таймер не активен
+			{
+				
+
+				newState = st->ones;
+			}
+
+			if (newState >= 0)	// Если было изменение состояния кнопки
+			{
+				button_state = (button_inverse ? ~newState : newState) & 1;
+
+				st->ones 	= 0;
+				st->total 	= 0;
+			}
 		}
-		exit:
     }
 
 }
@@ -275,6 +324,7 @@ void led_task(void *arg){
 
 
     int16_t currentBright=0;
+	int16_t appliedBright = -1;
     int16_t targetBright=inverse ? maxBright : minBright;
 
 	
@@ -283,8 +333,8 @@ void led_task(void *arg){
     while (1) {
 
         command_message_t msg;
-        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-            ESP_LOGD(TAG, "LED Input command %s for slot:%d", msg.str, msg.slot_num);
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, refreshPeriod) == pdPASS){
+            ESP_LOGD(TAG, "LED Input command %s for slot:%d", msg.str, slot_num);
 			int val = atoi(msg.str+strlen(me_state.action_topic_list[slot_num])+1);
 			if(val!=inverse){
 				targetBright = maxBright;
@@ -302,18 +352,24 @@ void led_task(void *arg){
 				//ESP_LOGD(TAG, "Flash max bright:%d targetBright:%d", currentBright, targetBright); 
 			}
         }
+
 		checkBright(&currentBright, targetBright, fade_increment);
-		ledc_set_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel, currentBright);
-		ledc_update_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel);
 
+		if (currentBright != appliedBright)
+		{
+			ledc_set_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel, currentBright);
+			ledc_update_duty(LEDC_LOW_SPEED_MODE, ledc_channel.channel);
 
+			appliedBright = currentBright;
+		}
+
+		// Слишком жирный делай, перенесено в QueueReceive
         //ESP_LOGD(TAG, "Led delay :%d", delay); 
-        vTaskDelayUntil(&lastWakeTime, refreshPeriod);
+        //vTaskDelayUntil(&lastWakeTime, refreshPeriod);
     }
 
 	EXIT:
     vTaskDelete(NULL);
-
 }
 
 

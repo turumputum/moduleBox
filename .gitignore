@@ -1,0 +1,16 @@
+lib
+.metadata
+.recommenders
+.local
+.build
+build
+*.tgz
+*.zip
+*.S2X
+*.log
+.*.json
+core
+build
+.vscode
+Makefile.env
+script.env

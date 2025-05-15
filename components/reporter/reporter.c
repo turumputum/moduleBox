@@ -237,7 +237,6 @@ void crosslinker(char* str){
 	}
 	//ESP_LOGD(TAG, "Crosslink calc time:%lld", esp_timer_get_time() - startTick);
 }
-
 void send_report(char *tmpStr){
 	usbprint(tmpStr);
 
@@ -314,6 +313,42 @@ void send_report(char *tmpStr){
 		}
 	}
 }
+void spread_the_word_task(void)
+{
+	//char tmpStr[555];
+	reporter_message_t received_message;
+	for(;;){
+		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, portMAX_DELAY) == pdPASS)
+		{
+			send_report(received_message.str);
+
+			heap_caps_free(received_message.str);
+		}	
+	}
+}
+void forward_report(char *msg, int slot_num)
+{
+	reporter_message_t send_message;
+
+	char *copy = heap_caps_malloc(strlen(msg)+1, MALLOC_CAP_8BIT);
+
+	if (copy)
+	{
+		strcpy(copy, msg);
+		send_message.str = copy;
+
+		send_message.slot_num = slot_num;
+		esp_err_t ret = xQueueSend(me_state.reporter_spread_queue, &send_message, 5);
+
+		if(ret!= pdPASS){
+			ESP_LOGE(TAG, "QueueSend error:%d", ret);
+
+			heap_caps_free(copy);
+		}
+	}
+	else
+		ESP_LOGE(TAG, "Der Heap ist kaputt");
+}
 
 void reporter_task(void){
 	//char tmpStr[555];
@@ -331,21 +366,25 @@ void reporter_task(void){
 			}else{
 				sprintf(tmpStr,"%s:%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}
-			//ESP_LOGD(TAG, "get message Report: %s", tmpStr);
-			
-			send_report(tmpStr);
-			
+			//ESP_LOGD(TAG, "Report: %s", tmpStr);
+		
+			forward_report(tmpStr, received_message.slot_num);
 			crosslinker(tmpStr);
+
+			// sometimes 5 ms lasting
 			heap_caps_free(received_message.str);
+
 			//vPortFree(received_message.str);
 		}	
 	}
 }
-
 void reporter_init(void){
 	me_state.reporter_queue=xQueueCreate(150, sizeof(reporter_message_t));
-	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 6, NULL, 0);
+	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 	//xTaskCreate (reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
+
+	me_state.reporter_spread_queue=xQueueCreate(150, sizeof(reporter_message_t));
+	xTaskCreatePinnedToCore(spread_the_word_task, "reporter_spread_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 }
 
 void report(char *msg, int slot_num){
@@ -364,11 +403,13 @@ void report(char *msg, int slot_num){
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 	if(ret!= pdPASS){
 		ESP_LOGE(TAG, "QueueSend error:%d", ret);
+
+		heap_caps_free(copy);
 	}
 	
-	//free(send_message.str);
-	ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 
+	//free(send_message.str);
+	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 }
 
 void reportState(){

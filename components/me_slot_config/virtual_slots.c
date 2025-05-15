@@ -766,14 +766,15 @@ void scaler_task(void* arg) {
                 if(abs(outputVal)<zeroDeadZone){
                     outputVal = 0;
                 }
-                //ESP_LOGD(TAG, "SCALER inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
+                ESP_LOGD(TAG, "SCALER inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
                 char str[50];
                 memset(str, 0, sizeof(str));
                 sprintf(str, "%ld", (int32_t)outputVal);
                 report(str, slot_num);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        // не нужен, QueueRecive обеспечивает задержку 
+        //vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

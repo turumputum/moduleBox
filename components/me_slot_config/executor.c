@@ -196,10 +196,13 @@ void execute(char *action) {
 	//ESP_LOGD(TAG, "Execute action:%s", action);
 	exec_message_t msg;
 	strcpy(msg.str, action);
+
+	//ESP_LOGE(TAG, "execute >>");
 	if(xQueueSend(me_state.executor_queue, &msg, portMAX_DELAY)!= pdPASS) {
 		ESP_LOGE(TAG, "Send message FAIL");
 	}
-	ESP_LOGD(TAG, "set msg:%s to executor queue", msg.str);
+
+	//ESP_LOGE(TAG, "execute <<");
 }
 
 void executer_task(void){
@@ -227,7 +230,6 @@ void executer_task(void){
 						//ESP_LOGD(TAG, "Forward cmd to slot:%d", i);
 						if(me_state.command_queue[i]!=NULL){
 							xQueueSend(me_state.command_queue[i], &msg, portMAX_DELAY);
-							ESP_LOGD(TAG, "Command %s forwarded to slot:%d", msg.str, i);
 							sum++;
 						}else{
 							ESP_LOGE(TAG, "Slot queue is not initialized");

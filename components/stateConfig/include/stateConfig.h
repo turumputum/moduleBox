@@ -36,6 +36,13 @@ typedef enum {
 } led_state_t;
 
 typedef struct {
+	uint8_t 	pin_num;
+	uint8_t 	flag;
+	uint32_t 	total;
+	uint32_t	ones;
+} debounceStat_t;
+
+typedef struct {
 //	uint8_t changeTrack;
 	uint8_t currentTrack;
 	uint8_t numOfTrack;
@@ -67,6 +74,7 @@ typedef struct {
 //	led_state_t ledState;
 	QueueHandle_t executor_queue;
 	QueueHandle_t reporter_queue;
+	QueueHandle_t reporter_spread_queue;
 
 	QueueHandle_t command_queue[NUM_OF_SLOTS];
 	QueueHandle_t interrupt_queue[NUM_OF_SLOTS];  
@@ -75,7 +83,9 @@ typedef struct {
 
 	char *trigger_topic_list[NUM_OF_SLOTS];
 	char *action_topic_list[NUM_OF_SLOTS];
-	
+
+	debounceStat_t counters [NUM_OF_SLOTS];
+
 } stateStruct;
 
 
