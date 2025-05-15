@@ -674,32 +674,36 @@ void start_out_3ch_task(int slot_num){
 
 
 //-----------------------------in_3ch-------------------------
-void readPins(uint8_t *pin_mass, uint8_t *inverse, int numOfCh, uint8_t *state_mass){
-	for(int i=0; i<numOfCh; i++){
-		state_mass[i] = gpio_get_level(pin_mass[i])? !inverse[i] : inverse[i];
-	}
-	//ESP_LOGD(TAG, "readPins: %d %d %d  inverseMap:%d %d %d", state_mass[0], state_mass[1], state_mass[2], inverse[0], inverse[1], inverse[2]);
-}
+// void readPins(inData_t *inData){
+// 	for(int i=0; i<inData->numOfCh; i++){
+// 		inData->statMass[i] = gpio_get_level(inData->pinMass[i])? !inData->inverseMass[i] : inData->inverseMass[i];
+// 	}
+// 	//ESP_LOGD(TAG, "readPins: %d %d %d  inverseMap:%d %d %d", inData->statMass[0], inData->statMass[1], inData->statMass[2], inData->inverseMass[0], inData->inverseMass[1], inData->inverseMass[2]);
+// }
 
-void checkStates(uint8_t *state_mass, uint8_t *prev_state_mass, int numOfCh, uint8_t slot_num, uint8_t logic){
+void checkStates(inData_t *inData){
+	for(int i=0; i<inData->numOfCh; i++){
+		inData->statMass[i] = gpio_get_level(inData->pinMass[i])? !inData->inverseMass[i] : inData->inverseMass[i];
+	}	
+	
 	//ESP_LOGD(TAG, "readPins: %d %d %d  prev_state:%d %d %d", state_mass[0], state_mass[1], state_mass[2], prev_state_mass[0], prev_state_mass[1], prev_state_mass[2]);
-	for(int i=0; i<numOfCh; i++){
-		if(state_mass[i]!=prev_state_mass[i]){
+	for(int i=0; i<inData->numOfCh; i++){
+		if(inData->statMass[i]!=inData->prevStateMass[i]){
 			char t_str[255];
 			memset(t_str, 0, sizeof(t_str));
-			if(logic==INDEPENDENT_MODE){
-				sprintf(t_str, "/ch_%d:%d", i, state_mass[i]);
-			}else if(logic==OR_LOGIC_MODE){
+			if(inData->logic==INDEPENDENT_MODE){
+				sprintf(t_str, "/ch_%d:%d", i, inData->statMass[i]);
+			}else if(inData->logic==OR_LOGIC_MODE){
 				int summ=0;
-				for(int j=0; j<numOfCh; j++){
-					if(state_mass[j])summ++;
+				for(int j=0; j<inData->numOfCh; j++){
+					if(inData->statMass[j])summ++;
 				}
 				if(summ==0){
 					sprintf(t_str, "%d", 0);
 				}else{
 					int pr_summ=0;
-					for(int j=0; j<numOfCh; j++){
-						if(prev_state_mass[j])pr_summ++;
+					for(int j=0; j<inData->numOfCh; j++){
+						if(inData->prevStateMass[j])pr_summ++;
 					}
 					if(pr_summ==0){
 						sprintf(t_str, "%d", 1);
@@ -707,123 +711,118 @@ void checkStates(uint8_t *state_mass, uint8_t *prev_state_mass, int numOfCh, uin
 						goto skip;
 					}
 				}
-			}else if(logic==AND_LOGIC_MODE){
+			}else if(inData->logic==AND_LOGIC_MODE){
 				int summ=0;
-				for(int j=0; j<numOfCh; j++){
-					if(state_mass[j])summ++;
+				for(int j=0; j<inData->numOfCh; j++){
+					if(inData->statMass[j])summ++;
 				}
-				if(summ==numOfCh){
+				if(summ==inData->numOfCh){
 					sprintf(t_str, "%d", 1);
 				}else{
 					int pr_summ=0;
-					for(int j=0; j<numOfCh; j++){
-						if(prev_state_mass[j])pr_summ++;
+					for(int j=0; j<inData->numOfCh; j++){
+						if(inData->prevStateMass[j])pr_summ++;
 					}
-					if(pr_summ==numOfCh){
+					if(pr_summ==inData->numOfCh){
 						sprintf(t_str, "%d", 0);
 					}else{
 						goto skip;
 					}
 				}
 			}
-			report(t_str, slot_num);
+			report(t_str, inData->slot_num);
 			//ESP_LOGD(TAG, "report: %s", t_str);
 			skip:
-			prev_state_mass[i] = state_mass[i];
+			inData->prevStateMass[i] = inData->statMass[i];
 		}
 	}
 }
 
-
 void in_3ch_task(void *arg){
-	int slot_num = *(int*) arg;
-	uint8_t numOfCh=3;
-	uint8_t pin_mass[numOfCh];
-	for(int i=0; i<numOfCh; i++){
-		pin_mass[i] = SLOTS_PIN_MAP[slot_num][i];
-		gpio_reset_pin(pin_mass[i]);
-		esp_rom_gpio_pad_select_gpio(pin_mass[i]);
+	inData_t inData = *(inData_t*)arg;
+	me_state.interrupt_queue[inData.slot_num] = xQueueCreate(15, sizeof(uint8_t));
+
+	for(int i=0; i<inData.numOfCh; i++){
+		inData.pinMass[i] = SLOTS_PIN_MAP[inData.slot_num][i];
+		gpio_reset_pin(inData.pinMass[i]);
+		esp_rom_gpio_pad_select_gpio(inData.pinMass[i]);
 		gpio_config_t in_conf = {};
 		in_conf.intr_type = GPIO_INTR_ANYEDGE;
 		//bit mask of the pins, use GPIO4/5 here
-		in_conf.pin_bit_mask = (1ULL<<pin_mass[i]);
+		in_conf.pin_bit_mask = (1ULL<<inData.pinMass[i]);
 		//set as input mode
 		in_conf.mode = GPIO_MODE_INPUT;
 		gpio_config(&in_conf);
-		gpio_set_intr_type(pin_mass[i], GPIO_INTR_ANYEDGE);
+		gpio_set_intr_type(inData.pinMass[i], GPIO_INTR_ANYEDGE);
 		gpio_install_isr_service(0);
-		gpio_isr_handler_add(pin_mass[i], gpio_isr_handler, (void*)slot_num);
-		ESP_LOGD(TAG,"SETUP IN_pin_%d Slot:%d", pin_mass[i], slot_num );
+		//int sn = inData.slot_num;
+		gpio_isr_handler_add(inData.pinMass[i], gpio_isr_handler, (void*)(intptr_t)inData.slot_num);
+		ESP_LOGD(TAG,"SETUP IN_pin_%d Slot:%d", inData.pinMass[i], inData.slot_num );
 	}
-
-	me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
 
 	
-	
 
-	uint8_t inverse[3]={0,0,0};
-	if (strstr(me_config.slot_options[slot_num], "inverse_0")!=NULL){
-		inverse[0]=1;
+	if (strstr(me_config.slot_options[inData.slot_num], "inverse_0")!=NULL){
+		inData.inverseMass[0]=1;
 	}
-	if (strstr(me_config.slot_options[slot_num], "inverse_1")!=NULL){
-		inverse[1]=1;
+	if (strstr(me_config.slot_options[inData.slot_num], "inverse_1")!=NULL){
+		inData.inverseMass[1]=1;
 	}
-	if (strstr(me_config.slot_options[slot_num], "inverse_2")!=NULL){
-		inverse[2]=1;
+	if (strstr(me_config.slot_options[inData.slot_num], "inverse_2")!=NULL){
+		inData.inverseMass[2]=1;
 	}
 	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
 
 	//---set delay---
 	uint16_t delay_ms = 0;
-	if (strstr(me_config.slot_options[slot_num], "inReportDelay") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "inReportDelay");
-		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, slot_num);
+	if (strstr(me_config.slot_options[inData.slot_num], "inReportDelay") != NULL) {
+		delay_ms = get_option_int_val(inData.slot_num, "inReportDelay");
+		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, inData.slot_num);
 	}
 
 	int debounce_gap = 30;
-	if (strstr(me_config.slot_options[slot_num], "inDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "inDebounceGap");
-		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
+	if (strstr(me_config.slot_options[inData.slot_num], "inDebounceGap") != NULL) {
+		debounce_gap = get_option_int_val(inData.slot_num, "inDebounceGap");
+		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, inData.slot_num);
 	}
 
-	int mode = INDEPENDENT_MODE;
-	if (strstr(me_config.slot_options[slot_num], "logic") != NULL) {
+	
+	if (strstr(me_config.slot_options[inData.slot_num], "logic") != NULL) {
         char* mode_str=NULL;
-		mode_str = get_option_string_val(slot_num, "logic");
+		mode_str = get_option_string_val(inData.slot_num, "logic");
         if(strstr(mode_str,"or")!=NULL){
-            mode= OR_LOGIC_MODE;
+            inData.logic= OR_LOGIC_MODE;
         }else if(strstr(mode_str,"and")!=NULL){
-            mode= AND_LOGIC_MODE;
+            inData.logic= AND_LOGIC_MODE;
         }
-		ESP_LOGD(TAG, "Set logic:%d for slot:%d",mode, slot_num);
+		ESP_LOGD(TAG, "Set logic:%s for slot:%d",inData.logic==OR_LOGIC_MODE?"OR":"AND", inData.slot_num);
 	}
     
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+    if (strstr(me_config.slot_options[inData.slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    	custom_topic = get_option_string_val(inData.slot_num, "topic");
+		me_state.trigger_topic_list[inData.slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[inData.slot_num]);
     }else{
 		char t_str[strlen(me_config.deviceName)+strlen("/in_0")+3];
-		sprintf(t_str, "%s/in_%d",me_config.deviceName, slot_num);
-		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+		sprintf(t_str, "%s/in_%d",me_config.deviceName, inData.slot_num);
+		me_state.trigger_topic_list[inData.slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[inData.slot_num]);
 	}
 
 
 	uint32_t tick=xTaskGetTickCount();
-	uint8_t state[3]={0,0,0};
-	uint8_t prev_state[3]={255,255,255};
+
 	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
 	
 	vTaskDelay(pdMS_TO_TICKS(100));
-	readPins(&pin_mass, &inverse, numOfCh, &state);
-	checkStates(&state, &prev_state, numOfCh, slot_num, mode);
+
+	checkStates(&inData);
 
 	esp_timer_handle_t debounce_gap_timer;
 	const esp_timer_create_args_t delay_timer_args = {
 		.callback = &gpio_handler,
-		.arg = (void*)slot_num,
+		.arg = (void*)inData.slot_num,
 		.name = "debounce_gap_timer"
 	};
 	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
@@ -831,10 +830,10 @@ void in_3ch_task(void *arg){
     for(;;) {
 		//vTaskDelay(pdMS_TO_TICKS(10));
 		uint8_t tmp;
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
+		if (xQueueReceive(me_state.interrupt_queue[inData.slot_num], &tmp, portMAX_DELAY) == pdPASS){
 			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
 
-			readPins(&pin_mass, &inverse, numOfCh, &state);
+			//readPins(&pin_mass, &inverse, numOfCh, &state);
 	
 			if(debounce_gap!=0){
 				if((xTaskGetTickCount()-tick)<debounce_gap){
@@ -842,8 +841,12 @@ void in_3ch_task(void *arg){
 					goto exit;
 				}
 			}
+			tick = xTaskGetTickCount();
+			if(debounce_gap!=0){
+				esp_timer_start_once(debounce_gap_timer, debounce_gap*1000);
+			}
 			
-			checkStates(&state, &prev_state, numOfCh, slot_num, mode);
+			checkStates(&inData);
 			//
 			
 			exit:
@@ -853,139 +856,140 @@ void in_3ch_task(void *arg){
 
 }
 
-void start_in_3ch_task(int slot_num){
+void start_in_3ch_task(int slot_num, int numOfCh){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
+	inData_t inData = inData_DEFAULT();
+	inData.slot_num = slot_num;
+	inData.numOfCh = numOfCh;
 	char tmpString[60];
 	sprintf(tmpString, "task_in_3ch_%d", slot_num);
-	xTaskCreatePinnedToCore(in_3ch_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
+	xTaskCreatePinnedToCore(in_3ch_task, tmpString, 1024*4, &inData, 12, NULL, 1);
 
 	ESP_LOGD(TAG,"In_3 task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 
-void in_2ch_task(void *arg){
-	int slot_num = *(int*) arg;
-	uint8_t numOfCh=2;
-	uint8_t pin_mass[numOfCh];
-	for(int i=0; i<numOfCh; i++){
-		pin_mass[i] = SLOTS_PIN_MAP[slot_num][i];
-		gpio_reset_pin(pin_mass[i]);
-		esp_rom_gpio_pad_select_gpio(pin_mass[i]);
-		gpio_config_t in_conf = {};
-		in_conf.intr_type = GPIO_INTR_ANYEDGE;
-		//bit mask of the pins, use GPIO4/5 here
-		in_conf.pin_bit_mask = (1ULL<<pin_mass[i]);
-		//set as input mode
-		in_conf.mode = GPIO_MODE_INPUT;
-		gpio_config(&in_conf);
-		gpio_set_intr_type(pin_mass[i], GPIO_INTR_ANYEDGE);
-		gpio_install_isr_service(0);
-		gpio_isr_handler_add(pin_mass[i], gpio_isr_handler, (void*)slot_num);
-		ESP_LOGD(TAG,"SETUP IN_pin_%d Slot:%d", pin_mass[i], slot_num );
-	}
+// void in_2ch_task(void *arg){
+// 	int slot_num = *(int*) arg;
+// 	uint8_t numOfCh=2;
+// 	uint8_t pin_mass[numOfCh];
+// 	for(int i=0; i<numOfCh; i++){
+// 		pin_mass[i] = SLOTS_PIN_MAP[slot_num][i];
+// 		gpio_reset_pin(pin_mass[i]);
+// 		esp_rom_gpio_pad_select_gpio(pin_mass[i]);
+// 		gpio_config_t in_conf = {};
+// 		in_conf.intr_type = GPIO_INTR_ANYEDGE;
+// 		//bit mask of the pins, use GPIO4/5 here
+// 		in_conf.pin_bit_mask = (1ULL<<pin_mass[i]);
+// 		//set as input mode
+// 		in_conf.mode = GPIO_MODE_INPUT;
+// 		gpio_config(&in_conf);
+// 		gpio_set_intr_type(pin_mass[i], GPIO_INTR_ANYEDGE);
+// 		gpio_install_isr_service(0);
+// 		gpio_isr_handler_add(pin_mass[i], gpio_isr_handler, (void*)slot_num);
+// 		ESP_LOGD(TAG,"SETUP IN_pin_%d Slot:%d", pin_mass[i], slot_num );
+// 	}
 
-	me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
+// 	me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
 
 	
 	
 
-	uint8_t inverse[3]={0,0,0};
-	if (strstr(me_config.slot_options[slot_num], "inverse_0")!=NULL){
-		inverse[0]=1;
-	}
-	if (strstr(me_config.slot_options[slot_num], "inverse_1")!=NULL){
-		inverse[1]=1;
-	}
+// 	uint8_t inverse[3]={0,0,0};
+// 	if (strstr(me_config.slot_options[slot_num], "inverse_0")!=NULL){
+// 		inverse[0]=1;
+// 	}
+// 	if (strstr(me_config.slot_options[slot_num], "inverse_1")!=NULL){
+// 		inverse[1]=1;
+// 	}
 
-	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
+// 	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
 
-	//---set delay---
-	uint16_t delay_ms = 0;
-	if (strstr(me_config.slot_options[slot_num], "inReportDelay") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "inReportDelay");
-		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, slot_num);
-	}
+// 	//---set delay---
+// 	uint16_t delay_ms = 0;
+// 	if (strstr(me_config.slot_options[slot_num], "inReportDelay") != NULL) {
+// 		delay_ms = get_option_int_val(slot_num, "inReportDelay");
+// 		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, slot_num);
+// 	}
 
-	int debounce_gap = 30;
-	if (strstr(me_config.slot_options[slot_num], "inDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "inDebounceGap");
-		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
-	}
+// 	int debounce_gap = 30;
+// 	if (strstr(me_config.slot_options[slot_num], "inDebounceGap") != NULL) {
+// 		debounce_gap = get_option_int_val(slot_num, "inDebounceGap");
+// 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
+// 	}
 
-	int mode = INDEPENDENT_MODE;
-	if (strstr(me_config.slot_options[slot_num], "logic") != NULL) {
-        char* mode_str=NULL;
-		mode_str = get_option_string_val(slot_num, "logic");
-        if(strstr(mode_str,"or")!=NULL){
-            mode= OR_LOGIC_MODE;
-        }else if(strstr(mode_str,"and")!=NULL){
-            mode= AND_LOGIC_MODE;
-        }
-		ESP_LOGD(TAG, "Set logic:%d for slot:%d",mode, slot_num);
-	}
+// 	int mode = INDEPENDENT_MODE;
+// 	if (strstr(me_config.slot_options[slot_num], "logic") != NULL) {
+//         char* mode_str=NULL;
+// 		mode_str = get_option_string_val(slot_num, "logic");
+//         if(strstr(mode_str,"or")!=NULL){
+//             mode= OR_LOGIC_MODE;
+//         }else if(strstr(mode_str,"and")!=NULL){
+//             mode= AND_LOGIC_MODE;
+//         }
+// 		ESP_LOGD(TAG, "Set logic:%d for slot:%d",mode, slot_num);
+// 	}
     
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/in_0")+3];
-		sprintf(t_str, "%s/in_%d",me_config.deviceName, slot_num);
-		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-	}
+//     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+// 		char* custom_topic=NULL;
+//     	custom_topic = get_option_string_val(slot_num, "topic");
+// 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+// 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+//     }else{
+// 		char t_str[strlen(me_config.deviceName)+strlen("/in_0")+3];
+// 		sprintf(t_str, "%s/in_%d",me_config.deviceName, slot_num);
+// 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+// 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+// 	}
 
 
-	uint32_t tick=xTaskGetTickCount();
-	uint8_t state[3]={0,0,0};
-	uint8_t prev_state[3]={255,255,255};
-	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
+// 	uint32_t tick=xTaskGetTickCount();
+// 	uint8_t state[3]={0,0,0};
+// 	uint8_t prev_state[3]={255,255,255};
+// 	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
 	
-	vTaskDelay(pdMS_TO_TICKS(100));
-	readPins(&pin_mass, &inverse, numOfCh, &state);
-	checkStates(&state, &prev_state, numOfCh, slot_num, mode);
+// 	vTaskDelay(pdMS_TO_TICKS(100));
+// 	checkStates(&inData);
 
-	esp_timer_handle_t debounce_gap_timer;
-	const esp_timer_create_args_t delay_timer_args = {
-		.callback = &gpio_handler,
-		.arg = (void*)slot_num,
-		.name = "debounce_gap_timer"
-	};
-	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+// 	esp_timer_handle_t debounce_gap_timer;
+// 	const esp_timer_create_args_t delay_timer_args = {
+// 		.callback = &gpio_handler,
+// 		.arg = (void*)slot_num,
+// 		.name = "debounce_gap_timer"
+// 	};
+// 	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
 
-    for(;;) {
-		//vTaskDelay(pdMS_TO_TICKS(10));
-		uint8_t tmp;
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
-			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+//     for(;;) {
+// 		//vTaskDelay(pdMS_TO_TICKS(10));
+// 		uint8_t tmp;
+// 		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS){
+// 			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
 
-			readPins(&pin_mass, &inverse, numOfCh, &state);
+// 			readPins(&pin_mass, &inverse, numOfCh, &state);
 	
-			if(debounce_gap!=0){
-				if((xTaskGetTickCount()-tick)<debounce_gap){
-					//ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
-					goto exit;
-				}
-			}
+// 			if(debounce_gap!=0){
+// 				if((xTaskGetTickCount()-tick)<debounce_gap){
+// 					//ESP_LOGD(TAG, "Debounce skip delta:%ld",(xTaskGetTickCount()-tick));
+// 					goto exit;
+// 				}
+// 			}
 			
-			checkStates(&state, &prev_state, numOfCh, slot_num, mode);
-			//
+// 			checkStates(&inData);
+// 			//
 			
-			exit:
+// 			exit:
 			
-		}
-    }
+// 		}
+//     }
 
-}
+// }
 
-void start_in_2ch_task(int slot_num){
-	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
-	char tmpString[60];
-	sprintf(tmpString, "task_in_2ch_%d", slot_num);
-	xTaskCreatePinnedToCore(in_2ch_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
+// void start_in_2ch_task(int slot_num){
+// 	uint32_t heapBefore = xPortGetFreeHeapSize();
+// 	int t_slot_num = slot_num;
+// 	char tmpString[60];
+// 	sprintf(tmpString, "task_in_2ch_%d", slot_num);
+// 	xTaskCreatePinnedToCore(in_2ch_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
 
-	ESP_LOGD(TAG,"In_2 task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-}
+// 	ESP_LOGD(TAG,"In_2 task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+// }

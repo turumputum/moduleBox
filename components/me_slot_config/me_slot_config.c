@@ -93,9 +93,11 @@ int init_slots(void){
 			start_button_task(i);
 			start_led_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
-			start_in_3ch_task(i);
+			start_in_3ch_task(i, 3);
 		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
-			start_in_2ch_task(i);
+			start_in_3ch_task(i, 2);
+		}else if(!memcmp(me_config.slot_mode[i], "in_1ch", 6)){
+			start_in_3ch_task(i, 1);
 		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);
 		}else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){

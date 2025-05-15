@@ -375,6 +375,7 @@ void stepper_task(void *arg){
         }
         stepper_speedUpdate(&stepper, refreshPeriod);
         stepper_getCurrentPos(&stepper);
+        //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
 
         if(posReport_flag){
             if(stepper.currentPos!=prevPos){

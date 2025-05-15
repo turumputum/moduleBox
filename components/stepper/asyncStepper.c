@@ -164,12 +164,24 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 #define STATE_STOP 3
 
 void stepper_getCurrentPos(stepper_t *stepper){
-    int32_t pos=0;
+    int32_t pos = 0;
     pcnt_unit_get_count(stepper->pcntUnit, &pos);
-    int16_t delta = pos- stepper->pcnt_prevPos;
+    
+    int32_t delta= pos - stepper->pcnt_prevPos;
+    if (abs(delta) > (INT16_MAX/2)) {
+        // Произошло переполнение
+        if(delta>0){
+            //переполнение в отрицательной зоне
+            delta = pos -(stepper->pcnt_prevPos - INT16_MIN);
+            ESP_LOGD(TAG, "overload in negative zone");
+        }else{
+            delta = pos - (stepper->pcnt_prevPos - INT16_MAX);
+            ESP_LOGD(TAG, "overload in positive zone");
+        }
+    }
     
     stepper->currentPos = stepper->currentPos + delta;
-    ESP_LOGD(TAG, "currentPos: %ld pos:%ld prevPos:%ld delta:%d", stepper->currentPos, pos, stepper->pcnt_prevPos, delta);
+    //ESP_LOGD(TAG, "currentPos: %ld pos:%ld prevPos:%ld delta:%ld dir:%d", stepper->currentPos, pos, stepper->pcnt_prevPos, delta, stepper->dir);
     stepper->pcnt_prevPos = pos;
 }
 
@@ -357,6 +369,8 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MIN);
     int32_t watchPoint = distance;
 
+    stepper_checkDir(stepper);
+
     if(stepper->dir==DIR_CW){
         while(watchPoint>INT16_MAX){
             watchPoint-=INT16_MAX;
@@ -379,8 +393,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
     stepper->pcnt_prevPos = 0;
     
-    stepper_checkDir(stepper);
-
+    
     //pcnt_unit_start(stepper->pcntUnit);
     int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
     float znam = 2 * stepper->accel;

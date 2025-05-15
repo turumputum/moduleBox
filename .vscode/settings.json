@@ -111,7 +111,8 @@
         "esp_cache.h": "c",
         "cstdint": "c",
         "cybergear.h": "c",
-        "esp_rom_sys.h": "c"
+        "esp_rom_sys.h": "c",
+        "*.def": "c"
     },
     "idf.espAdfPath": "C:\\Users\\Yac\\esp\\esp-adf",
     "idf.flashType": "UART",
