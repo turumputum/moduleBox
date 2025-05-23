@@ -116,8 +116,6 @@ int init_slots(void){
 			start_tachometer_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
 			start_analog_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 12)){
-			start_stepperSpeed_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
@@ -179,6 +177,8 @@ int init_slots(void){
 			start_tankControl_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "furbyEye", 8)){
 			start_furbyEye_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
+			start_stepper_conductor_task(i);
 		}
 		
 	}

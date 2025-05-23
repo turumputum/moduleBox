@@ -16,11 +16,9 @@
 #include "reporter.h"
 #include "stateConfig.h"
 
-#include "stepper_motor_encoder.h"
-
 #include "esp_log.h"
 #include "me_slot_config.h"
-#include "sCurveStepper.h"
+
 #include "asyncStepper.h"
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -369,6 +367,8 @@ void stepper_task(void *arg){
             }
             if(strstr(cmd, "stop")!=NULL){
                 stepper_stop(&stepper);
+            }else if(strstr(cmd, "break")!=NULL){
+                stepper_break(&stepper);
             }
             
             

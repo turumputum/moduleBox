@@ -16,6 +16,6 @@ idf_component_register(SRCS
                         "tachometer.c"
                        
                     INCLUDE_DIRS "include"
-                    REQUIRES myCDC stepper stateConfig reporter audioPlayer esp32-rotary-encoder driver rgbHsv myHID someUnique distanceSens accel servoDev ticketDispenser dwin VESC PPM CRSF)
+                    REQUIRES myCDC stepper stateConfig reporter audioPlayer driver rgbHsv myHID someUnique distanceSens accel servoDev ticketDispenser dwin VESC PPM CRSF)
 
  
