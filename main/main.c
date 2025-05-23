@@ -548,9 +548,21 @@ uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTic
 {
 	uint32_t result = pdFAIL;
 
-	while (xQueueReceive(xQueue, pvBuffer, xTicksToWait) == pdPASS)
+	if (xQueueReceive(xQueue, pvBuffer, 0) == pdPASS)
 	{
+		// Очередь не пустая - выбираем всё до последнего без таймаута
+		
 		result = pdPASS;
+
+		while (xQueueReceive(xQueue, pvBuffer, 0) == pdPASS)
+		{
+		}
+	}
+	else
+	{
+		// Очередь пустая - ждём положенный таймаут
+	
+		result = xQueueReceive(xQueue, pvBuffer, xTicksToWait);
 	}
 
 	return result;
