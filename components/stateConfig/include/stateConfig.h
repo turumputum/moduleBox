@@ -180,6 +180,6 @@ void initWorkPermissions();
 int workIsPermitted_(int slot_num, const char * moduleName);
 void waitForWorkPermit_(int slot_num, const char * moduleName);
 void setWorkPermission(int slot_num);
-
+uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTicksToWait);
 
 

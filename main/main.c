@@ -544,7 +544,17 @@ int workIsPermitted_(int slot, const char * moduleName)
 #undef EVERYONE
 #undef THISONE
 
+uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTicksToWait)
+{
+	uint32_t result = pdFAIL;
 
+	while (xQueueReceive(xQueue, pvBuffer, xTicksToWait) == pdPASS)
+	{
+		result = pdPASS;
+	}
+
+	return result;
+}
 
 // USB Device Driver task
 // This top level thread process all usb events and invoke callbacks

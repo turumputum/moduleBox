@@ -322,12 +322,9 @@ void audio_task(void *arg) {
 
 	waitForWorkPermit(slot_num);
 
-	//strcpy(cmd.str, "moduleBox/player_0/play:1");
-
 	while(1)
 	{
-		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 5) == pdPASS)
-		//if (*cmd.str)
+		if (xQueueReceiveLast(me_state.command_queue[slot_num], &cmd, 5) == pdPASS)
 		{
 			char *command=cmd.str+strlen(me_state.action_topic_list[slot_num])+1;
 			char *cmd_arg = NULL;
@@ -382,12 +379,7 @@ void audio_task(void *arg) {
 				setVolume_num(atoi(cmd_arg));
 			}
 
-			*cmd.str = 0;
 		}
-		else
-			vTaskDelay(pdMS_TO_TICKS(10));
-
-		
 
 		if(att_flag==1){
 			att_vol-=1;
@@ -483,8 +475,8 @@ void setVolume_str(char *cmd){
 }
 
 esp_err_t audioPlay(uint8_t truckNum) {
-	uint32_t heapBefore = xPortGetFreeHeapSize();
-
+	//uint32_t heapBefore = xPortGetFreeHeapSize();
+	
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
 	if(el_state==AEL_STATE_RUNNING){
 		audioStop();
