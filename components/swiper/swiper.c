@@ -86,6 +86,8 @@ void swiper_task(void *arg) {
     gesture_data_type gData;
     gData.state = WAITING;
 
+    waitForWorkPermit(slot_num);
+
     while(1){
         vTaskDelay(20 / portTICK_PERIOD_MS);
         if (readSensor(i2c_port, &gData) != ESP_OK){

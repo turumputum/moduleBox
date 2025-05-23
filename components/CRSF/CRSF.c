@@ -123,6 +123,9 @@ void crsf_rx_task(void* arg) {
     int32_t channels[numOfChannel];
     memset (channels, ((maxVal-minVal)/2)+minVal, sizeof(channels));
     // In the crsf_rx_task:
+
+    waitForWorkPermit(slot_num);
+
     while(1) {
         uint8_t buffer[64];
         crsf_frame_t frame;

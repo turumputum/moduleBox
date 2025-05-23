@@ -113,6 +113,8 @@ void dwinUart_task(void* arg) {
     uint8_t *rawByte = (uint8_t *) malloc(UART_MSG_SIZE);
     char str[255];
 
+    waitForWorkPermit(slot_num);
+
     while(1){
         //uart_read_bytes(uart_num, rawByte, 1, 5 / portTICK_RATE_MS);
         memset(rawByte,0,UART_MSG_SIZE);

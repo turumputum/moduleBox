@@ -104,10 +104,12 @@ static const char *TAG = "MAIN";
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
+#undef  LOG_LOCAL_LEVEL
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 #define CONFIG_FREERTOS_HZ 1000
 
+#undef  CFG_TUSB_DEBUG
 #define CFG_TUSB_DEBUG 3
 
 
@@ -119,8 +121,6 @@ EventGroupHandle_t xEventTask;
 extern uint8_t FTP_SESSION_START_FLAG;
 extern uint8_t FLAG_PC_AVAILEBLE;
 extern uint8_t FLAG_PC_EJECT;
-
-extern const char* VERSION;
 
 extern void usb_device_task(void *param);
 extern void set_usb_debug(void);
@@ -273,7 +273,7 @@ void heap_report(){
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
-
+/*
 static esp_err_t print_real_time_stats(TickType_t xTicksToWait){
 	#define configRUN_TIME_COUNTER_TYPE uint32_t
 	#define ARRAY_SIZE_OFFSET 30
@@ -359,7 +359,7 @@ exit:    //Common return path
     free(end_array);
     return ret;
 }
-
+*/
 
 
 void app_main(void)
@@ -407,6 +407,9 @@ void app_main(void)
 	}
 	load_Default_Config();
 	scanFileSystem();
+
+	initWorkPermissions();
+
 	me_state.config_init_res = loadConfig();
 	if (me_state.config_init_res != ESP_OK)	{
 		char tmpString[40];
@@ -439,16 +442,22 @@ void app_main(void)
 	if(me_config.WIFI_enable == 1){
 		wifiInit();
 	}
-	start_udp_recive_task();
-	start_osc_recive_task();
-	start_ftp_task();
-	start_mdns_task();
-	start_mqtt_task();
 
+	if (me_config.LAN_enable)
+	{
+		start_udp_recive_task();
+		start_osc_recive_task();
+		start_ftp_task();
+		start_mdns_task();
+		start_mqtt_task();
+	}
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
-	
+
+
+	setWorkPermission(EVERY_SLOT);
+
 
 	while (1)
 	{
@@ -477,11 +486,65 @@ void app_main(void)
         // ESP_LOGI(TAG, "Stack remaining: %u", stack_remaining);
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+}
 
+#define EVERYONE ((EventBits_t)(1 << 0))
+#define THISONE  ((EventBits_t)(1 << (slot + 1)))
+
+static StaticEventGroup_t uxWorkPermBuff;
+static EventGroupHandle_t uxWorkPerm = 0;
+
+void initWorkPermissions()
+{
+	uxWorkPerm = xEventGroupCreateStatic(&uxWorkPermBuff);
+}
+void setWorkPermission(int slot)
+{
+	if (slot == EVERY_SLOT)
+	{
+		ESP_LOGD(TAG, "Running all slots");
+	}
+	else	
+		ESP_LOGD(TAG, "Running SLOT %d", slot);
+
+	// EVERY_SLOT + 1 = 0
+	xEventGroupSetBits(uxWorkPerm, 1 << (slot + 1));
+}
+void waitForWorkPermit_(int slot, const char * moduleName)
+{
+	EventBits_t bits;
+
+	do 
+	{
+		bits = xEventGroupWaitBits(
+			uxWorkPerm,
+			EVERYONE | THISONE,
+			pdFALSE,              	// Очистить ожидаемые биты при выходе
+			pdFALSE,             	// Любой из указанных битов
+			portMAX_DELAY);
+
+	} while (!((bits & EVERYONE) || (bits & THISONE)));
+
+	ESP_LOGD(TAG, "slot %d [%s] started working", slot, moduleName);
+}
+int workIsPermitted_(int slot, const char * moduleName)
+{
+	EventBits_t bits;
+
+	bits = xEventGroupGetBits(uxWorkPerm);
+
+	if (!((bits & EVERYONE) || (bits & THISONE)))
+	{
+		waitForWorkPermit_(slot, moduleName);
 	}
 
-	
+	return 1;
 }
+#undef EVERYONE
+#undef THISONE
+
+
 
 // USB Device Driver task
 // This top level thread process all usb events and invoke callbacks

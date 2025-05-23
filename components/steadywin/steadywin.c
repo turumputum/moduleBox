@@ -576,6 +576,8 @@ void GIM_motor_task(void *arg) {
 
     int16_t increment = (maxVal-minVal)/100;
 
+    waitForWorkPermit(slot_num);
+
     while(1){ 
          command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){

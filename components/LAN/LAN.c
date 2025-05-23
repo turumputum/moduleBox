@@ -250,12 +250,9 @@ void start_udp_recive_task(){
 
 //------------------------------FTP----------------------------------------------
 void start_ftp_task(){
-	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
-		//ESP_LOGD(TAG, "LAN not ready");
-		vTaskDelay(pdMS_TO_TICKS(200));
-	}
 
 	if(me_config.FTP_enable){
+
 		uint32_t startTick = xTaskGetTickCount();
 		uint32_t heapBefore = xPortGetFreeHeapSize();
 		xTaskCreatePinnedToCore(ftp_task, "FTP", 1024 * 6, NULL, 4, NULL, 0);
@@ -267,7 +264,7 @@ void start_ftp_task(){
 //------------------------------MDNS----------------------------------------------
 void start_mdns_task(){
 	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
-		//ESP_LOGD(TAG, "LAN not ready");
+		ESP_LOGD(TAG, "LAN not ready");
 		vTaskDelay(pdMS_TO_TICKS(200));
 	}
 

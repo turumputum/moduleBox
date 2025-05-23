@@ -209,6 +209,8 @@ void encoderPPM_task(void *arg)
 	int anti_deb_mass_index = 0;
 	int val_mass[ANTI_DEBOUNCE_INERATIONS];
 
+	waitForWorkPermit(slot_num);
+
 	while (1){
 		vTaskDelay(pdMS_TO_TICKS(10));
 		if (tickVals.flag){
@@ -497,6 +499,8 @@ void encoder_inc_task(void *arg){
 	int32_t prev_count = -1;
 
 	TickType_t lastWakeTime = xTaskGetTickCount();
+
+	waitForWorkPermit(slot_num);
 
     while (1)
     {

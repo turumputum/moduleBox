@@ -10,8 +10,7 @@
 
 #define NUM_OF_SLOTS 10
 
-static const char* VERSION = "3.30";
-
+#define VERSION 	"3.30" BRANCH
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -172,4 +171,15 @@ int saveConfig(void);
 void debugTopicLists(void);
 uint8_t scanFileSystem();
 uint8_t scan_dir(const char *path);
+
+#define EVERY_SLOT		-1
+#define waitForWorkPermit(a) waitForWorkPermit_((a), __FUNCTION__)
+#define workIsPermitted(a) workIsPermitted_((a), __FUNCTION__)
+
+void initWorkPermissions();
+int workIsPermitted_(int slot_num, const char * moduleName);
+void waitForWorkPermit_(int slot_num, const char * moduleName);
+void setWorkPermission(int slot_num);
+
+
 

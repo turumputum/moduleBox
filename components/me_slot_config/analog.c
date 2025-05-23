@@ -163,6 +163,9 @@ void analog_task(void *arg)
 
 	uint32_t tmp = 0;
 	TickType_t lastWakeTime = xTaskGetTickCount();
+
+	waitForWorkPermit(slot_num);
+	
     while (1) {
 
 		tmp = 0;

@@ -195,6 +195,8 @@ void rgb_ledc_task(void *arg){
     uint8_t aniSwitch=0;
     TickType_t lastWakeTime = xTaskGetTickCount(); 
 
+    waitForWorkPermit(slot_num);
+
     while (1) {
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){

@@ -102,6 +102,8 @@ void tenzo_button_task(void *arg){
     adc_channel.integrated = 0;
     adc_channel.integrated2 = 0;
 
+    waitForWorkPermit(slot_num);
+
     while(1){
         vTaskDelayUntil(&lastWakeTime, 10);
         
