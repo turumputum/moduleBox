@@ -361,6 +361,74 @@ exit:    //Common return path
 }
 */
 
+bool startNetworkServices()
+{
+	bool result 			= false;
+	char errorString		[40];
+
+	if (me_config.LAN_enable || me_config.WIFI_enable)
+	{
+		if (me_config.LAN_enable == 1)	
+		{
+			if (LAN_init() != 0)
+			{
+				sprintf(errorString, "%s", "LAN init failed");
+			}
+			else
+				result = true;
+		}
+		if (me_config.WIFI_enable == 1)
+		{
+			if (wifiInit() != ESP_OK)
+			{
+				sprintf(errorString, "%s", "WIFI init failed");
+			}
+			else
+				result = true;
+		}
+
+		if (result)
+		{
+#define NETWORK_INIT_TIMEOUT		20
+
+			int timeout		= NETWORK_INIT_TIMEOUT;
+			bool ready 		= false;
+
+			do 
+			{
+				if ((ESP_OK != me_state.WIFI_init_res) && (ESP_OK != me_state.LAN_init_res))
+				{
+					vTaskDelay(pdMS_TO_TICKS(200));
+					timeout--;
+				}
+				else
+					ready = true;
+				
+			} while (!ready && timeout);
+
+			if (ready)
+			{
+				start_udp_recive_task(); 	// OK
+				start_osc_recive_task(); 	// OK
+				start_ftp_task(); 			// OK
+				start_mdns_task();			// OK
+				start_mqtt_task();			// OK
+			}
+			else
+			{
+				sprintf(errorString, "Network initialization timeout (%d)", NETWORK_INIT_TIMEOUT);
+				writeErrorTxt(errorString);
+			}
+		}
+		else
+			writeErrorTxt(errorString);
+	}
+	else
+		ESP_LOGI(TAG, "Network disabled, start skipped");
+
+	return result;
+}
+
 
 void app_main(void)
 {
@@ -436,21 +504,7 @@ void app_main(void)
 		me_state.content_search_res = ESP_FAIL;
 	}
 
-	if (me_config.LAN_enable == 1)	{
-		LAN_init();	
-	}
-	if(me_config.WIFI_enable == 1){
-		wifiInit();
-	}
-
-	if (me_config.LAN_enable)
-	{
-		start_udp_recive_task();
-		start_osc_recive_task();
-		start_ftp_task();
-		start_mdns_task();
-		start_mqtt_task();
-	}
+	startNetworkServices();
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
@@ -556,6 +610,7 @@ uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTic
 
 		while (xQueueReceive(xQueue, pvBuffer, 0) == pdPASS)
 		{
+			// Nothing
 		}
 	}
 	else

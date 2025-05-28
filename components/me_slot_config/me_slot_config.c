@@ -116,6 +116,8 @@ int init_slots(void){
 			start_tachometer_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
 			start_analog_task(i);		// OK
+		}else if(!memcmp(me_config.slot_mode[i], "adc1", 4)){
+			start_adc1_task(i);			// OK
 		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 12)){
 			start_stepperSpeed_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){

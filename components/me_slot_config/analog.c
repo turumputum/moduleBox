@@ -162,10 +162,11 @@ void analog_task(void *arg)
 	uint8_t oversumple = 150;
 
 	uint32_t tmp = 0;
-	TickType_t lastWakeTime = xTaskGetTickCount();
 
 	waitForWorkPermit(slot_num);
-	
+
+	TickType_t lastWakeTime = xTaskGetTickCount();
+
     while (1) {
 
 		tmp = 0;

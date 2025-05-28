@@ -98,11 +98,6 @@ void osc_recive_task(){
 		vTaskDelete(NULL);
 	}
 
-	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
-		//ESP_LOGD(TAG, "LAN not ready");
-		vTaskDelay(pdMS_TO_TICKS(200));
-	}
-
 	me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (me_state.osc_socket < 0) {
 		printf("Failed to create socket for OSC: %d\n", errno);
@@ -197,11 +192,6 @@ void udp_recive_task(){
 		vTaskDelete(NULL);
 	}
 
-	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
-		//ESP_LOGD(TAG, "LAN not ready");
-		vTaskDelay(pdMS_TO_TICKS(200));
-	}
-
 	me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (me_state.udp_socket < 0) {
 		printf("Failed to create socket for UDP: %d\n", errno);
@@ -263,10 +253,6 @@ void start_ftp_task(){
 
 //------------------------------MDNS----------------------------------------------
 void start_mdns_task(){
-	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
-		ESP_LOGD(TAG, "LAN not ready");
-		vTaskDelay(pdMS_TO_TICKS(200));
-	}
 
 	if(me_config.MDNS_enable){
 		uint32_t startTick = xTaskGetTickCount();
@@ -294,10 +280,6 @@ void start_mdns_task(){
 
 //------------------------------MQTT----------------------------------------------
 void start_mqtt_task(){
-	while((me_state.WIFI_init_res!=ESP_OK)&&(me_state.LAN_init_res!=ESP_OK)){
-		//ESP_LOGD(TAG, "LAN not ready");
-		vTaskDelay(pdMS_TO_TICKS(200));
-	}
 	if (strlen(me_config.mqttBrokerAdress) > 3)	{
 		mqtt_app_start();
 	}else{

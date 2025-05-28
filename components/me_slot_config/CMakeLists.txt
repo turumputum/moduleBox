@@ -7,6 +7,7 @@ idf_component_register(SRCS
                         "in_out.c" 
                         
                         "analog.c" 
+                        "adc1.c" 
                         "virtual_slots.c"
                         "encoders.c" 
                         "me_slot_config.c" 

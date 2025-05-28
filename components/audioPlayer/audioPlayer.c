@@ -426,12 +426,10 @@ void audio_task(void *arg) {
 					audio_element_info_t music_info = {0};
 					audio_element_getinfo(mp3_decoder, &music_info);
 
-					ESP_LOGD(TAG, "Current track: sample_rates=%d, bits=%d, ch=%d, byte_pos=%lld, total_bytes=%lld", 
+					ESP_LOGD(TAG, "Current track: sample_rates=%d, bits=%d, ch=%d", 
 							music_info.sample_rates, 
 							music_info.bits, 
-							music_info.channels, 
-							music_info.byte_pos, 
-							music_info.total_bytes);
+							music_info.channels);
 
 					// ESP_LOGI(TAG, "[ * ] Received music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d",
 					// 		music_info.sample_rates, music_info.bits, music_info.channels);
