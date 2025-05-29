@@ -120,7 +120,8 @@ void ds18b20_task(void* arg) {
     uint8_t state=0;
     int8_t state_prev=-1;
 
-    
+    waitForWorkPermit(slot_num);
+
     while (1) {
         TickType_t xLastWakeTime = xTaskGetTickCount();
         

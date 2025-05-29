@@ -120,7 +120,9 @@ void button_task(void *arg)
 		esp_timer_start_periodic(debounce_gap_timer, debounce_gap*1000);
 	}
 	
-    while (true)
+	waitForWorkPermit(slot_num);
+    //while (workIsPermitted(slot_num))
+	while (true)
 	{
 		if (button_state != prev_state) // Если состояние кнопки таки изменилось
 		{
@@ -330,6 +332,9 @@ void led_task(void *arg){
 	
 
 	TickType_t lastWakeTime = xTaskGetTickCount(); 
+
+	waitForWorkPermit(slot_num);
+	
     while (1) {
 
         command_message_t msg;

@@ -351,6 +351,8 @@ void smartLed_task(void *arg){
     //state = inverse;
     TickType_t lastWakeTime = xTaskGetTickCount(); 
 
+    waitForWorkPermit(slot_num);
+
     while (1) {
 
         command_message_t msg;
@@ -781,6 +783,8 @@ void swiperLed_task(void *arg){
     #define LED_EFFECT_LENGTH 30
     TickType_t lastWakeTime = xTaskGetTickCount(); 
 
+    waitForWorkPermit(slot_num);
+
     while (1) {
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
@@ -1041,6 +1045,9 @@ void ledRing_task(void *arg){
     
     //vTaskDelay(pdMS_TO_TICKS(1000));
     TickType_t lastWakeTime = xTaskGetTickCount(); 
+
+    waitForWorkPermit(slot_num);
+
     while(1){
         command_message_t temp_msg;
         command_message_t msg;
@@ -1295,6 +1302,8 @@ void ledBar_task(void *arg){
     
     //vTaskDelay(pdMS_TO_TICKS(1000));
     TickType_t lastWakeTime = xTaskGetTickCount(); 
+
+    waitForWorkPermit(slot_num);
     while(1){
         command_message_t msg;
 

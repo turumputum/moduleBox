@@ -23,6 +23,7 @@ extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
 
+#undef  LOG_LOCAL_LEVEL
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "IN_OUT";
 
@@ -122,6 +123,8 @@ void in_task(void *arg){
 		.name = "debounce_gap_timer"
 	};
 	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+
+	waitForWorkPermit(slot_num);
 
     for(;;) {
 		//vTaskDelay(pdMS_TO_TICKS(10));
@@ -234,6 +237,9 @@ void out_task(void *arg) {
 	me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 	
 	uint32_t tickToToggle=0;
+
+	waitForWorkPermit(slot_num);
+	
 	while(1){
 		command_message_t msg;
 		if (xQueueReceive(me_state.command_queue[slot_num], &msg, portMAX_DELAY) == pdPASS){
@@ -422,6 +428,8 @@ void out_2ch_task(void *arg) {
     }
     gpio_set_level(pin_map[1], (uint32_t)state[1]);
 
+	waitForWorkPermit(slot_num);
+
     while (1) {
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, portMAX_DELAY) == pdPASS) {
@@ -586,6 +594,8 @@ void out_3ch_task(void *arg) {
 		if(inverse_map[2]==1)state[2] = !state[2];
 	}
 	gpio_set_level(pin_map[2], (uint32_t )state[2]);
+
+	waitForWorkPermit(slot_num);
 
 	while(1){
 		command_message_t msg;
@@ -815,7 +825,7 @@ void in_3ch_task(void *arg){
 
 	//ESP_LOGD(TAG, "inverse[0]:%d, inverse[1]:%d, inverse[2]:%d", inverse[0], inverse[1], inverse[2]);
 	
-	vTaskDelay(pdMS_TO_TICKS(100));
+	//vTaskDelay(pdMS_TO_TICKS(100)); 
 
 	checkStates(&inData);
 
@@ -826,6 +836,8 @@ void in_3ch_task(void *arg){
 		.name = "debounce_gap_timer"
 	};
 	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+
+	waitForWorkPermit(inData.slot_num);
 
     for(;;) {
 		//vTaskDelay(pdMS_TO_TICKS(10));

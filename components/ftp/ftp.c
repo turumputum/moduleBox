@@ -1727,6 +1727,7 @@ void ftp_task(void *pvParameters) {
 	strcpy(ftp_pass, me_config.FTP_pass);
 	ESP_LOGI(TAG_CL, "ftp_user:[%s] ftp_pass:[%s], anon enabled:[%s]", ftp_user, ftp_pass, anon_enabled ? "yes" : "no");
 
+
 	net_if_num = network_get_active_interfaces();
 	ESP_LOGI(TAG_CL, "network_get_active_interfaces n_if=%d", net_if_num);
 

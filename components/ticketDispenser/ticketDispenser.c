@@ -128,6 +128,8 @@ void ticketDispenser_task(void *arg) {
 
     uint16_t timeKvant=30;
 
+    waitForWorkPermit(slot_num);
+
     while(1){
         command_message_t msg;
 		if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){

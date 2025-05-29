@@ -118,6 +118,9 @@ void tachometer_task(void *arg)
 	int _state = gpio_get_level(sens_pin_num);		
 	int runFlag = 0;
 	char str[255];
+
+	waitForWorkPermit(slot_num);
+	
 	while (1)
 	{	
 		#define TIMEOUT 2000 

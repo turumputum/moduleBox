@@ -111,6 +111,8 @@ void counter_task(void *arg) {
     int state=0;
     int prevState=0;
 
+    waitForWorkPermit(slot_num);
+
     while(1){
 		command_message_t cmd;
 		if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
@@ -211,6 +213,8 @@ void timer_task(void *arg) {
         .name = "virtual_timer"
     };
     esp_timer_create(&delay_timer_args, &virtual_timer);
+
+    waitForWorkPermit(slot_num);
 
     while(1){
 		//vTaskDelay(pdMS_TO_TICKS(10));
@@ -330,6 +334,9 @@ void flywheel_task(void *arg){
     uint8_t _flywheel_state=0;
 
     TickType_t lastWakeTime = xTaskGetTickCount();
+
+    waitForWorkPermit(slot_num);
+
     for(;;) {
         flywheelCount-=decrement;
         if(flywheelCount<minVal){
@@ -438,6 +445,7 @@ void watchdog_task(void *arg) {
     };
     esp_timer_create(&delay_timer_args, &virtual_timer);
 
+    waitForWorkPermit(slot_num);
 
     while(1){
 		vTaskDelay(pdMS_TO_TICKS(10));
@@ -521,7 +529,7 @@ void whitelist_task(void *arg) {
 		ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
-
+    waitForWorkPermit(slot_num);
     
     while(1){
         command_message_t msg;
@@ -632,6 +640,8 @@ void collector_task(void *arg) {
     uint32_t dial_start_time = 0;
     uint8_t state_flag = 0;
     
+    waitForWorkPermit(slot_num);
+
     while(1){
         vTaskDelay(15 / portTICK_PERIOD_MS);
         command_message_t msg;
@@ -742,6 +752,8 @@ void scaler_task(void* arg) {
 		ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
+    waitForWorkPermit(slot_num);
+
     while(1){
         command_message_t cmd;
         if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
@@ -766,7 +778,7 @@ void scaler_task(void* arg) {
                 if(abs(outputVal)<zeroDeadZone){
                     outputVal = 0;
                 }
-                ESP_LOGD(TAG, "SCALER inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
+                //ESP_LOGD(TAG, "SCALER inputVal:%ld, float:%f, outputVal:%ld", inputVal, inputFloat, (int32_t)outputVal);
                 char str[50];
                 memset(str, 0, sizeof(str));
                 sprintf(str, "%ld", (int32_t)outputVal);
@@ -835,6 +847,7 @@ void tankControl_task(void* arg) {
     uint16_t accel =inputMaxVal/2;
     uint16_t steering = inputMaxVal/2;
 
+    waitForWorkPermit(slot_num);
 
     while(1){
         command_message_t cmd;
