@@ -71,6 +71,12 @@ typedef struct __tag_ADC1_CHANNEL
 	adc_continuous_evt_cbs_t cb;
 	int 					slot_num;
 
+	int 					averagingCount;
+	uint64_t				averagingSum;
+
+	uint16_t 				result;
+	uint16_t 				prev_result;
+
     uint16_t 				MIN_VAL;
     uint16_t 				MAX_VAL;
     uint8_t 				flag_float_output;
@@ -247,6 +253,8 @@ void adc1_task(void *arg)
 	PADC1_CHANNEL	ch 			= &adc1_channels[slot_num];
 	uint8_t 		result		[ EXAMPLE_READ_LEN ] = {0};
 
+	char tmpString[255];
+
 
 	ch->slot_num 			= slot_num;
     ch->MIN_VAL 			= 0;
@@ -256,6 +264,7 @@ void adc1_task(void *arg)
 	ch->k					= 1;
 	ch->dead_band			= 10;
 	ch->periodic			= 0;
+	ch->prev_result			= 0xFFFF;
 
     if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
 		ch->flag_float_output = 1;
@@ -360,15 +369,71 @@ void adc1_task(void *arg)
 						adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
 						
 						uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
-						uint32_t data = EXAMPLE_ADC_GET_DATA(p);
+						uint32_t raw_val = EXAMPLE_ADC_GET_DATA(p);
 
 						int slot = SLOT_ADC1_MAP[chan_num];
 
-						if (slot >= 0)
+						if (!(slot < 0))
 						{
-							PADC1_CHANNEL	c = &adc1_channels[slot];
+							PADC1_CHANNEL 	ch 		= &adc1_channels[slot];
+
 							//ESP_LOGD(TAG, "slot %d = %d", slot, (int)data);
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+							if (ch->averagingCount < oversumple)
+							{
+								if (ch->inverse)
+									raw_val = 4096-raw_val;
+
+								ch->averagingSum += raw_val;
+								ch->averagingCount++;
+							}
+
+							if (ch->averagingCount >= oversumple)
+							{
+								raw_val = ch->averagingSum / ch->averagingCount;	
+
+								ch->averagingCount 	= 0;
+								ch->averagingSum 	= 0;
+
+
+								ch->result = ch->result * (1 - ch->k) + raw_val * ch->k;
+							
+								if((abs(ch->result - ch->prev_result)>ch->dead_band)||(ch->periodic!=0))
+								{
+									ch->prev_result = ch->result;
+									//ESP_LOGD(TAG, "analog val:%d , allow_delta:%d", resault, MAX_VAL-MIN_VAL);
+
+									int str_len;//=strlen(me_config.deviceName)+strlen("/tachometer_")+8;
+									char *str;// = (char*)malloc(str_len * sizeof(char));
+
+									float f_res = 0;
+									if(ch->flag_float_output){
+										f_res = ch->result;
+										if(f_res>ch->MAX_VAL)f_res=ch->MAX_VAL;
+										if(f_res<ch->MIN_VAL)f_res=ch->MIN_VAL;
+										f_res-=ch->MIN_VAL;
+										f_res = (float)f_res/(ch->MAX_VAL-ch->MIN_VAL);
+									}
+
+									//memset(tmpString, 0, strlen(tmpString));
+
+									if(ch->flag_float_output){
+										//sprintf(str,"%s/analog_%d:%f", me_config.deviceName, slot_num, f_res);
+										sprintf(tmpString,"%f", f_res);
+									}else{
+										//sprintf(str,"%s/analog_%d:%d", me_config.deviceName, slot_num, resault);
+										sprintf(tmpString,"%d", ch->result);
+									}
+
+									//ESP_LOGD(TAG, "result = %s", tmpString);
+
+									report(tmpString, ch->slot_num);
+									//free(str); 
+								}
+							}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 						}
 					}
 
