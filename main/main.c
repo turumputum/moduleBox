@@ -237,6 +237,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("P9813", level);
 	esp_log_level_set("TACHOMETER", level);
 	esp_log_level_set("ANALOG", level);
+	esp_log_level_set("ADC1", level);
 	esp_log_level_set("PN532", level);
 	esp_log_level_set("STEPPER", level);
 	esp_log_level_set("IN_OUT", level);
@@ -364,7 +365,7 @@ exit:    //Common return path
 bool startNetworkServices()
 {
 	bool result 			= false;
-	char errorString		[40];
+	char errorString		[40] = "";
 
 	if (me_config.LAN_enable || me_config.WIFI_enable)
 	{
@@ -389,20 +390,30 @@ bool startNetworkServices()
 
 		if (result)
 		{
-#define NETWORK_INIT_TIMEOUT		20
+#define NETWORK_INIT_TIMEOUT		10
 
 			int timeout		= NETWORK_INIT_TIMEOUT;
 			bool ready 		= false;
 
+			ESP_LOGD(TAG, "waiting for active interfaces...");
+
 			do 
 			{
-				if ((ESP_OK != me_state.WIFI_init_res) && (ESP_OK != me_state.LAN_init_res))
+extern int network_get_active_interfaces();				
+				if ((ESP_OK == me_state.WIFI_init_res) || (ESP_OK == me_state.LAN_init_res))
+				{
+					int net_if_num = network_get_active_interfaces();
+
+					if (net_if_num > 0)
+					{
+						ready = true;
+					}
+				}
+				else
 				{
 					vTaskDelay(pdMS_TO_TICKS(200));
 					timeout--;
 				}
-				else
-					ready = true;
 				
 			} while (!ready && timeout);
 
@@ -415,16 +426,17 @@ bool startNetworkServices()
 				start_mqtt_task();			// OK
 			}
 			else
-			{
 				sprintf(errorString, "Network initialization timeout (%d)", NETWORK_INIT_TIMEOUT);
-				writeErrorTxt(errorString);
-			}
 		}
-		else
-			writeErrorTxt(errorString);
 	}
 	else
-		ESP_LOGI(TAG, "Network disabled, start skipped");
+		ESP_LOGI(TAG, "Network disabled.");
+
+	if (errorString[0])
+	{
+		ESP_LOGE(TAG, "%s", errorString);
+		writeErrorTxt(errorString);
+	}
 
 	return result;
 }

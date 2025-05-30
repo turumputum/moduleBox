@@ -219,6 +219,8 @@ void analog_task(void *arg)
 				sprintf(tmpString,"%d", resault);
 			}
 
+			//ESP_LOGD(TAG, "result = %s", tmpString);
+
 			report(tmpString, slot_num);
 			//free(str); 
 
