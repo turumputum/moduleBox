@@ -191,6 +191,12 @@ int init_slots(void){
 	return ESP_OK;
 }
 
+int get_option_flag_val(int slot_num, char* string)
+{
+	// просто возвращаю как сейчас используется.
+	return 1;
+}
+
 int get_option_int_val(int slot_num, char* string){
 	char *ind_of_vol = strstr(me_config.slot_options[slot_num], string);
 	char options_copy[strlen(ind_of_vol)];

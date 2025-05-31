@@ -246,16 +246,8 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 
 	return result;
 }
-void adc1_task(void *arg)
+void adc1_configure(PADC1_CHANNEL	ch, int slot_num)
 {
-    uint32_t 		ret_num 	= 0;
-    int 			slot_num 	= *(int *)arg;
-	PADC1_CHANNEL	ch 			= &adc1_channels[slot_num];
-	uint8_t 		result		[ EXAMPLE_READ_LEN ] = {0};
-
-	char tmpString[255];
-
-
 	ch->slot_num 			= slot_num;
     ch->MIN_VAL 			= 0;
     ch->MAX_VAL 			= 4095;
@@ -267,35 +259,56 @@ void adc1_task(void *arg)
 	ch->prev_result			= 0xFFFF;
 
     if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
-		ch->flag_float_output = 1;
+		// Флаг определяет формат воводящего значения, 
+		// если указан - будет выводиться значение с плавающей точкой,
+		// иначе - целочисленное
+		ch->flag_float_output = get_option_flag_val(slot_num, "floatOutput");
 		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
 	}
 	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
+		// Определяет верхний порог значений
 		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal");
 		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", ch->MAX_VAL, slot_num);
 	}
     if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
+		// Определяет нижний порог значений
 		ch->MIN_VAL = get_option_int_val(slot_num, "minVal");
 		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", ch->MIN_VAL, slot_num);
 	}
 	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-		ch->inverse = 1;
+		// Флаг задаёт инвертирование значений
+		ch->inverse = get_option_flag_val(slot_num, "inverse");;
 	}
    
     if (strstr(me_config.slot_options[slot_num], "filterK")!=NULL){
+		// Коэфициент фильтрации
         ch->k = get_option_float_val(slot_num, "filterK");
 		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", ch->k, slot_num);
 	}
     
     if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
+		// Фильтрация "дребезга" - определяет порог срабатывания 
         ch->dead_band = get_option_int_val(slot_num, "deadBand");
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d", ch->dead_band, slot_num);
 	}
 
     if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
+		// Задаёт периодичночть отсчётов в миллисекундах
         ch->periodic = get_option_int_val(slot_num, "periodic");
 		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d", ch->periodic, slot_num);
 	}
+}
+
+void adc1_task(void *arg)
+{
+    uint32_t 		ret_num 	= 0;
+    int 			slot_num 	= *(int *)arg;
+	PADC1_CHANNEL	ch 			= &adc1_channels[slot_num];
+	uint8_t 		result		[ EXAMPLE_READ_LEN ] = {0};
+
+	char tmpString[255];
+
+	adc1_configure(ch, slot_num);
 
 	uint8_t divPin_1 = SLOTS_PIN_MAP[slot_num][2];
 	esp_rom_gpio_pad_select_gpio(divPin_1);
@@ -427,7 +440,7 @@ void adc1_task(void *arg)
 										sprintf(tmpString,"%d", ch->result);
 									}
 
-									//ESP_LOGD(TAG, "result = %s", tmpString);
+									//ESP_LOGD(TAG, "slot %d result = %s", ch->slot_num, tmpString);
 
 									report(tmpString, ch->slot_num);
 									//free(str); 
