@@ -128,12 +128,13 @@ void encoderPPM_task(void *arg)
 		ESP_LOGD(TAG, "calibrationFlag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}
 
-    uint16_t MIN_VAL = 0;
+
+    uint16_t MIN_VAL = 4;
 	// if (strstr(me_config.slot_options[slot_num], "pwmMinVal") != NULL){
 	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMinVal");
 	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
 	// }
-	uint16_t MAX_VAL = 899;
+	uint16_t MAX_VAL = 936;
 	// if (strstr(me_config.slot_options[slot_num], "pwmMaxVal") != NULL){
 	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMaxVal");
 	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
@@ -210,7 +211,7 @@ void encoderPPM_task(void *arg)
 	int val_mass[ANTI_DEBOUNCE_INERATIONS];
 
 	while (1){
-		vTaskDelay(pdMS_TO_TICKS(10));
+		vTaskDelay(pdMS_TO_TICKS(20));
 		if (tickVals.flag){
 			raw_val = tickVals.dTime + offset + pos_length/2;
 			//raw_val = tickVals.dTime + offset;
@@ -294,7 +295,7 @@ void start_encoderPPM_task(int slot_num)
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
 	// int slot_num = *(int*) arg;
-	xTaskCreate(encoderPPM_task, "encoderCalc", 1024 * 4, &t_slot_num, 1, NULL);
+	xTaskCreate(encoderPPM_task, "encoderCalc", 1024 * 4, &t_slot_num, 22, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "pwmEncoder init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

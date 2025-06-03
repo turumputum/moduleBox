@@ -140,7 +140,7 @@ esp_err_t rmt_new_led_strip_encoder(const led_strip_encoder_config_t *config, rm
     rmt_copy_encoder_config_t copy_encoder_config = {};
     ESP_GOTO_ON_ERROR(rmt_new_copy_encoder(&copy_encoder_config, &led_encoder->copy_encoder), err, TAG, "create copy encoder failed");
 
-    uint32_t reset_ticks = config->resolution / 1000000 * 90 / 2; // reset code duration defaults to 50us
+    uint32_t reset_ticks = config->resolution / 1000000 * 300 / 2; // reset code duration defaults to 50us
     led_encoder->reset_code = (rmt_symbol_word_t) {
         .level0 = 0,
         .duration0 = reset_ticks,
@@ -285,6 +285,12 @@ void smartLed_task(void *arg){
 		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
+
+    uint16_t forcedUpdatePeriod = 0;
+    if (strstr(me_config.slot_options[slot_num], "forcedUpdatePeriod") != NULL) {
+		forcedUpdatePeriod = get_option_int_val(slot_num, "forcedUpdatePeriod");
+		ESP_LOGD(TAG, "Set forcedUpdatePeriod:%d for slot:%d",forcedUpdatePeriod, slot_num);
+	}
     	
     RgbColor targetRGB={
         .r=0,
@@ -350,9 +356,9 @@ void smartLed_task(void *arg){
     };
     //state = inverse;
     TickType_t lastWakeTime = xTaskGetTickCount(); 
+    TickType_t lastUpdateTime = xTaskGetTickCount();
 
     while (1) {
-
         command_message_t msg;
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
             //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
@@ -443,11 +449,18 @@ void smartLed_task(void *arg){
         }
 
 
+        if(forcedUpdatePeriod!=0){
+            if(xTaskGetTickCount()-lastUpdateTime>=forcedUpdatePeriod){
+                flag_ledUpdate = true;
+            }
+        }
+
         if(flag_ledUpdate){
             flag_ledUpdate = false;
             //ESP_LOGD(TAG, "sizeof(led_strip_pixels):%d", sizeof(led_strip_pixels));
             
             rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
+            lastUpdateTime = xTaskGetTickCount();
         }
 
         //uint16_t delay = refreshPeriod - pdTICKS_TO_MS(xTaskGetTickCount()-startTick);
