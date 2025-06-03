@@ -97,6 +97,8 @@ void stepperSpeed_task(void *arg){
 
     TickType_t lastWakeTime = xTaskGetTickCount();
 
+    waitForWorkPermit(slot_num);
+
     while(1){
         if(fabs(targetFreq - currentFreq) > 0.0001){
             
@@ -335,6 +337,8 @@ void stepper_task(void *arg){
     }
 
     int32_t prevState=0;
+
+    waitForWorkPermit(slot_num);
    
     while(1){
         command_message_t msg;

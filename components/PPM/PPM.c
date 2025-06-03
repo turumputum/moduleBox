@@ -182,6 +182,7 @@ void ppm_generator_task(void *arg) {
     ppm_generator_init(&ppm_ch1, SLOTS_PIN_MAP[slot_num][1]);
     ppm_generator_set_value(&ppm_ch1, ((maxPulseWidth-minPulseWidth)/2)+minPulseWidth);
 
+    waitForWorkPermit(slot_num);
 
     while(1){
         command_message_t msg;

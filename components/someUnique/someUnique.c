@@ -171,6 +171,8 @@ void buttonMatrix_task(void* arg) {
     memset(_resMatrix, 0, sizeof(_resMatrix));
     uint8_t maxCount=6;
 
+    waitForWorkPermit(slot_num);
+
     while (1){
         vTaskDelay(15/portTICK_PERIOD_MS);
 
@@ -294,6 +296,8 @@ void uartLogger_task(void* arg) {
     uint8_t data[BUF_SIZE];
     int len_read;
 
+    waitForWorkPermit(slot_num);
+
     ESP_LOGD(TAG, "start logging to file: %s", file_name);
 
     while (1) {
@@ -412,6 +416,8 @@ void dialer_task(void* arg) {
     uint8_t state_flag = 0;
 
     uint32_t tick=xTaskGetTickCount();
+
+    waitForWorkPermit(slot_num);
 
     while(1){
         //vTaskDelay();      
@@ -646,6 +652,9 @@ void volnaKolya_task(void* arg) {
     execute(tmpStr);
 
     TickType_t lastWakeTime = xTaskGetTickCount();
+
+    waitForWorkPermit(slot_num);
+
     while(1){
         //---0---
         lastWakeTime = xTaskGetTickCount();
@@ -758,6 +767,7 @@ void furbyEye_task(void* arg) {
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
 
+    waitForWorkPermit(slot_num);
 
     int val;
     TickType_t lastWakeTime = xTaskGetTickCount(); 

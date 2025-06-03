@@ -205,7 +205,7 @@ void execute(char *action) {
 	//ESP_LOGE(TAG, "execute <<");
 }
 
-void executer_task(void){
+void executer_task(void * param){
 	exec_message_t msg;
 	me_state.executor_queue = xQueueCreate(150, sizeof(exec_message_t));
 

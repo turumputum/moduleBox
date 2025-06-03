@@ -134,6 +134,9 @@ void servoRod_task(void *arg) {
 	twai_message_t message;
 	cybergear_status_t status;
     TickType_t lastWakeTime = xTaskGetTickCount();
+
+    waitForWorkPermit(slot_num);
+    
     while(1){
 
         /* request status */

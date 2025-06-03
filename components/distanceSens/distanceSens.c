@@ -234,7 +234,7 @@ void VL53TOF_task(void* arg) {
     uint8_t f_report = 0;
     uint8_t index = 0;
 
-    
+    waitForWorkPermit(slot_num);
 
     while (1) {
         //uint16_t dist = 0;
@@ -347,6 +347,7 @@ void benewakeTOF_task(void* arg) {
     uint8_t index = 0;
     uint8_t data[255];
     
+    waitForWorkPermit(slot_num);
 
     while (1) {
         //uint16_t dist = 0;
@@ -457,6 +458,8 @@ void hlk2410_task(void* arg) {
     #define PACKET_END 0xF8F7F6F5
     uint8_t rawByte[20];
     uint8_t f_msg_start = 0;
+
+    waitForWorkPermit(slot_num);
 
     while (1) {
         if (uart_read_bytes(uart_num, &rawByte[index], 1, portMAX_DELAY)) {
@@ -582,6 +585,8 @@ void ultrasonic_task(void* arg) {
     int64_t end_time = 0;
 
     int64_t last_trigger_time = 0;
+
+    waitForWorkPermit(slot_num);
 
     while (1) {
         // Trigger the sensor

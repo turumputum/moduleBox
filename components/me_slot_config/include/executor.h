@@ -10,7 +10,7 @@ typedef struct{
 } command_message_t;
 
 
-void executer_task(void);
+void executer_task(void * param);
 void execute(char *action);
 
 void exec_optorelay(int slot_num, int payload);

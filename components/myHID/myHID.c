@@ -67,6 +67,8 @@ void HID_task(void *arg) {
     ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
     ESP_LOGD(TAG, "HID task init ok. Slot_num:%d", slot_num);
 
+    waitForWorkPermit(slot_num);
+
     while(1)   {
         if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
             char* payload;

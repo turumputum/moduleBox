@@ -67,6 +67,8 @@ void pn532Uart_task(void* arg) {
     char _cardID[3*10+3];
     memset(_cardID, 0, sizeof(cardID));
 
+    waitForWorkPermit(slot_num);
+
     while (1){
         buf[0] = 1;               
         buf[1] = 0;               /* 106 kbps type A(ISO / IEC14443 Type A) */
