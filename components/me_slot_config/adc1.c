@@ -301,10 +301,11 @@ void adc1_configure(PADC1_CHANNEL	ch, int slot_num)
 
 void adc1_task(void *arg)
 {
-    uint32_t 		ret_num 	= 0;
-    int 			slot_num 	= *(int *)arg;
-	PADC1_CHANNEL	ch 			= &adc1_channels[slot_num];
-	uint8_t 		result		[ EXAMPLE_READ_LEN ] = {0};
+    uint32_t 		ret_num 		= 0;
+    int 			slot_num 		= *(int *)arg;
+	TickType_t 		lastReportTime 	= 0;
+	PADC1_CHANNEL	ch 				= &adc1_channels[slot_num];
+	uint8_t 		result			[ EXAMPLE_READ_LEN ] = {0};
 
 	char tmpString[255];
 
@@ -413,7 +414,9 @@ void adc1_task(void *arg)
 
 								ch->result = ch->result * (1 - ch->k) + raw_val * ch->k;
 							
-								if((abs(ch->result - ch->prev_result)>ch->dead_band)||(ch->periodic!=0))
+								if (  (abs(ch->result - ch->prev_result)>ch->dead_band)  	|| 
+								      ((ch->periodic != 0) && ((xTaskGetTickCount() - lastReportTime) >= pdMS_TO_TICKS(ch->periodic))) 
+									   													 	)
 								{
 									ch->prev_result = ch->result;
 									//ESP_LOGD(TAG, "analog val:%d , allow_delta:%d", resault, MAX_VAL-MIN_VAL);
@@ -442,6 +445,7 @@ void adc1_task(void *arg)
 
 									//ESP_LOGD(TAG, "slot %d result = %s", ch->slot_num, tmpString);
 
+									lastReportTime = xTaskGetTickCount();
 									report(tmpString, ch->slot_num);
 									//free(str); 
 								}
