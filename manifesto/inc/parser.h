@@ -41,6 +41,8 @@ public:
         int             line;
         char            name                    [ 64 ];
 
+        char *          begin;
+
         char *          descRaw;
 }; 
 
@@ -74,13 +76,17 @@ private:
 
         char *          source;
 
-        char *          searchEnd;
+        char *          funcSearchEnd;
+        char *          modSearchEnd;
 
         int             numOfFuncs;
 
         Module          mod;
 
         Function        funcs                   [ MAX_PARAMS ];
+
+        char *          backstrstrGlobal        (char *         haystack,
+                                                 const char *   needle);
 
         char *          backstrstr              (char *         haystack,
                                                  const char *   needle);
@@ -130,10 +136,17 @@ private:
 
         bool            generateManifestoForModule();
 
-        const char *    generateManifesto       ();
-
         void            cleanValue              (char *         value);
-        
+
+        void            resetFunctions          ();
+
+        int             findNextModule          ();
+
+        char *          findCorellatedCurlyBrace(char *         begin);
+
+        bool            getModuleName           (char *         begin);
+
+        bool            getModuleDesc           (char *         begin);
 
 public:
                         Parser                  ()

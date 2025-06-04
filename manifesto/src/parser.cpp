@@ -11,6 +11,12 @@
 #include <stdlib.h>
 
 // ---------------------------------------------------------------------------
+// ---------------------------------- DATA -----------------------------------
+// -----|-------------------|-------------------------------------------------
+
+const char * CONFIGURE_BEGIN = "void configure_";
+
+// ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
@@ -46,16 +52,11 @@ void Parser::strdup(char * &       dest,
         strcpy(dest, begin);
     }
 }
-
-void Parser::resetSearching()
-{
-    searchEnd = source;    
-}
 void Parser::cleanValue(char *         value)
 {
     unsigned char * on = (unsigned char *)value;
 
-    printf("cleanValue: '%s' ->", value);
+    //printf("cleanValue: '%s' ->", value);
 
     // Skip begin
     while (*on && ((*on <= ' ') || (*on == '\"')))
@@ -85,7 +86,7 @@ void Parser::cleanValue(char *         value)
     else
         *value = 0;
 
-    printf("'%s'\n", value);
+    //printf("'%s'\n", value);
 }
 char * Parser::findNextFunction(Function &     func,
                                 const char *   part1,
@@ -95,7 +96,7 @@ char * Parser::findNextFunction(Function &     func,
     char *              begin;
     char *              end;
 
-    if ((begin = strstr(searchEnd,  part1)) != nil)
+    if ((begin = strstr(funcSearchEnd,  part1)) != nil)
     {
         if ((end = strchr(begin, '(')) != nil)
         {
@@ -107,12 +108,12 @@ char * Parser::findNextFunction(Function &     func,
             if (!memcmp(func.funcName + (len1 - len2), part2, len2))
             {
                 result      = begin;
-                searchEnd   = result + strlen(func.funcName);
+                funcSearchEnd   = result + strlen(func.funcName);
 
             }
             else
             {
-                searchEnd   = result + strlen(part1);
+                funcSearchEnd   = result + strlen(part1);
                 result      = findNextFunction(func, part1, part2);
             }
         }
@@ -120,15 +121,41 @@ char * Parser::findNextFunction(Function &     func,
 
     return result;
 }
-// 
 
+void Parser::resetFunctions()
+{
+    for (int i = 0; i < numOfFuncs; i++)
+    {
+        funcs[i].type = PARAMTYPE_unknown;
+        funcs[i].line = 0;
+        *funcs[i].funcName = 0;
+        *funcs[i].name = 0;
+        *funcs[i].unit = 0;
+
+        if (!funcs[i].paramsRaw)
+            free(funcs[i].paramsRaw);
+
+        if (!funcs[i].descRaw)
+            free(funcs[i].descRaw);
+
+        funcs[i].defaultVal = 0;
+        funcs[i].maxVal = 0;
+        funcs[i].minVal = 0;
+
+        funcs[i].defaultValF = 0;
+        funcs[i].maxValF = 0;
+        funcs[i].minValF = 0;
+    }
+    
+    numOfFuncs = 0;
+}
 bool Parser::getOptions()
 {
     bool        result = true;
 
-    resetSearching();
-
     char * on;
+
+    resetFunctions();
 
     while (result && ((on = findNextFunction(funcs[numOfFuncs], "get_option_", "_val")) != nil))
     {
@@ -165,6 +192,25 @@ bool Parser::getOptions()
 
     return result;
 }
+char * Parser::backstrstrGlobal(char *         haystack,
+                                const char *   needle)
+{
+    char *  result          = nil;
+    char *  on              = haystack;
+    int     len             = strlen(needle);
+
+    while (!result && *on && (on != source))
+    {
+        if ((*on == *needle) && (!memcmp(on, needle, len)))
+        {
+            result = on;
+        }
+        else
+            on--;
+    }
+
+    return result;
+}
 char * Parser::backstrstr(char *         haystack,
                           const char *   needle)
 {
@@ -172,7 +218,7 @@ char * Parser::backstrstr(char *         haystack,
     char *  on              = haystack;
     int     len             = strlen(needle);
 
-    while (!result && (on != source))
+    while (!result && (on != mod.begin))
     {
         if ((*on == *needle) && (!memcmp(on, needle, len)))
         {
@@ -424,17 +470,50 @@ bool Parser::parseFunctionParams(Function &     func,
 }
 const char * Parser::parse(char * source)
 {
-    const char *            result = 0;
-   
-    this->source = source;
+    const char *            result  = 0;
+    int                     mods    = 0;
+    int                     rc;
 
-    if (getOptions())
+    this->source    = source;
+    modSearchEnd    = source;
+
+    manifesto.append("[");
+
+    do
     {
-        result = generateManifesto();
+        switch (rc = findNextModule())
+        {
+            case 0:
+                break;
+
+            case -1:
+                printf("error searching for module\n");
+                mods = 0;
+                break;
+
+            default:
+                if (getOptions())
+                {
+                    if (generateManifestoForModule())
+                    {
+                        mods++;
+                    }
+                    else
+                        printf("error generating manifest for module %s\n", mod.name);
+                }
+                else
+                    printf("error parsing for options\n");
+                break;
+        }
+
+    } while (rc > 0);
+
+    if (mods > 0)
+    {
+        manifesto.append("]\n");
+        result = manifesto.c_str();
     }
-    else
-        printf("error parsing for options\n");
-    
+
     return result;
 }
 bool Parser::generateManifestoForModule()
@@ -443,7 +522,7 @@ bool Parser::generateManifestoForModule()
     Function *      f;
     char            tmp     [ 1024 ];
 
-    snprintf(tmp, sizeof(tmp), "\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n\t\t\"options\": [\n", mod.name, mod.descRaw);
+    snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n\t\t\"options\": [\n", mod.name, mod.descRaw);
     manifesto.append(tmp);
 
     for (int i = 0; i < numOfFuncs; i++)
@@ -521,26 +600,147 @@ bool Parser::generateManifestoForModule()
         manifesto.append(tmp);
     }
 
-    snprintf(tmp, sizeof(tmp), "\t},");
+    snprintf(tmp, sizeof(tmp), "\t},\n");
     manifesto.append(tmp);
 
 
     return result;
 }
-const char * Parser::generateManifesto()
+char * Parser::findCorellatedCurlyBrace(char *         begin)
 {
-    const char *          result  = nil;
-
-    manifesto.append("[\n");
-
-    strcpy(mod.name, "adc1");
-    strdup(mod.descRaw, "ADC convertor");
-
-    if (generateManifestoForModule())
+    char *      result  = nil;
+    char *      on      = begin;
+    int         count   = 0;
+    
+    do
     {
-        manifesto.append("]\n");
-        result = manifesto.c_str();
+        //printf("@@@@@@@@ '%c', count = %d | ", *on, count);
+
+        if (*on == '{')
+        {
+            count++;
+        }
+        else if (*on == '}')
+        {
+            count--;
+        }
+        
+        if (!count)
+        {
+            result = on;
+        }
+
+        on++;
+
+        //printf("count = %d, result = %p\n", count, result);
+
+    } while (*on && !result);
+    
+    return result;
+}
+bool Parser::getModuleDesc(char *         moduleBegin)
+{
+    bool        result = false;
+    char *      begin;
+    char *      end;
+
+    if ((end = backstrstrGlobal(moduleBegin, "*/")) != nil)
+    {
+        if ((begin = backstrstrGlobal(end, "/*")) != nil)
+        {
+            begin += 2;
+
+            if (dupFromTo(mod.descRaw, begin, end) > 0)
+            {
+                cleanValue(mod.descRaw);
+                result = true;
+            }
+            else
+                printf("error: cannot get desc body for module %s\n", mod.name);
+        }
+        else
+            printf("error: cannot get desc begin for module %s\n", mod.name);
     }
+    else
+        printf("error: cannot get desc end for module %s\n", mod.name);
+
+    return result;
+}
+/*
+bool Parser::getModuleName(char *         begin)
+{
+    bool            result      = false;
+    char *          on          = begin;
+    
+    while ((on != modSearchEnd) && (*on > ' '))
+    {
+        on--;
+    }
+
+    if (on != modSearchEnd)
+    {
+        copyFromTo(mod.name, on, begin);
+        cleanValue(mod.name);
+
+        result = true;
+    }
+
+    return result;
+}
+*/
+bool Parser::getModuleName(char *         begin)
+{
+    bool            result      = false;
+    char *          on          = begin;
+    
+    if ((on = strchr(begin, '(')) != nil)
+    {
+        copyFromTo(mod.name, begin + strlen(CONFIGURE_BEGIN), on);
+        cleanValue(mod.name);
+
+        result = true;
+    }
+
+    return result;
+}
+int Parser::findNextModule()
+{
+    int                 result          = -1;
+    char *              begin;
+    char *              end;
+
+    if ((begin = strstr(modSearchEnd,  CONFIGURE_BEGIN)) != nil)
+    {
+        //printf("parser.cpp:669 - stage FOUND !!! %p \n", begin);
+        
+        if ((mod.begin = strchr(begin, '{')) != nil)
+        {
+            if ((end = findCorellatedCurlyBrace(mod.begin)) != nil)
+            {
+                if (getModuleName(begin))
+                {
+                    if (getModuleDesc(begin))
+                    {
+                        funcSearchEnd   = mod.begin;
+                        *end            = 0;
+                        modSearchEnd    = ++end;
+
+                        result = 1;
+                    }
+                    else
+                        printf("error: cannot get description of module\n");
+                }
+                else
+                    printf("error: cannot get name of module\n");
+            }
+            else
+                printf("error: cannot get end of module configure function\n");
+        }
+        else
+            printf("error: cannot get begin of module configure function\n");
+    }
+    else 
+        result = 0;
 
     return result;
 }

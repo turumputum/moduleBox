@@ -1,0 +1,145 @@
+[
+	{
+		"mode": "adc1"
+		"description": "Модуль реализует поддержку первого ADC"
+		"options": [
+			{
+				"name": "floatOutput",
+				"description": "Флаг определяет формат воводящего значения, 
+		  если указан - будет выводиться значение с плавающей точкой,
+		  иначе - целочисленное",
+				"valueType": "flag",
+			},
+			{
+				"name": "maxVal",
+				"description": "Определяет верхний порог значений",
+				"valueType": "int",
+				"unit": "",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "minVal",
+				"description": "Определяет нижний порог значений",
+				"valueType": "int",
+				"unit": "",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "inverse",
+				"description": "Флаг задаёт инвертирование значений",
+				"valueType": "flag",
+			},
+			{
+				"name": "filterK",
+				"description": "Коэфициент фильтрации",
+				"valueType": "float",
+				"valueDefault": 0,
+				"valueMax": 5,
+				"valueMin": 0
+			},
+			{
+				"name": "deadBand",
+				"description": "Фильтрация "дребезга" - определяет порог срабатывания",
+				"valueType": "int",
+				"unit": "",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "periodic",
+				"description": "Задаёт периодичночть отсчётов в миллисекундах",
+				"valueType": "int",
+				"unit": "ms",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "topic",
+				"description": "Определяет топик для MQTT сообщений",
+				"valueType": "string",
+			},
+			{
+				"name": "dividerMode",
+				"description": "Задаёт режим делителя",
+				"valueType": "string",
+			},
+	},
+
+	{
+		"mode": "adc2"
+		"description": "Модуль реализует поддержку второго ADC"
+		"options": [
+			{
+				"name": "floatOutput",
+				"description": "Флаг определяет формат воводящего значения, 
+		  если указан - будет выводиться значение с плавающей точкой,
+		  иначе - целочисленное",
+				"valueType": "flag",
+			},
+			{
+				"name": "maxVal",
+				"description": "Определяет верхний порог значений",
+				"valueType": "int",
+				"unit": "",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "minVal",
+				"description": "Определяет нижний порог значений",
+				"valueType": "int",
+				"unit": "",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "inverse",
+				"description": "Флаг задаёт инвертирование значений",
+				"valueType": "flag",
+			},
+			{
+				"name": "filterK",
+				"description": "Коэфициент фильтрации",
+				"valueType": "float",
+				"valueDefault": 0,
+				"valueMax": 5,
+				"valueMin": 0
+			},
+			{
+				"name": "deadBand",
+				"description": "Фильтрация "дребезга" - определяет порог срабатывания",
+				"valueType": "int",
+				"unit": "",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "periodic",
+				"description": "Задаёт периодичночть отсчётов в миллисекундах",
+				"valueType": "int",
+				"unit": "ms",
+				"valueDefault": 10,
+				"valueMax": 4096,
+				"valueMin": 1
+			},
+			{
+				"name": "topic",
+				"description": "Определяет топик для MQTT сообщений",
+				"valueType": "string",
+			},
+			{
+				"name": "dividerMode",
+				"description": "Задаёт режим делителя",
+				"valueType": "string",
+			},
+	},
+]
