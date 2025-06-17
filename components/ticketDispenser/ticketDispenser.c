@@ -72,7 +72,7 @@ void ticketDispenser_task(void *arg) {
 
     int debounce_gap = 100;
 	if (strstr(me_config.slot_options[slot_num], "inDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "inDebounceGap");
+		debounce_gap = get_option_int_val(slot_num, "inDebounceGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
 
@@ -87,19 +87,19 @@ void ticketDispenser_task(void *arg) {
 
     uint16_t outTimeout = 5*1000;
 	if (strstr(me_config.slot_options[slot_num], "outTimeout") != NULL) {
-		outTimeout = get_option_int_val(slot_num, "outTimeout")*1000;
+		outTimeout = get_option_int_val(slot_num, "outTimeout", "", 10, 1, 4096)*1000;
 		ESP_LOGD(TAG, "Set outTimeout:%d mSek for slot:%d",outTimeout, slot_num);
 	}
 
     uint16_t overPrint = 200;
 	if (strstr(me_config.slot_options[slot_num], "overPrint") != NULL) {
-		overPrint = get_option_int_val(slot_num, "overPrint");
+		overPrint = get_option_int_val(slot_num, "overPrint", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set overPrint:%d mSek for slot:%d",outTimeout, slot_num);
 	}
 
     uint16_t blindGap = 200;
     if (strstr(me_config.slot_options[slot_num], "blindGap") != NULL) {
-		blindGap = get_option_int_val(slot_num, "blindGap");
+		blindGap = get_option_int_val(slot_num, "blindGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set blindGap:%d mSek for slot:%d",outTimeout, slot_num);
 	}
 

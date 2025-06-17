@@ -135,7 +135,7 @@ void audio_task(void *arg) {
 
 	int8_t volume=70;
 	if (strstr(me_config.slot_options[slot_num], "volume")!=NULL){
-		volume = get_option_int_val(slot_num, "volume");
+		volume = get_option_int_val(slot_num, "volume", "", 10, 1, 4096);
 		if(volume>100){volume=100;}
 		if(volume<0){volume=0;}
 		ESP_LOGD(TAG, "Set volume:%d", volume);
@@ -156,21 +156,21 @@ void audio_task(void *arg) {
 	uint8_t eqFlag=0;
 	int8_t eqLow=0;
 	if (strstr(me_config.slot_options[slot_num], "eqLow")!=NULL){
-		eqLow = get_option_int_val(slot_num, "eqLow");
+		eqLow = get_option_int_val(slot_num, "eqLow", "", 10, 1, 4096);
 		eqFlag = 1;
 		ESP_LOGD(TAG, "Set eqLow:%d", eqLow);
 	}
 
 	int8_t eqMid=0;
 	if (strstr(me_config.slot_options[slot_num], "eqMid")!=NULL){
-		eqMid = get_option_int_val(slot_num, "eqMid");
+		eqMid = get_option_int_val(slot_num, "eqMid", "", 10, 1, 4096);
 		eqFlag = 1;
 		ESP_LOGD(TAG, "Set eqMid:%d", eqMid);
 	}
 
 	int8_t eqHigh=0;
 	if (strstr(me_config.slot_options[slot_num], "eqHigh")!=NULL){
-		eqHigh = get_option_int_val(slot_num, "eqHigh");
+		eqHigh = get_option_int_val(slot_num, "eqHigh", "", 10, 1, 4096);
 		eqFlag = 1;
 		ESP_LOGD(TAG, "Set eqMid:%d", eqMid);
 	}
@@ -185,7 +185,7 @@ void audio_task(void *arg) {
 	
 	uint16_t play_delay=0;
 	if (strstr(me_config.slot_options[slot_num], "playDelay")!=NULL){
-		play_delay = get_option_int_val(slot_num, "playDelay");
+		play_delay = get_option_int_val(slot_num, "playDelay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set play_delay:%d", play_delay);
 	}
 

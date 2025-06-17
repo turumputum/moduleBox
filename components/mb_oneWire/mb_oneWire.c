@@ -79,7 +79,7 @@ void ds18b20_task(void* arg) {
 
     float threshold = 0.0;
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-        threshold = get_option_int_val(slot_num, "threshold");
+        threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
         ESP_LOGD(TAG, "threshold:%f. Slot:%d", threshold, slot_num);
     }
 
@@ -96,7 +96,7 @@ void ds18b20_task(void* arg) {
 
     uint32_t periodic=0;
     if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
-        periodic = abs(get_option_int_val(slot_num, "periodic"))*1000;
+        periodic = abs(get_option_int_val(slot_num, "periodic", "", 10, 1, 4096))*1000;
 		ESP_LOGD(TAG, "Set periodic:%ld. Slot:%d",periodic, slot_num);
 	}
 

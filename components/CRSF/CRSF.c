@@ -71,7 +71,7 @@ void crsf_rx_task(void* arg) {
 
     uint16_t deadBand = 1;
 	if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
-		deadBand = get_option_int_val(slot_num, "deadBand");
+		deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set deadBand:%d for slot:%d",deadBand, slot_num);
 	}
 

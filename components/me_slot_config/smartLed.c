@@ -241,7 +241,7 @@ void smartLed_task(void *arg){
 
     uint16_t num_of_led=24;
     if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
-		num_of_led = get_option_int_val(slot_num, "numOfLed");
+		num_of_led = get_option_int_val(slot_num, "numOfLed", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
 	}
 
@@ -252,13 +252,13 @@ void smartLed_task(void *arg){
 
     uint8_t state=0;
     if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
-		state = get_option_int_val(slot_num, "defaultState");
+		state = get_option_int_val(slot_num, "defaultState", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
 	}
 
     int16_t increment = 255;
     if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-		increment = get_option_int_val(slot_num, "increment");
+		increment = get_option_int_val(slot_num, "increment", "", 10, 1, 4096);
         if(increment<1)increment=1;
         if(increment>255)increment=255;
 		ESP_LOGD(TAG, "Set increment:%d for slot:%d",increment, slot_num);
@@ -266,7 +266,7 @@ void smartLed_task(void *arg){
 
     int16_t maxBright = 255;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		maxBright = get_option_int_val(slot_num, "maxBright");
+		maxBright = get_option_int_val(slot_num, "maxBright", "", 10, 1, 4096);
         if(maxBright>255)maxBright=255;
         if(maxBright<0)maxBright=0;
 		ESP_LOGD(TAG, "Set maxBright:%d for slot:%d",maxBright, slot_num);
@@ -274,7 +274,7 @@ void smartLed_task(void *arg){
 
     int16_t minBright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = get_option_int_val(slot_num, "minBright");
+		minBright = get_option_int_val(slot_num, "minBright", "", 10, 1, 4096);
         if(minBright<0)minBright=0;
         if(minBright>255)minBright=255;
 		ESP_LOGD(TAG, "Set minBright:%d for slot:%d",minBright, slot_num);
@@ -282,7 +282,7 @@ void smartLed_task(void *arg){
 
     uint16_t refreshPeriod = 1000/30;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
     	
@@ -696,27 +696,27 @@ void swiperLed_task(void *arg){
     
     uint16_t num_of_led=16;
     if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
-		num_of_led = get_option_int_val(slot_num, "numOfLed");
+		num_of_led = get_option_int_val(slot_num, "numOfLed", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
 	}
 
     float maxBright = 1.0;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		maxBright = (float)get_option_int_val(slot_num, "maxBright")/255;
+		maxBright = (float)get_option_int_val(slot_num, "maxBright", "", 10, 1, 4096)/255;
         if(maxBright>1.0)maxBright=1.0;
 		ESP_LOGD(TAG, "Set maxBright:%f for slot:%d",maxBright, slot_num);
 	}
 
     float minBright = 0.0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = (float)get_option_int_val(slot_num, "minBright")/255;
+		minBright = (float)get_option_int_val(slot_num, "minBright", "", 10, 1, 4096)/255;
         if(minBright<0.0)minBright=0.0;
 		ESP_LOGD(TAG, "Set minBright:%f for slot:%d",minBright, slot_num);
 	}
 
     uint16_t refreshPeriod = 25;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
     	
@@ -915,13 +915,13 @@ void ledRing_task(void *arg){
     
     uint16_t num_of_led=24;
     if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
-		num_of_led = get_option_int_val(slot_num, "numOfLed");
+		num_of_led = get_option_int_val(slot_num, "numOfLed", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
 	}
 
     int16_t increment = 255;
     if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-		increment = get_option_int_val(slot_num, "increment");
+		increment = get_option_int_val(slot_num, "increment", "", 10, 1, 4096);
         if(increment>255)increment=255;
         if(increment<0)increment=0;
 		ESP_LOGD(TAG, "Set increment:%d for slot:%d",increment, slot_num);
@@ -929,7 +929,7 @@ void ledRing_task(void *arg){
 
     int16_t maxBright = 255;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		maxBright = get_option_int_val(slot_num, "maxBright");
+		maxBright = get_option_int_val(slot_num, "maxBright", "", 10, 1, 4096);
         if(maxBright>255)maxBright=255;
         if(maxBright<0)maxBright=0;
 		ESP_LOGD(TAG, "Set maxBright:%d for slot:%d",maxBright, slot_num);
@@ -937,7 +937,7 @@ void ledRing_task(void *arg){
 
     int16_t minBright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = get_option_int_val(slot_num, "minBright");
+		minBright = get_option_int_val(slot_num, "minBright", "", 10, 1, 4096);
         if(minBright<0)minBright=0;
         if(minBright>255)minBright=255;
 		ESP_LOGD(TAG, "Set minBright:%d for slot:%d",minBright, slot_num);
@@ -945,25 +945,25 @@ void ledRing_task(void *arg){
 
     uint16_t refreshPeriod = 1000/30;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
     uint16_t numOfPos = num_of_led;
     if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL) {
-		numOfPos = (get_option_int_val(slot_num, "numOfPos"));
+		numOfPos = (get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set numOfPos:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
     uint16_t effectLen = num_of_led/4;
     if (strstr(me_config.slot_options[slot_num], "effectLen") != NULL) {
-		effectLen = (get_option_int_val(slot_num, "effectLen"));
+		effectLen = (get_option_int_val(slot_num, "effectLen", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set effectLen:%d for slot:%d", effectLen, slot_num);
 	}
 
     uint8_t state=0;
     if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
-		state = get_option_int_val(slot_num, "defaultState");
+		state = get_option_int_val(slot_num, "defaultState", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
 	}
     uint8_t prevState=255;
@@ -976,7 +976,7 @@ void ledRing_task(void *arg){
 
     int16_t offset=0;
     if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
-		offset = get_option_int_val(slot_num, "offset");
+		offset = get_option_int_val(slot_num, "offset", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set offset:%d for slot:%d", offset, slot_num);
 	}
 
@@ -1178,13 +1178,13 @@ void ledBar_task(void *arg){
     
     uint16_t num_of_led=24;
     if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
-		num_of_led = get_option_int_val(slot_num, "numOfLed");
+		num_of_led = get_option_int_val(slot_num, "numOfLed", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
 	}
 
     int16_t increment = 255;
     if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-		increment = get_option_int_val(slot_num, "increment");
+		increment = get_option_int_val(slot_num, "increment", "", 10, 1, 4096);
         if(increment>255)increment=255;
         if(increment<0)increment=0;
 		ESP_LOGD(TAG, "Set increment:%d for slot:%d",increment, slot_num);
@@ -1192,7 +1192,7 @@ void ledBar_task(void *arg){
 
     int16_t maxBright = 255;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		maxBright = get_option_int_val(slot_num, "maxBright");
+		maxBright = get_option_int_val(slot_num, "maxBright", "", 10, 1, 4096);
         if(maxBright>255)maxBright=255;
         if(maxBright<0)maxBright=0;
 		ESP_LOGD(TAG, "Set maxBright:%d for slot:%d",maxBright, slot_num);
@@ -1200,7 +1200,7 @@ void ledBar_task(void *arg){
 
     int16_t minBright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = get_option_int_val(slot_num, "minBright");
+		minBright = get_option_int_val(slot_num, "minBright", "", 10, 1, 4096);
         if(minBright<0)minBright=0;
         if(minBright>255)minBright=255;
 		ESP_LOGD(TAG, "Set minBright:%d for slot:%d",minBright, slot_num);
@@ -1208,19 +1208,19 @@ void ledBar_task(void *arg){
 
     uint16_t refreshPeriod = 1000/30;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
     uint16_t numOfPos = num_of_led;
     if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL) {
-		numOfPos = (get_option_int_val(slot_num, "numOfPos"));
+		numOfPos = (get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set numOfPos:%d for slot:%d",numOfPos, slot_num);
 	}
 
     uint8_t state=0;
     if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
-		state = get_option_int_val(slot_num, "defaultState");
+		state = get_option_int_val(slot_num, "defaultState", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
 	}
     uint8_t prevState=255;
@@ -1233,7 +1233,7 @@ void ledBar_task(void *arg){
 
     int16_t offset=0;
     if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
-		offset = get_option_int_val(slot_num, "offset");
+		offset = get_option_int_val(slot_num, "offset", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set offset:%d for slot:%d", offset, slot_num);
 	}
 

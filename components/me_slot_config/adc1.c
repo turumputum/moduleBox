@@ -85,6 +85,10 @@ typedef struct __tag_ADC1_CHANNEL
 	uint16_t 				dead_band;
 	uint16_t 				periodic;
 
+	char *					custom_topic;
+	int 					flag_custom_topic;
+	int 					divider;
+
 } ADC1_CHANNEL, * PADC1_CHANNEL; 
 
 
@@ -246,7 +250,10 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 
 	return result;
 }
-void adc1_configure(PADC1_CHANNEL	ch, int slot_num)
+/* 
+    Модуль реализует поддержку первого ADC
+*/
+void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 {
 	ch->slot_num 			= slot_num;
     ch->MIN_VAL 			= 0;
@@ -259,43 +266,61 @@ void adc1_configure(PADC1_CHANNEL	ch, int slot_num)
 	ch->prev_result			= 0xFFFF;
 
     if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
-		// Флаг определяет формат воводящего значения, 
-		// если указан - будет выводиться значение с плавающей точкой,
-		// иначе - целочисленное
+        /* Флаг определяет формат воводящего значения, 
+          если указан - будет выводиться значение с плавающей точкой,
+          иначе - целочисленное
+        */
 		ch->flag_float_output = get_option_flag_val(slot_num, "floatOutput");
 		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
 	}
 	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
-		// Определяет верхний порог значений
-		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal");
+		/* Определяет верхний порог значений */
+		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", ch->MAX_VAL, slot_num);
 	}
     if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
-		// Определяет нижний порог значений
-		ch->MIN_VAL = get_option_int_val(slot_num, "minVal");
+		/* Определяет нижний порог значений */
+		ch->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", ch->MIN_VAL, slot_num);
 	}
 	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-		// Флаг задаёт инвертирование значений
+		/* Флаг задаёт инвертирование значений */
 		ch->inverse = get_option_flag_val(slot_num, "inverse");;
 	}
    
     if (strstr(me_config.slot_options[slot_num], "filterK")!=NULL){
-		// Коэфициент фильтрации
+		/* Коэфициент фильтрации */
         ch->k = get_option_float_val(slot_num, "filterK");
 		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", ch->k, slot_num);
 	}
     
     if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-		// Фильтрация "дребезга" - определяет порог срабатывания 
-        ch->dead_band = get_option_int_val(slot_num, "deadBand");
+		/* Фильтрация "дребезга" - определяет порог срабатывания */
+        ch->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d", ch->dead_band, slot_num);
 	}
 
     if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
-		// Задаёт периодичночть отсчётов в миллисекундах
-        ch->periodic = get_option_int_val(slot_num, "periodic");
+		/* Задаёт периодичночть отсчётов в миллисекундах */
+        ch->periodic = get_option_int_val(slot_num, "periodic", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d", ch->periodic, slot_num);
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
+		/* Определяет топик для MQTT сообщений */
+		ch->custom_topic = get_option_string_val(slot_num,"topic");
+		ESP_LOGD(TAG, "Custom topic:%s", ch->custom_topic);
+		ch->flag_custom_topic=1;
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
+		/* Задаёт режим делителя */
+        char *dividerModeStr = get_option_string_val(slot_num, "dividerMode");
+		if(strcmp(dividerModeStr, "3V3")==0){
+			ch->divider = 0;
+		}else if(strcmp(dividerModeStr, "10V")==0){
+			ch->divider = 1;
+		}
 	}
 }
 
@@ -309,7 +334,7 @@ void adc1_task(void *arg)
 
 	char tmpString[255];
 
-	adc1_configure(ch, slot_num);
+	configure_adc1(ch, slot_num);
 
 	uint8_t divPin_1 = SLOTS_PIN_MAP[slot_num][2];
 	esp_rom_gpio_pad_select_gpio(divPin_1);
@@ -320,35 +345,30 @@ void adc1_task(void *arg)
 
 	gpio_set_level(divPin_1, 1);
 	gpio_set_level(divPin_2, 0);
+
 	ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
 
-    if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
-        char *dividerModeStr = get_option_string_val(slot_num, "dividerMode");
-		if(strcmp(dividerModeStr, "3V3")==0){
-			gpio_set_level(divPin_1, 0);
-			gpio_set_level(divPin_2, 0);
-			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
-		}else if(strcmp(dividerModeStr, "10V")==0){
+	switch (ch->divider)
+	{
+		case 1:
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 1);
 			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
-		}
+			break;
+		
+		default:
+			gpio_set_level(divPin_1, 0);
+			gpio_set_level(divPin_2, 0);
+			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
+			break;
 	}
 
-    uint8_t flag_custom_topic = 0;
-	char *custom_topic=NULL;
-	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
-		custom_topic = get_option_string_val(slot_num,"topic");
-		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
-		flag_custom_topic=1;
-	}
-
-    if(flag_custom_topic==0){
+    if(ch->flag_custom_topic==0){
 		char *str = calloc(strlen(me_config.deviceName)+strlen("/analog_")+4, sizeof(char));
 		sprintf(str, "%s/analog_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=str;
 	}else{
-		me_state.trigger_topic_list[slot_num]=custom_topic;
+		me_state.trigger_topic_list[slot_num]=ch->custom_topic;
 	}
 
 	uint8_t oversumple = 150;

@@ -197,7 +197,7 @@ int get_option_flag_val(int slot_num, char* string)
 	return 1;
 }
 
-int get_option_int_val(int slot_num, char* string){
+int get_option_int_val(int slot_num, char* string, const char*  unit_name, int default_value, int min_value, int max_value){
 	char *ind_of_vol = strstr(me_config.slot_options[slot_num], string);
 	char options_copy[strlen(ind_of_vol)];
 	strcpy(options_copy, ind_of_vol);

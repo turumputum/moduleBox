@@ -70,7 +70,7 @@ void tachometer_task(void *arg)
 
     uint16_t threshold  = 0;
 	if (strstr(me_config.slot_options[slot_num], "threshold")!=NULL){
-		threshold = get_option_int_val(slot_num, "threshold");
+		threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
 		if (threshold <= 0)
 		{
 			ESP_LOGD(TAG, "threshold wrong format, set default. Slot:%d", slot_num);

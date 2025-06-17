@@ -131,7 +131,7 @@ void ppm_generator_task(void *arg) {
 
     uint16_t inputMaxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "inputMaxVal") != NULL) {
-		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal");
+		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set inputMaxVal:%d for slot:%d",inputMaxVal, slot_num);
 	}
 
@@ -148,12 +148,12 @@ void ppm_generator_task(void *arg) {
 
 	uint16_t minPulseWidth = 1000;
 	if (strstr(me_config.slot_options[slot_num], "minPulseWidth") != NULL) {
-		minPulseWidth = get_option_int_val(slot_num, "minPulseWidth");
+		minPulseWidth = get_option_int_val(slot_num, "minPulseWidth", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set minPulseWidth:%d for slot:%d",minPulseWidth, slot_num);
 	}
     uint16_t maxPulseWidth = 2000;
 	if (strstr(me_config.slot_options[slot_num], "maxPulseWidth") != NULL) {
-		maxPulseWidth = get_option_int_val(slot_num, "maxPulseWidth");
+		maxPulseWidth = get_option_int_val(slot_num, "maxPulseWidth", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set maxPulseWidth:%d for slot:%d",minPulseWidth, slot_num);
 	}
 

@@ -80,13 +80,13 @@ void in_task(void *arg){
 	//---set delay---
 	uint16_t delay_ms = 0;
 	if (strstr(me_config.slot_options[slot_num], "inReportDelay") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "inReportDelay");
+		delay_ms = get_option_int_val(slot_num, "inReportDelay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, slot_num);
 	}
 
 	int debounce_gap = 10;
 	if (strstr(me_config.slot_options[slot_num], "inDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "inDebounceGap");
+		debounce_gap = get_option_int_val(slot_num, "inDebounceGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
     
@@ -202,7 +202,7 @@ void out_task(void *arg) {
 	//---set default state---
 	uint8_t def_state = out_inverse;
 	if (strstr(me_config.slot_options[slot_num], "outDefaultState") != NULL) {
-		def_state = get_option_int_val(slot_num, "outDefaultState");
+		def_state = get_option_int_val(slot_num, "outDefaultState", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",def_state, slot_num);
 	}
 	gpio_set_level(pin_num, out_inverse ? !def_state : def_state);
@@ -210,14 +210,14 @@ void out_task(void *arg) {
 	//---set delay---
 	uint16_t delay_ms = 0;
 	if (strstr(me_config.slot_options[slot_num], "outDelay") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "outDelay");
+		delay_ms = get_option_int_val(slot_num, "outDelay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d",delay_ms, slot_num);
 	}
 
 	//---set impulse---
 	uint16_t impulse_ms = 0;
 	if (strstr(me_config.slot_options[slot_num], "outImpulse") != NULL) {
-		impulse_ms = get_option_int_val(slot_num, "outImpulse");
+		impulse_ms = get_option_int_val(slot_num, "outImpulse", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set impulse_ms:%d for slot:%d",impulse_ms, slot_num);
 	}
 
@@ -327,7 +327,7 @@ void exec_out(int slot_num, int payload) {
 
 	int impulse_len =-1;
 	if (strstr(me_config.slot_options[slot_num], "impulse") != NULL) {
-		impulse_len = get_option_int_val(slot_num, "impulse");
+		impulse_len = get_option_int_val(slot_num, "impulse", "", 10, 1, 4096);
 		
 		esp_timer_handle_t oneshot_timer;
 		
@@ -382,14 +382,14 @@ void out_2ch_task(void *arg) {
     //---set delay---
     uint16_t delay_ms = 0;
     if (strstr(me_config.slot_options[slot_num], "outDelay") != NULL) {
-        delay_ms = get_option_int_val(slot_num, "outDelay");
+        delay_ms = get_option_int_val(slot_num, "outDelay", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d", delay_ms, slot_num);
     }
 
     //---set impulse---
     uint16_t impulse_ms = 0;
     if (strstr(me_config.slot_options[slot_num], "outImpulse") != NULL) {
-        impulse_ms = get_option_int_val(slot_num, "outImpulse");
+        impulse_ms = get_option_int_val(slot_num, "outImpulse", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set impulse_ms:%d for slot:%d", impulse_ms, slot_num);
     }
 
@@ -413,7 +413,7 @@ void out_2ch_task(void *arg) {
     vTaskDelay(pdTICKS_TO_MS(100));
 
     if (strstr(me_config.slot_options[slot_num], "defState_0") != NULL) {
-        state[0] = get_option_int_val(slot_num, "defState_0");
+        state[0] = get_option_int_val(slot_num, "defState_0", "", 10, 1, 4096);
         if (inverse_map[0] == 1) {
             state[0] = !state[0];
         }
@@ -421,7 +421,7 @@ void out_2ch_task(void *arg) {
     gpio_set_level(pin_map[0], (uint32_t)state[0]);
 
     if (strstr(me_config.slot_options[slot_num], "defState_1") != NULL) {
-        state[1] = get_option_int_val(slot_num, "defState_1");
+        state[1] = get_option_int_val(slot_num, "defState_1", "", 10, 1, 4096);
         if (inverse_map[1] == 1) {
             state[1] = !state[1];
         }
@@ -549,14 +549,14 @@ void out_3ch_task(void *arg) {
 	//---set delay---
 	uint16_t delay_ms = 0;
 	if (strstr(me_config.slot_options[slot_num], "outDelay") != NULL) {
-		delay_ms = get_option_int_val(slot_num, "outDelay");
+		delay_ms = get_option_int_val(slot_num, "outDelay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set delay_ms:%d for slot:%d",delay_ms, slot_num);
 	}
 
 	//---set impulse---
 	uint16_t impulse_ms = 0;
 	if (strstr(me_config.slot_options[slot_num], "outImpulse") != NULL) {
-		impulse_ms = get_option_int_val(slot_num, "outImpulse");
+		impulse_ms = get_option_int_val(slot_num, "outImpulse", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set impulse_ms:%d for slot:%d",impulse_ms, slot_num);
 	}
 
@@ -580,17 +580,17 @@ void out_3ch_task(void *arg) {
 	uint8_t state[3]={inverse_map[0],inverse_map[1],inverse_map[2]};
 	vTaskDelay(pdTICKS_TO_MS(100));
 	if (strstr(me_config.slot_options[slot_num], "defState_0") != NULL) {
-		state[0] = get_option_int_val(slot_num, "defState_0");
+		state[0] = get_option_int_val(slot_num, "defState_0", "", 10, 1, 4096);
 		if(inverse_map[0]==1)state[0] = !state[0];
 	}
 	gpio_set_level(pin_map[0], (uint32_t )state[0]);
 	if (strstr(me_config.slot_options[slot_num], "defState_1") != NULL) {
-		state[1] = get_option_int_val(slot_num, "defState_1");
+		state[1] = get_option_int_val(slot_num, "defState_1", "", 10, 1, 4096);
 		if(inverse_map[1]==1)state[1] = !state[1];
 	}
 	gpio_set_level(pin_map[1], (uint32_t )state[1]);
 	if (strstr(me_config.slot_options[slot_num], "defState_2") != NULL) {
-		state[2] = get_option_int_val(slot_num, "defState_2");
+		state[2] = get_option_int_val(slot_num, "defState_2", "", 10, 1, 4096);
 		if(inverse_map[2]==1)state[2] = !state[2];
 	}
 	gpio_set_level(pin_map[2], (uint32_t )state[2]);
@@ -786,13 +786,13 @@ void in_3ch_task(void *arg){
 	//---set delay---
 	uint16_t delay_ms = 0;
 	if (strstr(me_config.slot_options[inData.slot_num], "inReportDelay") != NULL) {
-		delay_ms = get_option_int_val(inData.slot_num, "inReportDelay");
+		delay_ms = get_option_int_val(inData.slot_num, "inReportDelay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set report_delay_ms:%d for slot:%d",delay_ms, inData.slot_num);
 	}
 
 	int debounce_gap = 30;
 	if (strstr(me_config.slot_options[inData.slot_num], "inDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(inData.slot_num, "inDebounceGap");
+		debounce_gap = get_option_int_val(inData.slot_num, "inDebounceGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, inData.slot_num);
 	}
 

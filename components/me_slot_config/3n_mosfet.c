@@ -54,7 +54,7 @@ void rgb_ledc_task(void *arg){
     
     int16_t increment = 255;
     if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-		increment = get_option_int_val(slot_num, "increment");
+		increment = get_option_int_val(slot_num, "increment", "", 10, 1, 4096);
         if(increment>255)increment=255;
         if(increment<1)increment=1;
 		ESP_LOGD(TAG, "Set increment:%d for slot:%d",increment, slot_num);
@@ -68,7 +68,7 @@ void rgb_ledc_task(void *arg){
 
     int16_t max_bright = 255;
     if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		max_bright = get_option_int_val(slot_num, "maxBright");
+		max_bright = get_option_int_val(slot_num, "maxBright", "", 10, 1, 4096);
         if(max_bright>255)max_bright=255;
         if(max_bright<0)max_bright=0;
 		ESP_LOGD(TAG, "Set max_bright:%d for slot:%d",max_bright, slot_num);
@@ -76,7 +76,7 @@ void rgb_ledc_task(void *arg){
 
     int16_t min_bright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		min_bright = get_option_int_val(slot_num, "minBright");
+		min_bright = get_option_int_val(slot_num, "minBright", "", 10, 1, 4096);
         if(min_bright>255)min_bright=255;
         if(min_bright<0)min_bright=0;
 		ESP_LOGD(TAG, "Set min_bright:%d for slot:%d",min_bright, slot_num);
@@ -84,7 +84,7 @@ void rgb_ledc_task(void *arg){
 
     uint16_t refreshPeriod = 40;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/get_option_int_val(slot_num, "refreshRate");
+		refreshPeriod = 1000/get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
     	
@@ -120,7 +120,7 @@ void rgb_ledc_task(void *arg){
 
     uint8_t state=0;
     if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
-		state = get_option_int_val(slot_num, "defaultState");
+		state = get_option_int_val(slot_num, "defaultState", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
 	}
 

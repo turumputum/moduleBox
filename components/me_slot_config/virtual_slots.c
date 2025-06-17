@@ -29,7 +29,7 @@ void startup_task(void *arg) {
 
     int delay = 50; // 
     if (strstr(me_config.slot_options[slot_num], "delay") != NULL) {
-		delay = get_option_int_val(slot_num, "delay");
+		delay = get_option_int_val(slot_num, "delay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set delay :%d for slot:%d",delay, slot_num);
 	}
 
@@ -78,19 +78,19 @@ void counter_task(void *arg) {
 
     int minVal = 0; // 
     if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-		minVal = get_option_int_val(slot_num, "minVal");
+		minVal = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set minVal :%d for slot:%d", minVal, slot_num);
 	}
 
     int maxVal = 32766; // 
     if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-		maxVal = get_option_int_val(slot_num, "maxVal");
+		maxVal = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set maxVal :%d for slot:%d", maxVal, slot_num);
 	}
 
     int threshold = -1; // 
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-		threshold = get_option_int_val(slot_num, "threshold");
+		threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set threshold :%d for slot:%d", threshold, slot_num);
 	}
 
@@ -187,7 +187,7 @@ void timer_task(void *arg) {
 
     uint16_t time = 0; // 
     if (strstr(me_config.slot_options[slot_num], "time") != NULL) {
-		time = get_option_int_val(slot_num, "time");
+		time = get_option_int_val(slot_num, "time", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set time :%d for slot:%d", time, slot_num);
 	}
 
@@ -287,13 +287,13 @@ void flywheel_task(void *arg){
 
     uint16_t period = 100;
     if (strstr(me_config.slot_options[slot_num], "period") != NULL) {
-		period = get_option_int_val(slot_num, "period");
+		period = get_option_int_val(slot_num, "period", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",period, slot_num);
 	}
 
     uint16_t threshold = 0;
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-        threshold = get_option_int_val(slot_num, "threshold");
+        threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
         if (threshold <= 0){
             ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
             threshold = 0; // default val
@@ -304,13 +304,13 @@ void flywheel_task(void *arg){
 
 	int32_t maxVal = 20;
 	if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-		maxVal = get_option_int_val(slot_num, "maxVal");
+		maxVal = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set max_counter:%ld for slot:%d", maxVal, slot_num);
 	}
 
     int32_t minVal = 0;
 	if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-		minVal = get_option_int_val(slot_num, "minVal");
+		minVal = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set min_counter:%ld for slot:%d", minVal, slot_num);
 	}
 
@@ -422,7 +422,7 @@ void watchdog_task(void *arg) {
 
     uint32_t time = 3600; // in sek
     if (strstr(me_config.slot_options[slot_num], "time") != NULL) {
-		time = get_option_int_val(slot_num, "time");
+		time = get_option_int_val(slot_num, "time", "", 10, 1, 4096);
 	}
     ESP_LOGD(TAG, "Set time :%ld for slot:%d", time, slot_num);
 
@@ -609,13 +609,13 @@ void collector_task(void *arg) {
 
     uint8_t stringMaxLenght = 7;
     if (strstr(me_config.slot_options[slot_num], "stringMaxLenght") != NULL) {
-		stringMaxLenght = get_option_int_val(slot_num, "stringMaxLenght");
+		stringMaxLenght = get_option_int_val(slot_num, "stringMaxLenght", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set stringMaxLenght:%d for slot:%d", stringMaxLenght, slot_num);
 	}
 
     uint16_t waitingTime = 3000;//ms
     if (strstr(me_config.slot_options[slot_num], "waitingTime") != NULL) {
-		waitingTime = get_option_int_val(slot_num, "waitingTime");
+		waitingTime = get_option_int_val(slot_num, "waitingTime", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", waitingTime, slot_num);
 	}
 
@@ -708,19 +708,19 @@ void scaler_task(void* arg) {
 
     int16_t zeroDeadZone = 0;
 	if (strstr(me_config.slot_options[slot_num], "zeroDeadZone") != NULL) {
-		zeroDeadZone = get_option_int_val(slot_num, "zeroDeadZone");
+		zeroDeadZone = get_option_int_val(slot_num, "zeroDeadZone", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set zeroDeadZone:%d for slot:%d",zeroDeadZone, slot_num);
 	}
     
 
     int32_t inputMinVal = 0;
 	if (strstr(me_config.slot_options[slot_num], "inputMinVal") != NULL) {
-		inputMinVal = get_option_int_val(slot_num, "inputMinVal");
+		inputMinVal = get_option_int_val(slot_num, "inputMinVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set inputMinVal:%ld for slot:%d",inputMinVal, slot_num);
 	}
     int32_t inputMaxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "inputMaxVal") != NULL) {
-		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal");
+		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set inputMaxVal:%ld for slot:%d",inputMaxVal, slot_num);
 	}
     // uint16_t inputMidlVal = (inputMaxVal-inputMinVal)/2+inputMinVal;
@@ -728,13 +728,13 @@ void scaler_task(void* arg) {
 
     int32_t outputMinVal = 0;
 	if (strstr(me_config.slot_options[slot_num], "outputMinVal") != NULL) {
-		outputMinVal = get_option_int_val(slot_num, "outputMinVal");
+		outputMinVal = get_option_int_val(slot_num, "outputMinVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set outputMinVal:%ld for slot:%d",outputMinVal, slot_num);
 	}
 
     int32_t outputMaxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "outputMaxVal") != NULL) {
-		outputMaxVal = get_option_int_val(slot_num, "outputMaxVal");
+		outputMaxVal = get_option_int_val(slot_num, "outputMaxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set outputMaxVal:%ld for slot:%d",outputMaxVal, slot_num);
 	}
 
@@ -807,18 +807,18 @@ void tankControl_task(void* arg) {
 
     uint16_t deadBand = 10;
 	if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
-		deadBand = get_option_int_val(slot_num, "deadBand");
+		deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set deadBand:%d for slot:%d",deadBand, slot_num);
 	}
 
     uint16_t inputMinVal = 0;
 	if (strstr(me_config.slot_options[slot_num], "inputMinVal") != NULL) {
-		inputMinVal = get_option_int_val(slot_num, "inputMinVal");
+		inputMinVal = get_option_int_val(slot_num, "inputMinVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set inputMinVal:%d for slot:%d",inputMinVal, slot_num);
 	}
     uint16_t inputMaxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "inputMaxVal") != NULL) {
-		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal");
+		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set inputMaxVal:%d for slot:%d",inputMaxVal, slot_num);
 	}
     uint16_t inputMidlVal = (inputMaxVal-inputMinVal)/2+inputMinVal;
@@ -826,7 +826,7 @@ void tankControl_task(void* arg) {
 
     uint16_t outputMaxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "outputMaxVal") != NULL) {
-		outputMaxVal = get_option_int_val(slot_num, "outputMaxVal");
+		outputMaxVal = get_option_int_val(slot_num, "outputMaxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set outputMaxVal:%d for slot:%d",outputMaxVal, slot_num);
 	}
 

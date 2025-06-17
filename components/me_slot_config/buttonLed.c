@@ -76,7 +76,7 @@ void button_task(void *arg)
 
 	int debounce_gap = 20;
 	if (strstr(me_config.slot_options[slot_num], "buttonDebounceGap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap");
+		debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
 
@@ -245,7 +245,7 @@ void led_task(void *arg){
 
     int16_t fade_increment = 255;
     if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-		fade_increment = get_option_int_val(slot_num, "increment");
+		fade_increment = get_option_int_val(slot_num, "increment", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set fade_increment:%d for slot:%d",fade_increment, slot_num);
 	}
 
@@ -259,7 +259,7 @@ void led_task(void *arg){
 
     int16_t minBright = 0;
     if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = get_option_int_val(slot_num, "minBright");
+		minBright = get_option_int_val(slot_num, "minBright", "", 10, 1, 4096);
         if(minBright>255)minBright=255;
 		if(minBright<0)minBright=0;
 		ESP_LOGD(TAG, "Set minBright:%d for slot:%d",minBright, slot_num);
@@ -267,7 +267,7 @@ void led_task(void *arg){
 
     uint16_t refreshPeriod = 40;
     if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate"));
+		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 

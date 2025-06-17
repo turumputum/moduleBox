@@ -60,19 +60,19 @@ void tenzo_button_task(void *arg){
     //---options block---
     uint32_t detThres = 100*1024; // distance for mass to go
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-		detThres = get_option_int_val(slot_num, "threshold")*1024;
+		detThres = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096)*1024;
 		ESP_LOGD(TAG, "Set threshold :%ld for slot:%d",detThres/1024, slot_num);
 	}
     
     int integrMult = 50; // 1/moving_mass (20...100) inertia
     if (strstr(me_config.slot_options[slot_num], "inertia") != NULL) {
-		integrMult = get_option_int_val(slot_num, "inertia")*1024;
+		integrMult = get_option_int_val(slot_num, "inertia", "", 10, 1, 4096)*1024;
 		ESP_LOGD(TAG, "Set inertia :%d for slot:%d", integrMult, slot_num);
 	}
 
     int oversample = 8; //
     if (strstr(me_config.slot_options[slot_num], "oversample") != NULL) {
-		oversample = get_option_int_val(slot_num, "oversample");
+		oversample = get_option_int_val(slot_num, "oversample", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set oversample:%d for slot:%d",oversample, slot_num);
 	}
 

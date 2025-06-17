@@ -87,11 +87,11 @@ void analog_task(void *arg)
 		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
 	}
 	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
-		MAX_VAL = get_option_int_val(slot_num, "maxVal");
+		MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", MAX_VAL, slot_num);
 	}
     if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
-		MIN_VAL = get_option_int_val(slot_num, "minVal");
+		MIN_VAL = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", MIN_VAL, slot_num);
 	}
 
@@ -108,13 +108,13 @@ void analog_task(void *arg)
     
     uint16_t dead_band=10;
     if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-        dead_band = get_option_int_val(slot_num, "deadBand");
+        dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d",dead_band, slot_num);
 	}
 
 	uint16_t periodic=0;
     if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
-        periodic = get_option_int_val(slot_num, "periodic");
+        periodic = get_option_int_val(slot_num, "periodic", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d",periodic, slot_num);
 	}
 

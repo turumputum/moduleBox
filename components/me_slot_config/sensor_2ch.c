@@ -77,7 +77,7 @@ void sensors_task(void *arg){
 
 	int debounce_gap = 0;
 	if (strstr(me_config.slot_options[slot_num], "sens_debounce_gap") != NULL) {
-		debounce_gap = get_option_int_val(slot_num, "sens_debounce_gap");
+		debounce_gap = get_option_int_val(slot_num, "sens_debounce_gap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",debounce_gap, slot_num);
 	}
 

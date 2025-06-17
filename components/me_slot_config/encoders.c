@@ -118,7 +118,7 @@ void encoderPPM_task(void *arg)
 
 	uint8_t zero_shift = 0;
 	if (strstr(me_config.slot_options[slot_num], "zeroShift") != NULL){
-		zero_shift = get_option_int_val(slot_num, "zeroShift");
+		zero_shift = get_option_int_val(slot_num, "zeroShift", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
 	}
 
@@ -141,7 +141,7 @@ void encoderPPM_task(void *arg)
 	int pole = MAX_VAL - MIN_VAL;
 	int num_of_pos;
 	if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL)	{
-		num_of_pos = get_option_int_val(slot_num, "numOfPos");
+		num_of_pos = get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096);
 		if (num_of_pos <= 0){
 			ESP_LOGD(TAG, "pwmEncoder num_of_pos wrong format, set default slot:%d", slot_num);
 			num_of_pos = 24; // default val
@@ -447,30 +447,30 @@ void encoder_inc_task(void *arg){
 
     uint16_t refreshPeriod = 10;
     if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
-		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod"));
+		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
 	int16_t divider = 1;
     if (strstr(me_config.slot_options[slot_num], "divider") != NULL) {
-		divider = (get_option_int_val(slot_num, "divider"));
+		divider = (get_option_int_val(slot_num, "divider", "", 10, 1, 4096));
 		if(divider<=0) divider=1;
 		ESP_LOGD(TAG, "Set divider:%d for slot:%d",divider, slot_num);
 	}
 	int16_t offset = 0;
     if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
-		offset = (get_option_int_val(slot_num, "offset"));
+		offset = (get_option_int_val(slot_num, "offset", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
 	int32_t minVal = INT32_MIN;
     if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-		minVal = (get_option_int_val(slot_num, "minVal"));
+		minVal = (get_option_int_val(slot_num, "minVal", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set minVal:%ld for slot:%d",minVal, slot_num);
 	}
 	int32_t maxVal = INT32_MAX;
     if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-		maxVal = (get_option_int_val(slot_num, "maxVal"));
+		maxVal = (get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set maxVal:%ld for slot:%d",maxVal, slot_num);
 	}
 

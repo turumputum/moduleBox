@@ -48,7 +48,7 @@ void servoRod_task(void *arg) {
 
     uint16_t refreshPeriod = 20;
     if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
-		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod"));
+		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
@@ -74,22 +74,22 @@ void servoRod_task(void *arg) {
 
     int16_t maxVal = INT16_MAX;
 	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
-		maxVal = get_option_int_val(slot_num, "maxVal");
+		maxVal = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
 	}
 
     int16_t minVal = INT16_MIN;
     if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
-        minVal = get_option_int_val(slot_num, "minVal");
+        minVal = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
     }
 
     int16_t targetVal = 0;
     if (strstr(me_config.slot_options[slot_num], "targetVal")!=NULL){
-        targetVal = get_option_int_val(slot_num, "targetVal");
+        targetVal = get_option_int_val(slot_num, "targetVal", "", 10, 1, 4096);
     }
 
     int16_t deadBand = 2;
     if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-        deadBand = get_option_int_val(slot_num, "deadBand");
+        deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
     }
 
     uint8_t posReport=0;
