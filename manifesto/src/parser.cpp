@@ -16,6 +16,8 @@
 
 const char * CONFIGURE_BEGIN = "void configure_";
 
+//int stage = 1;
+
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
@@ -122,9 +124,9 @@ char * Parser::findNextFunction(Function &     func,
     return result;
 }
 
-void Parser::resetFunctions()
+void Parser::resetFunctions(bool first)
 {
-    for (int i = 0; i < numOfFuncs; i++)
+    for (int i = 0; i < int(sizeof(funcs) / sizeof(Function)); i++)
     {
         funcs[i].type = PARAMTYPE_unknown;
         funcs[i].line = 0;
@@ -132,11 +134,18 @@ void Parser::resetFunctions()
         *funcs[i].name = 0;
         *funcs[i].unit = 0;
 
-        if (!funcs[i].paramsRaw)
-            free(funcs[i].paramsRaw);
+        if (!first)
+        {
+            if (!funcs[i].paramsRaw)
+                free(funcs[i].paramsRaw);
 
-        if (!funcs[i].descRaw)
-            free(funcs[i].descRaw);
+            if (!funcs[i].descRaw)
+                free(funcs[i].descRaw);
+        }
+
+        funcs[i].paramsRaw = 0;
+        funcs[i].descRaw = 0;
+
 
         funcs[i].defaultVal = 0;
         funcs[i].maxVal = 0;
@@ -145,6 +154,8 @@ void Parser::resetFunctions()
         funcs[i].defaultValF = 0;
         funcs[i].maxValF = 0;
         funcs[i].minValF = 0;
+
+        funcs[i].enumsCount = 0;
     }
     
     numOfFuncs = 0;
@@ -155,10 +166,13 @@ bool Parser::getOptions()
 
     char * on;
 
-    resetFunctions();
+    resetFunctions(false);
 
     while (result && ((on = findNextFunction(funcs[numOfFuncs], "get_option_", "_val")) != nil))
     {
+        // printf("parser.cpp:162 - stage %d\n", stage);
+        // stage++;
+
         char * name = funcs[numOfFuncs].funcName;
 
         if (!strcmp(name, "get_option_int_val"))
@@ -176,6 +190,10 @@ bool Parser::getOptions()
         else if (!strcmp(name, "get_option_flag_val"))
         {
             funcs[numOfFuncs].type = PARAMTYPE_flag;
+        }
+        else if (!strcmp(name, "get_option_enum_val"))
+        {
+            funcs[numOfFuncs].type = PARAMTYPE_enum;
         }
 
         if (!parseFunctionParams(funcs[numOfFuncs], on))
@@ -282,17 +300,17 @@ bool Parser::extractIntParam(Function &     func,
         
         case 3:
             func.defaultVal = strtol(value, &end_ptr, 10);
-            result = errno == 0;
+            //result = errno != EINVAL;
             break;
         
         case 4:
             func.minVal = strtol(value, &end_ptr, 10);
-            result = errno == 0;
+            //result = errno != EINVAL;
             break;
 
         case 5:
             func.maxVal = strtol(value, &end_ptr, 10);
-            result = errno == 0;
+            //result = errno != EINVAL;
             break;
 
         default:
@@ -320,17 +338,17 @@ bool Parser::extractFloatParam(Function &     func,
         
         case 2:
             func.defaultValF = atof(value);
-            result = errno == 0;
+            //result = errno == ERANGE;
             break;
         
         case 3:
             func.minValF = atof(value);
-            result = errno == 0;
+            //result = errno != ERANGE;
             break;
 
         case 4:
             func.maxValF = atof(value);
-            result = errno == 0;
+            //result = errno != ERANGE;
             break;
 
         default:
@@ -386,6 +404,38 @@ bool Parser::extractStringParam(Function &     func,
 
     return result;
 }
+bool Parser::extractEnumParam(Function &     func,
+                                int            idx,
+                                char *         value)
+{
+    bool result = true;
+
+    switch (idx)
+    {
+        case 0:
+            // skip
+            break;
+
+        case 1:
+            strcpy(func.name, value);
+            break;
+        
+        default:
+            if (func.enumsCount < DEF_MAX_ENUMS)
+            {
+                func.enums[func.enumsCount] = (char*)malloc (strlen(value) + 1);
+                strcpy(func.enums[func.enumsCount], value);
+                func.enumsCount++;
+            }
+            else
+                result = false;
+            break;
+    }
+
+    //printf("extractEnumParam = %d\n", result);
+
+    return result;
+}
 bool Parser::extractParams(Function &     func)
 {
     bool        result  = true;
@@ -420,6 +470,11 @@ bool Parser::extractParams(Function &     func)
                 result = extractFloatParam(func, idx, tmp);
                 break;
 
+            case PARAMTYPE_enum:
+                result = extractEnumParam(func, idx, tmp);
+                break;
+
+
             default:
                 break;
         }
@@ -440,6 +495,8 @@ bool Parser::parseFunctionParams(Function &     func,
 
     if ((params = strchr(function, '(')) != nil)
     {
+//        printf("parseFunctionParams stage %d\n", stage);
+
         params++;
         if ((end = strchr(params, ')')) != nil)
         {
@@ -455,7 +512,11 @@ bool Parser::parseFunctionParams(Function &     func,
                     {
                         result = true;
                     }
+                    else
+                        printf("error: cannot extract desc for func %s(%d)\n", func.name, func.line);
                 }
+                else
+                    printf("error: cannot extract params for func %s(%d)\n", func.name, func.line);
             }
             else
                 printf("error: cannot get params body for func %s(%d)\n", func.name, func.line);
@@ -478,6 +539,8 @@ const char * Parser::parse(char * source)
     modSearchEnd    = source;
 
     manifesto.append("[");
+
+    resetFunctions(true);
 
     do
     {
@@ -591,6 +654,35 @@ bool Parser::generateManifestoForModule()
                         f->name,
                         f->descRaw);
                    
+                break;
+        
+            case PARAMTYPE_enum:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"enum\",\n"
+                        "\t\t\t\t\"values\": [ ",
+                        f->name,
+                        f->descRaw);
+
+                manifesto.append(tmp);
+
+                if (f->enumsCount > 1)
+                {
+                    for (int i = 0; i < f->enumsCount - 1; i++)
+                    {
+                        if (i)
+                            snprintf(tmp, sizeof(tmp), ", \"%s\"", f->enums[i]);
+                        else
+                            snprintf(tmp, sizeof(tmp), "\"%s\"", f->enums[i]);
+
+                        manifesto.append(tmp);
+                    }
+                }                
+
+                snprintf(tmp, sizeof(tmp), "%s", " ]\n\t\t\t},\n");
+                  
                 break;
         
             default:

@@ -19,7 +19,6 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
-
 #include "esp_peripherals.h"
 #include "periph_sdcard.h"
 #include "periph_touch.h"
@@ -82,6 +81,7 @@
 #include "smartLed.h"
 #include "someUnique.h"
 
+#include <manifest.h>
 
 
 
@@ -441,7 +441,6 @@ extern int network_get_active_interfaces();
 	return result;
 }
 
-
 void app_main(void)
 {
 
@@ -487,6 +486,8 @@ void app_main(void)
 	}
 	load_Default_Config();
 	scanFileSystem();
+
+	saveManifesto();
 
 	initWorkPermissions();
 

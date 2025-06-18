@@ -42,6 +42,7 @@
 #include "VESC.h"
 #include "PPM.h"
 #include "CRSF.h"
+#include <stdarg.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -232,7 +233,7 @@ float get_option_float_val(int slot_num, char* string){
 		return -1;
 	}
 }
-char* get_option_string_val(int slot_num, char* option){
+char* get_option_string_val(int slot_num, char* option, ...){
 	char* resault;
 	char *options_copy = strdup(me_config.slot_options[slot_num]);
 	char *ind_of_vol = strstr(options_copy, option);
@@ -247,10 +248,82 @@ char* get_option_string_val(int slot_num, char* option){
 			ind_of_vol=ind_of_eqal;
 		}
 	}
-	resault = malloc(strlen(ind_of_vol)*sizeof(char));
 	resault = ind_of_vol+1;
 	return resault;
 	// }
+}
+static char * _cleanValue(char *         value)
+{
+	char * 			result;
+    unsigned char * on 		= (unsigned char *)value;
+
+    while (*on && ((*on <= ' ') || (*on == '\"')))
+    {
+        on++;
+    }
+
+	result 	= (char*)on;
+    int len = strlen(result);
+
+    if (len)
+    {
+        result[len] = 0;
+        
+        on = (unsigned char*)&result[len - 1];
+        
+        // Clean end
+        while ((on > (unsigned char*)result) && ((*on <= ' ') || (*on == '\"')))
+        {
+            on--;
+        }
+        
+        *(on + 1) = 0;
+    }
+
+	return result;
+}
+int get_option_enum_val(int slot_num, char* option, ...)
+{
+	int 			result			= -1;
+    va_list         list;
+	char *			options_copy;
+	char *			end;
+	char * 			arg;
+	
+    va_start(list, option);
+
+	if ((options_copy = strdup(me_config.slot_options[slot_num])) != NULL)
+	{
+		char *			key 			= strstr(options_copy, option);
+		char *			separator		= strchr(key, ':');
+
+		if (separator != NULL)
+		{
+			char * value = separator + 1;  
+			if ((end = strchr(value, ',')) != NULL)
+			{
+				*end = 0;
+			}
+			value = _cleanValue(value);
+
+			if (strlen(value) > 0)
+			{
+				for (int idx = 0; ((result < 0) && ((arg = va_arg(list, char *)) != NULL)); idx++)
+				{
+					if (!strcmp(arg, value))
+					{
+						result = idx;
+					}
+				}
+			}
+		}
+
+		free(options_copy);
+	}
+
+	va_end(list);
+
+	return result;
 }
 
 

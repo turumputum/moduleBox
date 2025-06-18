@@ -18,8 +18,8 @@
 
 #define nil         (0)
 
-#define MAX_PARAMS          200       
-
+#define MAX_PARAMS              200       
+#define DEF_MAX_ENUMS           32
 
 typedef enum
 {
@@ -27,7 +27,8 @@ typedef enum
     PARAMTYPE_int,
     PARAMTYPE_flag,
     PARAMTYPE_string,
-    PARAMTYPE_float
+    PARAMTYPE_float,
+    PARAMTYPE_enum
 } PARAMTYPE;
 
 
@@ -65,7 +66,11 @@ public:
         float           defaultValF;
         float           maxValF;
         float           minValF;
-}; 
+
+        int             enumsCount;
+
+        char *          enums                   [ DEF_MAX_ENUMS ];
+};  
 
 
 class Parser
@@ -126,6 +131,10 @@ private:
                                                  int            idx,
                                                  char *         value);
 
+        bool            extractEnumParam        (Function &     func,
+                                                 int            idx,
+                                                 char *         value);
+
         bool            extractParams           (Function &     func);
 
         bool            extractDesc             (Function &     func,
@@ -138,7 +147,7 @@ private:
 
         void            cleanValue              (char *         value);
 
-        void            resetFunctions          ();
+        void            resetFunctions          (bool           first);
 
         int             findNextModule          ();
 

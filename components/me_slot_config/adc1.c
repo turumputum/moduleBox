@@ -28,6 +28,8 @@
 
 #include "esp_adc/adc_continuous.h"
 
+#include <generated_files/adc1.h>
+
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
@@ -315,13 +317,12 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 
     if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
 		/* Задаёт режим делителя */
-        char *dividerModeStr = get_option_string_val(slot_num, "dividerMode");
-		if(strcmp(dividerModeStr, "3V3")==0){
-			ch->divider = 0;
-		}else if(strcmp(dividerModeStr, "10V")==0){
-			ch->divider = 1;
+        if ((ch->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0)
+		{
+			ESP_LOGE(TAG, "dividerMode: unricognized value");
 		}
 	}
+
 }
 
 void adc1_task(void *arg)
@@ -343,23 +344,25 @@ void adc1_task(void *arg)
 	esp_rom_gpio_pad_select_gpio(divPin_2);
 	gpio_set_direction(divPin_2, GPIO_MODE_OUTPUT);
 
-	gpio_set_level(divPin_1, 1);
-	gpio_set_level(divPin_2, 0);
-
-	ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
 
 	switch (ch->divider)
 	{
 		case 1:
+			gpio_set_level(divPin_1, 0);
+			gpio_set_level(divPin_2, 0);
+			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
+			break;
+
+		case 2:
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 1);
 			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
 			break;
 		
 		default:
-			gpio_set_level(divPin_1, 0);
+			gpio_set_level(divPin_1, 1);
 			gpio_set_level(divPin_2, 0);
-			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
+			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
 			break;
 	}
 
@@ -499,3 +502,9 @@ void start_adc1_task(int slot_num)
 
 	ESP_LOGD(TAG, "adc1_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+const char * get_manifest_adc1()
+{
+	return manifesto;
+}
+
+
