@@ -19,15 +19,13 @@
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
-#define MOUNT_POINT         "/sdcard"
+#define MAX_FILES_TO_DELETE 10  // if more - than next time
 
-#define MANIFESTO_FNAME_BASE "manifest-" 
+#define MOUNT_POINT             "/sdcard"
+#define MANIFESTO_FNAME_BASE    "manifest-" 
+#define MANIFESTO_FNAME         MANIFESTO_FNAME_BASE VERSION ".json"
+#define MANIFESTO_FULL_FNAME    MOUNT_POINT "/" MANIFESTO_FNAME
 
-#define MANIFESTO_FNAME     MANIFESTO_FNAME_BASE VERSION ".json"
-
-#define MANIFESTO_FULL_FNAME  MOUNT_POINT "/" MANIFESTO_FNAME
-
-#define MAX_FILES_TO_DELETE 10
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
@@ -81,7 +79,7 @@ bool checkExistent()
         {
             for (int i = 0; i < filesToDelete; i++)
             {
-                ESP_LOGE(TAG, "manifest: deleting %s", toDelete[i]);
+                ESP_LOGI(TAG, "deleting old manifest: %s", toDelete[i]);
 
                 sprintf(tmp, "%s/%s", MOUNT_POINT, toDelete[i]);
                 remove(tmp);
@@ -100,8 +98,6 @@ int saveManifesto()
 
     if (!checkExistent())
     {
-	    ESP_LOGE(TAG, "saving manifesto");
-
         if ((manFile = fopen(MANIFESTO_FULL_FNAME, "w")) != NULL)
         {
             if ((tmp = get_manifest_adc1()) != NULL)
@@ -109,7 +105,7 @@ int saveManifesto()
                 fprintf(manFile, "%s", tmp);
             }
 
-            ESP_LOGE(TAG, "manifest saved");
+            ESP_LOGI(TAG, "manifest saved");
 
             result = ESP_OK;
             
@@ -117,12 +113,12 @@ int saveManifesto()
         }
         else
         {
-            ESP_LOGE(TAG, "saveManifesto: fopen() failed");
+            ESP_LOGE(TAG, "manifest save error: fopen() failed");
         }
     }
     else
     {
-        ESP_LOGE(TAG, "manifesto exist, saving skiped");
+        ESP_LOGI(TAG, "manifest exists, save skiped");
         result = ESP_OK;
     }
 

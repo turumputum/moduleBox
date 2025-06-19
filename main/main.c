@@ -390,7 +390,7 @@ bool startNetworkServices()
 
 		if (result)
 		{
-#define NETWORK_INIT_TIMEOUT		10
+#define NETWORK_INIT_TIMEOUT		100
 
 			int timeout		= NETWORK_INIT_TIMEOUT;
 			bool ready 		= false;

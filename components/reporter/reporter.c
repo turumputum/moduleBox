@@ -240,13 +240,21 @@ void crosslinker(char* str){
 void send_report(char *tmpStr){
 	usbprint(tmpStr);
 
+	//ESP_LOGE(TAG,"send_report stage 1\n");
+
 	if(me_state.MQTT_init_res==ESP_OK){
+
 		char tmpString[strlen(tmpStr)];
 		strcpy(tmpString, tmpStr);
 		char *payload;
 		char *topic = strtok_r(tmpString, ":", &payload);
+
+		//ESP_LOGE(TAG,"send_report stage 2: %s %s\n", topic, payload);
+
 		mqtt_pub(topic, payload);
 	}
+	// else
+	// 	ESP_LOGE(TAG,"send_report stage 3\n");
 
 	if(me_state.OSC_init_res==ESP_OK){
 		char msg_copy[strlen(tmpStr)+1];
