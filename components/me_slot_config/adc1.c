@@ -122,6 +122,8 @@ static bool 				started 			= false;
 static 
 adc_continuous_config_t 	adc1_dig_cfg = 
 	{
+		.pattern_num		= 0,
+		.adc_pattern		= 0,
 		.sample_freq_hz 	= 20 * 1000,
 		.conv_mode 			= ADC_CONV_SINGLE_UNIT_1,
 		.format 			= ADC_DIGI_OUTPUT_FORMAT_TYPE2,
@@ -176,12 +178,10 @@ static bool adc1_init()
 	{
 		ESP_ERROR_CHECK(adc_continuous_new_handle(&adc1_config, &adc1_handle));
 
-		if (adc1_handle != NULL)
+		if (adc1_handle == NULL)
 		{
-			startSemaphore = xSemaphoreCreateMutex();
-		}
-		else
 			result = false;
+		}
 	}
 
 	return result;
@@ -205,6 +205,8 @@ static bool adc1_start_and_there_can_be_only_one()
 						result = started = true;
 					}
 				}
+				else
+					ESP_LOGE(TAG, "ADC configuration failed!");
 			}
 
 			xSemaphoreGive(startSemaphore);
@@ -217,37 +219,42 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 {
 	bool result  	= false;
 
-	if ((CHANNEL_ADC1_MAP[ch->slot_num] != -1) && (!ch->used))
+	if( xSemaphoreTake(startSemaphore, portMAX_DELAY) == pdTRUE)
 	{
-		ch->s_task_handle = xTaskGetCurrentTaskHandle();
-		ch->cb.on_conv_done = s_conv_done_cb;
-		ch->pattern_num	= adc1_dig_cfg.pattern_num;
-
-		adc_digi_pattern_config_t * p = &adc1_pattern[ch->pattern_num];
-
-		p->atten 		= ADC_ATTEN_DB_12;
-		p->channel 		= CHANNEL_ADC1_MAP[ch->slot_num];
-		p->unit 		= ADC_UNIT_1;
-		p->bit_width 	= SOC_ADC_DIGI_MAX_BITWIDTH;
-
-		// Добавляем CB только для первого потока, он и будет рабочим.
-		if (!adc1_dig_cfg.pattern_num)
+		if ((CHANNEL_ADC1_MAP[ch->slot_num] != -1) && (!ch->used))
 		{
-			ESP_LOGD(TAG, "ADC CB was set on slot %d", ch->slot_num);
+			ch->s_task_handle = xTaskGetCurrentTaskHandle();
+			ch->cb.on_conv_done = s_conv_done_cb;
+			ch->pattern_num	= adc1_dig_cfg.pattern_num;
 
-			if (adc_continuous_register_event_callbacks(adc1_handle, &ch->cb, ch) == ESP_OK)
+			adc_digi_pattern_config_t * p = &adc1_pattern[ch->pattern_num];
+
+			p->atten 		= ADC_ATTEN_DB_12;
+			p->channel 		= CHANNEL_ADC1_MAP[ch->slot_num];
+			p->unit 		= ADC_UNIT_1;
+			p->bit_width 	= SOC_ADC_DIGI_MAX_BITWIDTH;
+
+			// Добавляем CB только для первого потока, он и будет рабочим.
+			if (!adc1_dig_cfg.pattern_num)
 			{
-				result = true;			
+				ESP_LOGD(TAG, "ADC CB was set on slot %d", ch->slot_num);
+
+				if (adc_continuous_register_event_callbacks(adc1_handle, &ch->cb, ch) == ESP_OK)
+				{
+					result = true;			
+				}
+			}
+			else	
+				result = true;
+
+			if (result)
+			{
+				adc1_dig_cfg.pattern_num++;
+				ch->used = true;
 			}
 		}
-		else	
-			result = true;
 
-		if (result)
-		{
-			adc1_dig_cfg.pattern_num++;
-			ch->used = true;
-		}
+		xSemaphoreGive(startSemaphore);
 	}
 
 	return result;
@@ -258,71 +265,52 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 {
 	ch->slot_num 			= slot_num;
-    ch->MIN_VAL 			= 0;
-    ch->MAX_VAL 			= 4095;
-    ch->flag_float_output	= 0;
-	ch->inverse  			= 0;
-	ch->k					= 1;
-	ch->dead_band			= 10;
-	ch->periodic			= 0;
 	ch->prev_result			= 0xFFFF;
 
-    if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
-        /* Флаг определяет формат воводящего значения, 
-          если указан - будет выводиться значение с плавающей точкой,
-          иначе - целочисленное
-        */
-		ch->flag_float_output = get_option_flag_val(slot_num, "floatOutput");
-		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
-	}
-	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
-		/* Определяет верхний порог значений */
-		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", ch->MAX_VAL, slot_num);
-	}
-    if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
-		/* Определяет нижний порог значений */
-		ch->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", ch->MIN_VAL, slot_num);
-	}
-	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-		/* Флаг задаёт инвертирование значений */
-		ch->inverse = get_option_flag_val(slot_num, "inverse");;
-	}
-   
-    if (strstr(me_config.slot_options[slot_num], "filterK")!=NULL){
-		/* Коэфициент фильтрации */
-        ch->k = get_option_float_val(slot_num, "filterK");
-		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", ch->k, slot_num);
-	}
-    
-    if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-		/* Фильтрация "дребезга" - определяет порог срабатывания */
-        ch->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d", ch->dead_band, slot_num);
-	}
+	/* Флаг определяет формат воводящего значения, 
+		если указан - будет выводиться значение с плавающей точкой,
+		иначе - целочисленное
+	*/
+	ch->flag_float_output = get_option_flag_val(slot_num, "floatOutput");
+	ESP_LOGD(TAG, "S%d: Set float output = %d", slot_num, ch->flag_float_output);
 
-    if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
-		/* Задаёт периодичночть отсчётов в миллисекундах */
-        ch->periodic = get_option_int_val(slot_num, "periodic", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d", ch->periodic, slot_num);
-	}
+	/* Определяет верхний порог значений */
+	ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 4095, 0, 4095);
+	ESP_LOGD(TAG, "S%d: Set max_val:%d", slot_num, ch->MAX_VAL);
+
+	/* Определяет нижний порог значений */
+	ch->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 0, 0, 4095);
+	ESP_LOGD(TAG, "S%d: Set min_val:%d", slot_num, ch->MIN_VAL);
+
+	/* Флаг задаёт инвертирование значений */
+	ch->inverse = get_option_flag_val(slot_num, "inverse");
+   
+	/* Коэфициент фильтрации */
+	ch->k = get_option_float_val(slot_num, "filterK", 1);
+	ESP_LOGD(TAG, "S%d: Set k filter:%f", slot_num, ch->k);
+    
+	/* Фильтрация дребезга - определяет порог срабатывания */
+	ch->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4095);
+	ESP_LOGD(TAG, "S%d: Set dead_band:%d", slot_num, ch->dead_band);
+
+	/* Задаёт периодичночть отсчётов в миллисекундах */
+	ch->periodic = get_option_int_val(slot_num, "periodic", "", 0, 0, 4095);
+	ESP_LOGD(TAG, "S%d: Set periodic:%d", slot_num, ch->periodic);
 
 	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
 		/* Определяет топик для MQTT сообщений */
 		ch->custom_topic = get_option_string_val(slot_num,"topic");
-		ESP_LOGD(TAG, "Custom topic:%s", ch->custom_topic);
+		ESP_LOGD(TAG, "S%d: Custom topic:%s", slot_num, ch->custom_topic);
 		ch->flag_custom_topic=1;
 	}
 
-    if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
-		/* Задаёт режим делителя */
-        if ((ch->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0)
-		{
-			ESP_LOGE(TAG, "dividerMode: unricognized value");
-		}
-	}
+	/* Задаёт режим делителя */
+	if ((ch->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0)
+	{
+		ESP_LOGE(TAG, "S%d: dividerMode: unricognized value", slot_num);
 
+		ch->divider = 0;
+	}
 }
 
 void adc1_task(void *arg)
@@ -350,19 +338,19 @@ void adc1_task(void *arg)
 		case 1:
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 0);
-			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
+			ESP_LOGD(TAG, "S%d: Selected divider mode: 3V3", slot_num);
 			break;
 
 		case 2:
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 1);
-			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
+			ESP_LOGD(TAG, "S%d: Selected divider mode: 10V", slot_num);
 			break;
 		
 		default:
 			gpio_set_level(divPin_1, 1);
 			gpio_set_level(divPin_2, 0);
-			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
+			ESP_LOGD(TAG, "S%d: Selected divider mode: 5V", slot_num);
 			break;
 	}
 
@@ -498,6 +486,9 @@ void start_adc1_task(int slot_num)
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
 
+	if (!startSemaphore)
+		startSemaphore = xSemaphoreCreateMutex();
+
 	xTaskCreatePinnedToCore(adc1_task, "adc1_task", 1024 * 4, &t_slot_num, 12, NULL,1);
 
 	ESP_LOGD(TAG, "adc1_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
@@ -505,6 +496,35 @@ void start_adc1_task(int slot_num)
 const char * get_manifest_adc1()
 {
 	return manifesto;
+}
+
+typedef enum
+{
+	RPT_blob		= 0,
+	RPT_string,
+	RPT_int,
+	RPT_float
+} RPT;
+
+void test()
+{
+	// ADC1_CHANNEL		c = {0};
+
+	// int 				slot_num = 1;
+
+	// // Эта строка будет в конфигурации, 
+	// // из неё мы выбираем всю инфу для манифеста
+
+	// /* Текущее значение входа с плавающей точкой
+	// */
+	// с.floatReport = regirster_stdreport(slot_num, RPT_float, "unit", "topicPoUmolchaniu");
+
+
+	// float value = 1.0;
+
+	// // А это собственно сам отчёт. 
+	// // что делать со сзначением по ссылке уже указано при регистрации
+	// stdreport(с.floatReport, &value);
 }
 
 

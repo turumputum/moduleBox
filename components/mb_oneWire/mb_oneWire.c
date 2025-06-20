@@ -73,7 +73,7 @@ void ds18b20_task(void* arg) {
 
     float deadBand = 0.01;
     if(strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
-        deadBand = abs(get_option_float_val(slot_num, "deadBand"));
+        deadBand = abs(get_option_float_val(slot_num, "deadBand", 0.01));
         ESP_LOGD(TAG, "Sensor set dead_band:%f for slot:%d", deadBand, slot_num);
     }
 

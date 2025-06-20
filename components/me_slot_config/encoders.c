@@ -21,6 +21,45 @@
 #include "executor.h"
 #include "esp_rom_sys.h"
 
+#include <generated_files/encoders.h>
+
+// ---------------------------------------------------------------------------
+// ------------------------------- DEFINITIONS -------------------------------
+// -----|-------------------|-------------------------------------------------
+
+#define INCREMENTAL 0
+#define ABSOLUTE 1
+
+// ---------------------------------------------------------------------------
+// ---------------------------------- TYPES ----------------------------------
+// -|-----------------------|-------------------------------------------------
+
+typedef struct __tag_ENCODERCONFIG
+{
+	uint8_t 				encoderMode;
+	uint8_t 				float_output;
+	uint8_t 				dirInverse;
+	uint8_t 				zero_shift;
+	uint8_t 				calibrationFlag;
+	uint16_t 				MIN_VAL;
+	uint16_t 				MAX_VAL;
+	int 					pole;
+	int 					num_of_pos;
+} ENCODERCONFIG, * PENCODERCONFIG; 
+
+
+typedef struct
+{
+	uint8_t flag;
+	int64_t tick_rise;
+	int64_t tick_fall;
+	int64_t dTime;
+} pwmEvent_t;
+
+// ---------------------------------------------------------------------------
+// ---------------------------------- DATA -----------------------------------
+// -----|-------------------|-------------------------------------------------
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
@@ -33,14 +72,9 @@ extern char debugString[200];
 // uint64_t dTime=0;
 // uint8_t flag_calc;
 
-
-typedef struct
-{
-	uint8_t flag;
-	int64_t tick_rise;
-	int64_t tick_fall;
-	int64_t dTime;
-} pwmEvent_t;
+// ---------------------------------------------------------------------------
+// -------------------------------- FUNCTIONS --------------------------------
+// -----------------|---------------------------(|------------------|---------
 
 static void IRAM_ATTR rise_handler(void *args){
 	pwmEvent_t *tickVals = (pwmEvent_t *)args;
@@ -65,10 +99,94 @@ static void IRAM_ATTR fall_handler(void *args){
 		}
 	//}
 }
+/* 
+	Модуль поддержки энкодеров
+*/
+void configure_encoderInc(PENCODERCONFIG c, int slot_num)
+{
 
+	c->encoderMode = INCREMENTAL;
+	if (strstr(me_config.slot_options[slot_num], "absolute") != NULL){
+		/* Флаг определяет абслютный режим работы энкодера, 
+			иначе - инкрементальный
+        */
+		c->encoderMode = get_option_flag_val(slot_num, "absolute");
+		ESP_LOGD(TAG, "pwmEncoder mode: absolute slot:%d", slot_num);
+	}else{
+		ESP_LOGD(TAG, "pwmEncoder mode: incremental slot:%d", slot_num);
+	}
 
+	if (strstr(me_config.slot_options[slot_num], "floatOutput") != NULL){
+		/* Флаг определяет значение с плавающей точкой,
+		   иначе - целочисленное
+		*/
+		c->float_output = get_option_flag_val(slot_num, "floatOutput");
+		ESP_LOGD(TAG, "float_output mode: %d", slot_num);
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "dirInverse") != NULL){
+		/* Флаг задаёт инверсию направления */
+		c->dirInverse = get_option_flag_val(slot_num, "dirInverse");
+		ESP_LOGD(TAG, "dirInverse slot: %d", slot_num);
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "zeroShift") != NULL){
+		/* Значение смещения нуля
+		*/
+		c->zero_shift = get_option_int_val(slot_num, "zeroShift", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "zero_shift: %d", c->zero_shift);
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "calibration") != NULL){
+		/* Флаг задаёт необходимость калибровки */
+		c->calibrationFlag = get_option_flag_val(slot_num, "calibration");
+		ESP_LOGD(TAG, "calibrationFlag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "pwmMinVal") != NULL){
+		/* Минимальное значение */
+		c->MIN_VAL = get_option_int_val(slot_num, "pwmMinVal", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "MIN_VAL: %d", c->MIN_VAL);
+	}
+
+	c->MAX_VAL = 899;
+	if (strstr(me_config.slot_options[slot_num], "pwmMaxVal") != NULL){
+		/* Максимальное значение */
+		c->MAX_VAL = get_option_int_val(slot_num, "pwmMaxVal", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "MAX_VAL: %d", c->MAX_VAL);
+	}
+
+	c->pole = c->MAX_VAL - c->MIN_VAL;
+	c->num_of_pos = 24;
+	if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL)	{
+		/* Количество положений
+		*/
+		c->num_of_pos = get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096);
+		if (c->num_of_pos <= 0){
+			ESP_LOGD(TAG, "pwmEncoder num_of_pos wrong format, set default slot:%d", slot_num);
+			c->num_of_pos = 24; // default val
+		}
+	}
+
+	ESP_LOGD(TAG, "pwmEncoder num_of_pos:%d slot:%d", c->num_of_pos, slot_num);
+	
+	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+		/* Определяет топик для MQTT сообщений */
+    	custom_topic = get_option_string_val(slot_num, "encoder_topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0")+3];
+		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+}
 void encoderPPM_task(void *arg)
 {
+	ENCODERCONFIG		c 	= {0};
+
 	int slot_num = *(int *)arg;
 
 	char str[255];
@@ -93,94 +211,27 @@ void encoderPPM_task(void *arg)
 	gpio_isr_handler_add(rise_pin_num, rise_handler, (void *)&tickVals);
 	gpio_isr_handler_add(fall_pin_num, fall_handler, (void *)&tickVals);
 
-#define INCREMENTAL 0
-#define ABSOLUTE 1
-	uint8_t encoderMode = INCREMENTAL;
-	if (strstr(me_config.slot_options[slot_num], "absolute") != NULL){
-		encoderMode = ABSOLUTE;
-		ESP_LOGD(TAG, "pwmEncoder mode: absolute slot:%d", slot_num);
-	}else{
-		ESP_LOGD(TAG, "pwmEncoder mode: incremental slot:%d", slot_num);
-	}
+	configure_encoderInc(&c, slot_num);
 
-
-	uint8_t float_output = 0;
-	if (strstr(me_config.slot_options[slot_num], "floatOutput") != NULL){
-		float_output = 1;
-		ESP_LOGD(TAG, "float_output mode: %d", slot_num);
-	}
-
-	uint8_t dirInverse = 0;
-	if (strstr(me_config.slot_options[slot_num], "dirInverse") != NULL){
-		dirInverse = 1;
-		ESP_LOGD(TAG, "dirInverse slot: %d", slot_num);
-	}
-
-	uint8_t zero_shift = 0;
-	if (strstr(me_config.slot_options[slot_num], "zeroShift") != NULL){
-		zero_shift = get_option_int_val(slot_num, "zeroShift", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
-	}
-
-	uint8_t calibrationFlag = 0;
-	if (strstr(me_config.slot_options[slot_num], "calibration") != NULL){
-		calibrationFlag = 1;
-		ESP_LOGD(TAG, "calibrationFlag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	}
-
-    uint16_t MIN_VAL = 0;
-	// if (strstr(me_config.slot_options[slot_num], "pwmMinVal") != NULL){
-	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMinVal");
-	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
-	// }
-	uint16_t MAX_VAL = 899;
-	// if (strstr(me_config.slot_options[slot_num], "pwmMaxVal") != NULL){
-	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMaxVal");
-	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
-	// }
-	int pole = MAX_VAL - MIN_VAL;
-	int num_of_pos;
-	if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL)	{
-		num_of_pos = get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096);
-		if (num_of_pos <= 0){
-			ESP_LOGD(TAG, "pwmEncoder num_of_pos wrong format, set default slot:%d", slot_num);
-			num_of_pos = 24; // default val
-		}
-	}else{
-		num_of_pos = 24; // default val
-	}
-	ESP_LOGD(TAG, "pwmEncoder num_of_pos:%d slot:%d", num_of_pos, slot_num);
-	
-	float pos_length = (float)pole / num_of_pos;
+	float pos_length = (float)c.pole / c.num_of_pos;
 	uint16_t raw_val;
 	int current_pos, prev_pos = -1;
 
-	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "encoder_topic");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0")+3];
-		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
-		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-	}
 
-	while(calibrationFlag){
+	while(c.calibrationFlag){
 		if(tickVals.dTime>1000){
 			ESP_LOGD(TAG, "EBOLA rise:%lld fall:%lld dTime:%lld", tickVals.tick_rise, tickVals.tick_fall, tickVals.dTime);
 		}else{
-			if(tickVals.dTime<MIN_VAL){
-				MIN_VAL = tickVals.dTime;
+			if(tickVals.dTime<c.MIN_VAL){
+				c.MIN_VAL = tickVals.dTime;
 			}
-			if(tickVals.dTime>MAX_VAL){
-				MAX_VAL = tickVals.dTime;
+			if(tickVals.dTime>c.MAX_VAL){
+				c.MAX_VAL = tickVals.dTime;
 			}
 
-			sprintf(str, "/calibration: pwmMinVal:%d pwmMaxVal:%d", MIN_VAL, MAX_VAL);
+			sprintf(str, "/calibration: pwmMinVal:%d pwmMaxVal:%d", c.MIN_VAL, c.MAX_VAL);
 			report(str, slot_num);
-			ESP_LOGD(TAG,"VAL:%lld MIN_VAL:%d MAX_VAL:%d",tickVals.dTime, MIN_VAL, MAX_VAL);
+			ESP_LOGD(TAG,"VAL:%lld MIN_VAL:%d MAX_VAL:%d",tickVals.dTime, c.MIN_VAL, c.MAX_VAL);
 		}
 		vTaskDelay(20 / portTICK_PERIOD_MS);
 	}
@@ -193,9 +244,9 @@ void encoderPPM_task(void *arg)
 	}
 	
 	raw_val = tickVals.dTime;
-	current_pos = (raw_val / pos_length)+zero_shift;
-	while(current_pos>=num_of_pos){
-		current_pos -= num_of_pos;
+	current_pos = (raw_val / pos_length)+c.zero_shift;
+	while(current_pos>=c.num_of_pos){
+		current_pos -= c.num_of_pos;
 	}
 
 	int offset = raw_val;
@@ -222,8 +273,8 @@ void encoderPPM_task(void *arg)
 
 		//raw_val = raw_val + offset;
 		//ESP_LOGD(TAG, "raw_val:%d", raw_val);
-		while(raw_val > pole){
-			raw_val = pole;
+		while(raw_val > c.pole){
+			raw_val = c.pole;
 		}
 
 		val_mass[anti_deb_mass_index] = raw_val;
@@ -245,12 +296,12 @@ void encoderPPM_task(void *arg)
 				tmpVal -= pos_length;
 			}
 			//current_pos = ((raw_val- pos_length/2)/ pos_length)+zero_shift;
-			while(current_pos>=num_of_pos){
-				current_pos -= num_of_pos;
+			while(current_pos>=c.num_of_pos){
+				current_pos -= c.num_of_pos;
 			}
 
-			if(dirInverse){
-				current_pos = num_of_pos-current_pos;
+			if(c.dirInverse){
+				current_pos = c.num_of_pos-current_pos;
 			}
 		}
 
@@ -258,22 +309,22 @@ void encoderPPM_task(void *arg)
 
 		if (current_pos != prev_pos){
 			//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);
-			if (encoderMode == ABSOLUTE){
-				if(float_output){
-					sprintf(str, "%f", (float)current_pos/(num_of_pos-1));
+			if (c.encoderMode == ABSOLUTE){
+				if(c.float_output){
+					sprintf(str, "%f", (float)current_pos/(c.num_of_pos-1));
 				}else{
 					sprintf(str, "%d", current_pos);
 				}
-			}else if (encoderMode == INCREMENTAL){
+			}else if (c.encoderMode == INCREMENTAL){
 				int delta = abs(current_pos - prev_pos);
-				if (delta < (num_of_pos / 2)){
+				if (delta < (c.num_of_pos / 2)){
 					if (current_pos < prev_pos)	{
 						sprintf(str, "-%d", delta);
 					}else{
 						sprintf(str, "+%d", delta);
 					}
 				}else{
-					delta = num_of_pos - delta;
+					delta = c.num_of_pos - delta;
 					if (current_pos < prev_pos)	{
 						sprintf(str, "+%d", delta);
 					}else{
@@ -557,3 +608,9 @@ void start_encoder_inc_task(int slot_num)
 
 	ESP_LOGD(TAG, "encoder_inc_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
+const char * get_manifest_encoders()
+{
+	return manifesto;
+}
+
+

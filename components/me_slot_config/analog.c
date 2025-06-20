@@ -18,6 +18,9 @@
 #include "me_slot_config.h"
 #include "reporter.h"
 
+#include <generated_files/analog.h>
+
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
@@ -30,8 +33,101 @@ static const char *TAG = "ANALOG";
 #define MODE_5V 1
 #define MODE_10V 2
 
+
+typedef struct __tag_ANALOG_CONFIG
+{
+	bool 					used;
+	int 					pattern_num;
+	TaskHandle_t			s_task_handle;
+	int 					slot_num;
+
+	int 					averagingCount;
+	uint64_t				averagingSum;
+
+	uint16_t 				result;
+	uint16_t 				prev_result;
+
+    uint16_t 				MIN_VAL;
+    uint16_t 				MAX_VAL;
+    uint8_t 				flag_float_output;
+	uint8_t 				inverse;
+	float 					k;
+	uint16_t 				dead_band;
+	uint16_t 				periodic;
+
+	char *					custom_topic;
+	int 					flag_custom_topic;
+	int 					divider;
+
+} ANALOG_CONFIG, * PANALOG_CONFIG; 
+
+/* 
+    Старая версия поддержки ADC
+*/
+void configure_analog(PANALOG_CONFIG	ch, int slot_num)
+{
+    if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
+        /* Флаг определяет формат воводящего значения, 
+          если указан - будет выводиться значение с плавающей точкой,
+          иначе - целочисленное
+        */
+		ch->flag_float_output = get_option_flag_val(slot_num, "floatOutput");
+		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
+	}
+	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
+		/* Определяет верхний порог значений */
+		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", ch->MAX_VAL, slot_num);
+	}
+    if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
+		/* Определяет нижний порог значений */
+		ch->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", ch->MIN_VAL, slot_num);
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
+		/* Флаг задаёт инвертирование значений */
+		ch->inverse = get_option_flag_val(slot_num, "inverse");
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "filterK")!=NULL){
+		/* Коэфициент фильтрации */
+        ch->k = get_option_float_val(slot_num, "filterK", 1);
+		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", ch->k, slot_num);
+	}
+    
+    if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
+		/* Фильтрация "дребезга" - определяет порог срабатывания */
+        ch->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d", ch->dead_band, slot_num);
+	}
+
+    if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
+		/* Задаёт периодичночть отсчётов в миллисекундах */
+        ch->periodic = get_option_int_val(slot_num, "periodic", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d", ch->periodic, slot_num);
+	}
+
+	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
+		/* Определяет топик для MQTT сообщений */
+		ch->custom_topic = get_option_string_val(slot_num,"topic");
+		ESP_LOGD(TAG, "Custom topic:%s", ch->custom_topic);
+		ch->flag_custom_topic=1;
+	}
+
+
+    if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
+		/* Задаёт режим делителя */
+        if ((ch->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0)
+		{
+			ESP_LOGE(TAG, "dividerMode: unricognized value");
+		}
+	}
+}
+
 void analog_task(void *arg)
 {
+	ANALOG_CONFIG		c = {0};
     uint16_t raw_val;
     uint16_t resault=0, prev_resault=0xFFFF;
 
@@ -79,44 +175,7 @@ void analog_task(void *arg)
     	adc1_config_channel_atten(ADC_chan, atten);
 	}
 
-    uint16_t MIN_VAL = 0;
-    uint16_t MAX_VAL = 4095;
-    uint8_t flag_float_output=0;
-    if (strstr(me_config.slot_options[slot_num], "floatOutput")!=NULL){
-		flag_float_output = 1;
-		ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
-	}
-	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
-		MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", MAX_VAL, slot_num);
-	}
-    if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
-		MIN_VAL = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", MIN_VAL, slot_num);
-	}
-
-    uint8_t inverse  = 0;
-	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-		inverse=1;
-	}
-
-    float k=1;
-    if (strstr(me_config.slot_options[slot_num], "filterK")!=NULL){
-        k = get_option_float_val(slot_num, "filterK");
-		ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", k, slot_num);
-	}
-    
-    uint16_t dead_band=10;
-    if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-        dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d",dead_band, slot_num);
-	}
-
-	uint16_t periodic=0;
-    if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
-        periodic = get_option_int_val(slot_num, "periodic", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set periodic:%d. Slot:%d",periodic, slot_num);
-	}
+	configure_analog(&c, slot_num);
 
 	uint8_t divPin_1 = SLOTS_PIN_MAP[slot_num][2];
 	esp_rom_gpio_pad_select_gpio(divPin_1);
@@ -125,37 +184,33 @@ void analog_task(void *arg)
 	esp_rom_gpio_pad_select_gpio(divPin_2);
 	gpio_set_direction(divPin_2, GPIO_MODE_OUTPUT);
 
-	gpio_set_level(divPin_1, 1);
-	gpio_set_level(divPin_2, 0);
-	ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
-
-    if (strstr(me_config.slot_options[slot_num], "dividerMode")!=NULL){
-        char *dividerModeStr = get_option_string_val(slot_num, "dividerMode");
-		if(strcmp(dividerModeStr, "3V3")==0){
+	switch (c.divider)
+	{
+		case 1:
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 0);
 			ESP_LOGD(TAG, "Set dividerMode:3V3. Slot:%d", slot_num);
-		}else if(strcmp(dividerModeStr, "10V")==0){
+			break;
+
+		case 2:
 			gpio_set_level(divPin_1, 0);
 			gpio_set_level(divPin_2, 1);
 			ESP_LOGD(TAG, "Set dividerMode:10V. Slot:%d", slot_num);
-		}
+			break;
+		
+		default:
+			gpio_set_level(divPin_1, 1);
+			gpio_set_level(divPin_2, 0);
+			ESP_LOGD(TAG, "Set dividerMode:5V. Slot:%d", slot_num);
+			break;
 	}
 
-    uint8_t flag_custom_topic = 0;
-	char *custom_topic=NULL;
-	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
-		custom_topic = get_option_string_val(slot_num,"topic");
-		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
-		flag_custom_topic=1;
-	}
-
-    if(flag_custom_topic==0){
+    if(c.flag_custom_topic==0){
 		char *str = calloc(strlen(me_config.deviceName)+strlen("/analog_")+4, sizeof(char));
 		sprintf(str, "%s/analog_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=str;
 	}else{
-		me_state.trigger_topic_list[slot_num]=custom_topic;
+		me_state.trigger_topic_list[slot_num]=c.custom_topic;
 	}
 
 
@@ -171,7 +226,7 @@ void analog_task(void *arg)
 
 		tmp = 0;
 		for(int i=0;i<oversumple;i++){
-			if(inverse){
+			if(c.inverse){
 				if(slot_num==2){
 					adc2_get_raw(ADC_chan, width, &raw_val);
 					raw_val = 4096-raw_val;
@@ -189,29 +244,29 @@ void analog_task(void *arg)
 			//vTaskDelay(1);
 		}
 		tmp = tmp/oversumple;
-		resault =resault*(1-k)+tmp*k;
+		resault =resault*(1-c.k)+tmp*c.k;
 		//printf(">val:%d\n",resault);
 		//ESP_LOGD(TAG, "raw_val:%d time:%ld", raw_val, xTaskGetTickCount()-startTick);
 
-        if((abs(resault - prev_resault)>dead_band)||(periodic!=0)){
+        if((abs(resault - prev_resault)>c.dead_band)||(c.periodic!=0)){
             prev_resault = resault;
             //ESP_LOGD(TAG, "analog val:%d , allow_delta:%d", resault, MAX_VAL-MIN_VAL);
 
 			int str_len;//=strlen(me_config.deviceName)+strlen("/tachometer_")+8;
 			char *str;// = (char*)malloc(str_len * sizeof(char));
 
-            float f_res;
-            if(flag_float_output){
+            float f_res = 0;
+            if(c.flag_float_output){
 				f_res = resault;
-				if(f_res>MAX_VAL)f_res=MAX_VAL;
-				if(f_res<MIN_VAL)f_res=MIN_VAL;
-				f_res-=MIN_VAL;
-				f_res = (float)f_res/(MAX_VAL-MIN_VAL);
+				if(f_res>c.MAX_VAL)f_res=c.MAX_VAL;
+				if(f_res<c.MIN_VAL)f_res=c.MIN_VAL;
+				f_res-=c.MIN_VAL;
+				f_res = (float)f_res/(c.MAX_VAL-c.MIN_VAL);
             }
 
 			memset(tmpString, 0, strlen(tmpString));
 
-            if(flag_float_output){
+            if(c.flag_float_output){
 				//sprintf(str,"%s/analog_%d:%f", me_config.deviceName, slot_num, f_res);
 				sprintf(tmpString,"%f", f_res);
 			}else{
@@ -226,15 +281,14 @@ void analog_task(void *arg)
 
         }
         //ESP_LOGD(TAG, "analog val:%d", resault);
-        if(periodic!=0){
-			vTaskDelayUntil(&lastWakeTime, periodic);
+        if(c.periodic!=0){
+			vTaskDelayUntil(&lastWakeTime, c.periodic);
 		}else{
 			vTaskDelayUntil(&lastWakeTime, 32);
 		}
     }
     
 }
-
 void start_analog_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
@@ -244,4 +298,8 @@ void start_analog_task(int slot_num){
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "analog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+const char * get_manifest_analog()
+{
+	return manifesto;
 }

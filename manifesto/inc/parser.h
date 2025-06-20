@@ -28,7 +28,8 @@ typedef enum
     PARAMTYPE_flag,
     PARAMTYPE_string,
     PARAMTYPE_float,
-    PARAMTYPE_enum
+    PARAMTYPE_enum,
+    PARAMTYPE_color,
 } PARAMTYPE;
 
 
@@ -66,6 +67,8 @@ public:
         float           defaultValF;
         float           maxValF;
         float           minValF;
+
+        char            defaultValStr           [ 256 ];
 
         int             enumsCount;
 
@@ -132,6 +135,10 @@ private:
                                                  char *         value);
 
         bool            extractEnumParam        (Function &     func,
+                                                 int            idx,
+                                                 char *         value);
+
+        bool            extractColorParam       (Function &     func,
                                                  int            idx,
                                                  char *         value);
 

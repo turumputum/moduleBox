@@ -43,6 +43,7 @@
 #include "PPM.h"
 #include "CRSF.h"
 #include <stdarg.h>
+#include <rgbHsv.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -194,44 +195,77 @@ int init_slots(void){
 
 int get_option_flag_val(int slot_num, char* string)
 {
-	// просто возвращаю как сейчас используется.
-	return 1;
+	int  	result = 0;
+
+	if (strstr(me_config.slot_options[slot_num], string) != NULL)
+	{
+		result = 1;
+	}
+
+	return result;
+}
+int get_option_int_val(int slot_num, char* string, const char*  unit_name, int default_value, int min_value, int max_value)
+{
+	int 		result	= default_value;
+	char *		begin;
+	char *		value;
+	char *		end;
+	int 		len;
+
+	if ((begin = strstr(me_config.slot_options[slot_num], string)) != NULL)
+	{
+		if ((end = strchr(begin, ',')) == NULL)
+		{ end = begin + strlen(begin); }
+		len = end - begin;
+		char dup [len + 1];
+		memcpy(dup, begin, len);
+		dup[len] = 0;
+
+		if ((value = strchr(begin, ':')) != NULL)
+		{
+			value++;
+
+			result = atoi(value);
+		}
+		else
+		{
+			ESP_LOGW(TAG, "Options wrong format:%s", dup);
+		}
+	}
+
+	return result;
 }
 
-int get_option_int_val(int slot_num, char* string, const char*  unit_name, int default_value, int min_value, int max_value){
-	char *ind_of_vol = strstr(me_config.slot_options[slot_num], string);
-	char options_copy[strlen(ind_of_vol)];
-	strcpy(options_copy, ind_of_vol);
-	char *rest;
-	char *ind_of_eqal=strstr(ind_of_vol, ":");
-	if(ind_of_eqal!=NULL){
-		if(strstr(ind_of_vol, ",")!=NULL){
-			ind_of_vol = strtok_r(options_copy,",",&rest);
-		}
-		return atoi(ind_of_eqal+1);
-	}else{
-		ESP_LOGW(TAG, "Options wrong format:%s", ind_of_vol);
-		//free(options_copy);
-		return -1;
-	}
-}
+float get_option_float_val(int slot_num, char* string, float default_value)
+{
+	float 		result	= default_value;
+	char *		begin;
+	char *		value;
+	char *		end;
+	int 		len;
 
-float get_option_float_val(int slot_num, char* string){
-	char *ind_of_vol = strstr(me_config.slot_options[slot_num], string);
-	char options_copy[strlen(ind_of_vol)];
-	strcpy(options_copy, ind_of_vol);
-	char *rest;
-	char *ind_of_eqal=strstr(ind_of_vol, ":");
-	if(ind_of_eqal!=NULL){
-		if(strstr(ind_of_vol, ",")!=NULL){
-			ind_of_vol = strtok_r(options_copy,",",&rest);
+	if ((begin = strstr(me_config.slot_options[slot_num], string)) != NULL)
+	{
+		if ((end = strchr(begin, ',')) == NULL)
+		{ end = begin + strlen(begin); }
+		len = end - begin;
+		char dup [len + 1];
+		memcpy(dup, begin, len);
+		dup[len] = 0;
+
+		if ((value = strchr(begin, ':')) != NULL)
+		{
+			value++;
+
+			result = atof(value);
 		}
-		return atof(ind_of_eqal+1);
-	}else{
-		ESP_LOGW(TAG, "Options wrong format:%s", ind_of_vol);
-		free(options_copy);
-		return -1;
+		else
+		{
+			ESP_LOGW(TAG, "Options wrong format:%s", dup);
+		}
 	}
+
+	return result;
 }
 char* get_option_string_val(int slot_num, char* option, ...){
 	char* resault;
@@ -286,24 +320,26 @@ int get_option_enum_val(int slot_num, char* option, ...)
 {
 	int 			result			= -1;
     va_list         list;
-	char *			options_copy;
-	char *			end;
 	char * 			arg;
-	
+	char *			begin;
+	char *			value;
+	char *			end;
+	int 			len;
+
     va_start(list, option);
 
-	if ((options_copy = strdup(me_config.slot_options[slot_num])) != NULL)
+	if ((begin = strstr(me_config.slot_options[slot_num], option)) != NULL)
 	{
-		char *			key 			= strstr(options_copy, option);
-		char *			separator		= strchr(key, ':');
+		if ((end = strchr(begin, ',')) == NULL)
+		{ end = begin + strlen(begin); }
+		len = end - begin;
+		char dup [len + 1];
+		memcpy(dup, begin, len);
+		dup[len] = 0;
 
-		if (separator != NULL)
+		if ((value = strchr(dup, ':')) != NULL)
 		{
-			char * value = separator + 1;  
-			if ((end = strchr(value, ',')) != NULL)
-			{
-				*end = 0;
-			}
+			value++;
 			value = _cleanValue(value);
 
 			if (strlen(value) > 0)
@@ -317,15 +353,58 @@ int get_option_enum_val(int slot_num, char* option, ...)
 				}
 			}
 		}
-
-		free(options_copy);
+		else
+		{
+			ESP_LOGW(TAG, "Options wrong format:%s", dup);
+		}
 	}
+	else
+		result = 0;
 
 	va_end(list);
 
 	return result;
 }
 
+int get_option_color_val(RgbColor * output, int slot_num, char* string, char * default_value)
+{
+	int 		result	= ESP_FAIL;
+	char *		begin;
+	char *		value;
+	char *		end;
+	int 		len;
+
+	if ((begin = strstr(me_config.slot_options[slot_num], string)) != NULL)
+	{
+		if ((end = strchr(begin, ',')) == NULL)
+		{ end = begin + strlen(begin); }
+		len = end - begin;
+		char dup [len + 1];
+		memcpy(dup, begin, len);
+		dup[len] = 0;
+
+		if ((value = strchr(begin, ':')) != NULL)
+		{
+			value++;
+
+			if (parseRGB(output, value) == -1)
+			{
+				ESP_LOGW(TAG, "Color wrong format:%s", dup);
+			}
+		}
+		else
+		{
+			ESP_LOGW(TAG, "Options wrong format:%s", dup);
+		}
+	}
+
+	if (result != ESP_OK)
+	{
+		parseRGB(output, default_value);
+	}
+	
+	return result;
+}
 
 // char* get_option_string_val(int slot_num, char* option, char* custom_topic){
 // 	char* resault;

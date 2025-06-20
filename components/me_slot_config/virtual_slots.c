@@ -281,7 +281,7 @@ void flywheel_task(void *arg){
 
     float decrement=0.1;
     if (strstr(me_config.slot_options[slot_num], "decrement") != NULL) {
-		decrement = get_option_float_val(slot_num, "decrement");
+		decrement = get_option_float_val(slot_num, "decrement", 0.1);
 		ESP_LOGD(TAG, "Set decrement:%f for slot:%d",decrement, slot_num);
 	}
 

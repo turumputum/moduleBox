@@ -143,13 +143,13 @@ void audio_task(void *arg) {
 
 	float speed=1.09;
 	if (strstr(me_config.slot_options[slot_num], "speed")!=NULL){
-		speed = get_option_float_val(slot_num, "speed");
+		speed = get_option_float_val(slot_num, "speed", 1.09);
 		ESP_LOGD(TAG, "Set speed:%f", speed);
 	}
 
 	float tone=1.0;
 	if (strstr(me_config.slot_options[slot_num], "tone")!=NULL){
-		tone = get_option_float_val(slot_num, "tone");
+		tone = get_option_float_val(slot_num, "tone", 1.0);
 		ESP_LOGD(TAG, "Set tone:%f", tone);
 	}
 

@@ -195,6 +195,10 @@ bool Parser::getOptions()
         {
             funcs[numOfFuncs].type = PARAMTYPE_enum;
         }
+        else if (!strcmp(name, "get_option_color_val"))
+        {
+            funcs[numOfFuncs].type = PARAMTYPE_color;
+        }
 
         if (!parseFunctionParams(funcs[numOfFuncs], on))
         {
@@ -436,6 +440,39 @@ bool Parser::extractEnumParam(Function &     func,
 
     return result;
 }
+bool Parser::extractColorParam(Function &     func,
+                               int            idx,
+                               char *         value)
+{
+    bool result = true;
+
+    switch (idx)
+    {
+        case 0:
+            // skip - output
+            break;
+
+        case 1:
+            // skip - slot number
+            break;
+
+        case 2:
+            strcpy(func.name, value);
+            break;
+
+        case 3:
+            strcpy(func.defaultValStr, value);
+            break;
+
+        default:
+            result = false;
+            break;
+    }
+
+    //printf("extractEnumParam = %d\n", result);
+
+    return result;
+}
 bool Parser::extractParams(Function &     func)
 {
     bool        result  = true;
@@ -472,6 +509,10 @@ bool Parser::extractParams(Function &     func)
 
             case PARAMTYPE_enum:
                 result = extractEnumParam(func, idx, tmp);
+                break;
+
+            case PARAMTYPE_color:
+                result = extractColorParam(func, idx, tmp);
                 break;
 
 
@@ -538,7 +579,7 @@ const char * Parser::parse(char * source)
     this->source    = source;
     modSearchEnd    = source;
 
-    manifesto.append("[");
+    //manifesto.append("[");
 
     resetFunctions(true);
 
@@ -573,7 +614,7 @@ const char * Parser::parse(char * source)
 
     if (mods > 0)
     {
-        manifesto.append("]\n");
+        //manifesto.append("]\n");
         result = manifesto.c_str();
     }
 
@@ -684,7 +725,22 @@ bool Parser::generateManifestoForModule()
                 snprintf(tmp, sizeof(tmp), "%s", " ]\n\t\t\t},\n");
                   
                 break;
-        
+
+            case PARAMTYPE_color:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"color\",\n"
+                        "\t\t\t\t\"valueDefault\": \"%s\",\n"
+                        "\t\t\t},\n",
+                        f->name,
+                        f->descRaw,
+                        f->defaultValStr);
+                   
+                break;
+
+
             default:
                 break;
         }

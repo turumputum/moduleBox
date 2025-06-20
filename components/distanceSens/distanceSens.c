@@ -85,7 +85,7 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
     }
 
     if (strstr(me_config.slot_options[slot_num], "filterK") != NULL) {
-        distanceSens->k = get_option_float_val(slot_num, "filterK");
+        distanceSens->k = get_option_float_val(slot_num, "filterK", 1);
         ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", distanceSens->k, slot_num);
     }
 

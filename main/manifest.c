@@ -34,6 +34,20 @@
 static const char *TAG      = "MAIN";
 
 
+typedef const char *        (*GET_MANIFEST_FUNC)();
+
+
+static GET_MANIFEST_FUNC    funcs   [] = 
+{
+    get_manifest_adc1,
+    get_manifest_analog,
+    get_manifest_buttonLed,
+    get_manifest_3n_mosfet,
+    get_manifest_encoders,
+    get_manifest_smartLed,
+    NULL
+}; 
+
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
@@ -92,18 +106,26 @@ bool checkExistent()
 }
 int saveManifesto()
 {
-	int 			result 		= ESP_FAIL;
-	FILE *			manFile;
-	const char * 	tmp;
+	int 			    result 		= ESP_FAIL;
+	FILE *			    manFile;
+	const char * 	    tmp;
+    GET_MANIFEST_FUNC   f;
 
     if (!checkExistent())
     {
         if ((manFile = fopen(MANIFESTO_FULL_FNAME, "w")) != NULL)
         {
-            if ((tmp = get_manifest_adc1()) != NULL)
+            fprintf(manFile, "%s", "[\n");
+
+            for (int i = 0; (f = funcs[i]) != NULL; i++)
             {
-                fprintf(manFile, "%s", tmp);
+                if ((tmp = (*f)()) != NULL)
+                {
+                    fprintf(manFile, "%s", tmp);
+                }
             }
+
+            fprintf(manFile, "%s", "]\n");
 
             ESP_LOGI(TAG, "manifest saved");
 
