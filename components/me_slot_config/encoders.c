@@ -122,6 +122,12 @@ void encoderPPM_task(void *arg)
 		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
 	}
 
+	int8_t offset = 0;
+	if (strstr(me_config.slot_options[slot_num], "offset") != NULL){
+		offset = get_option_int_val(slot_num, "offset");
+		ESP_LOGD(TAG, "zero_shift: %d", zero_shift);
+	}
+
 	uint8_t calibrationFlag = 0;
 	if (strstr(me_config.slot_options[slot_num], "calibration") != NULL){
 		calibrationFlag = 1;
@@ -134,7 +140,7 @@ void encoderPPM_task(void *arg)
 	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMinVal");
 	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
 	// }
-	uint16_t MAX_VAL = 936;
+	uint16_t MAX_VAL = 925;
 	// if (strstr(me_config.slot_options[slot_num], "pwmMaxVal") != NULL){
 	// 	MIN_VAL = get_option_int_val(slot_num, "pwmMaxVal");
 	// 	ESP_LOGD(TAG, "MIN_VAL: %d", zero_shift);
@@ -195,15 +201,16 @@ void encoderPPM_task(void *arg)
 	
 	raw_val = tickVals.dTime;
 	current_pos = (raw_val / pos_length)+zero_shift;
-	while(current_pos>=num_of_pos){
+	while(current_pos>num_of_pos){
 		current_pos -= num_of_pos;
 	}
 
-	int offset = raw_val;
-	while(offset >= pos_length){
-		offset -= pos_length;
-	}
-	offset = -(offset); //
+	// int offset = raw_val;
+	// while(offset >= pos_length/2){
+	// 	offset -= pos_length/2;
+	// }
+
+	//offset = -(offset); //
 	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, offset, pos_length);
 
 	#define ANTI_DEBOUNCE_INERATIONS 1
@@ -215,7 +222,7 @@ void encoderPPM_task(void *arg)
 	while (1){
 		vTaskDelay(pdMS_TO_TICKS(20));
 		if (tickVals.flag){
-			raw_val = tickVals.dTime + offset + pos_length/2;
+			raw_val = tickVals.dTime + offset;
 			//raw_val = tickVals.dTime + offset;
 		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
 			raw_val = 0;
@@ -224,7 +231,7 @@ void encoderPPM_task(void *arg)
 		//raw_val = raw_val + offset;
 		//ESP_LOGD(TAG, "raw_val:%d", raw_val);
 		while(raw_val > pole){
-			raw_val = pole;
+			raw_val -= pole;
 		}
 
 		val_mass[anti_deb_mass_index] = raw_val;
@@ -245,6 +252,7 @@ void encoderPPM_task(void *arg)
 				current_pos++;
 				tmpVal -= pos_length;
 			}
+			//ESP_LOGD(TAG, "obrezok: %f", tmpVal);
 			//current_pos = ((raw_val- pos_length/2)/ pos_length)+zero_shift;
 			while(current_pos>=num_of_pos){
 				current_pos -= num_of_pos;

@@ -115,15 +115,7 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
-<<<<<<< HEAD
 			start_analog_task(i);
-=======
-			start_analog_task(i);		// OK
-		}else if(!memcmp(me_config.slot_mode[i], "adc1", 4)){
-			start_adc1_task(i);			// OK
-		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 12)){
-			start_stepperSpeed_task(i);	// OK
->>>>>>> 27c515a6fbe10b769da7a8d1afda684ddb1c1227
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);		// OK
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
@@ -184,13 +176,9 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "tankControl", 11)){
 			start_tankControl_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "furbyEye", 8)){
-<<<<<<< HEAD
 			start_furbyEye_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
 			start_stepper_conductor_task(i);
-=======
-			start_furbyEye_task(i);		// OK
->>>>>>> 27c515a6fbe10b769da7a8d1afda684ddb1c1227
 		}
 		
 	}

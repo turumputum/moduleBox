@@ -983,6 +983,7 @@ void stepper_conductor_task(void *arg) {
             if (currentTime - lastCommandTime > timeout) {
                 ESP_LOGD(TAG, "Timeout reached, stopping motor");
                 report("/stop", slot_num);
+                lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
                 isMoving = 0;
             }
         }
@@ -999,6 +1000,7 @@ void stepper_conductor_task(void *arg) {
                 // Check if we've reached the target position
                 if (isMoving && currentPosition == targetPosition) {
                     report("/stop", slot_num);
+                    lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
                     isMoving = 0;
                     ESP_LOGD(TAG, "Target position reached: %ld", currentPosition);
                 }
@@ -1064,6 +1066,7 @@ void stepper_conductor_task(void *arg) {
             // Process stop command
             else if (strstr(command, "stop") != NULL) {
                 report("/stop", slot_num);
+                lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
                 isMoving = 0;
                 ESP_LOGD(TAG, "Stop command received");
             }
