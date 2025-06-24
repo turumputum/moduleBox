@@ -19,8 +19,42 @@ const char * CONFIGURE_BEGIN = "void configure_";
 //int stage = 1;
 
 // ---------------------------------------------------------------------------
-// -------------------------------- FUNCTIONS --------------------------------
+// -------------------------------- OptionS --------------------------------
 // -----------------|---------------------------(|------------------|---------
+
+char * Parser::findNextFunction(FUNCSEARCH &    f,
+                                const char *    part1,
+                                const char *    part2)
+{
+    char *              result = 0;
+    char *              begin;
+    char *              end;
+
+    if ((begin = strstr(funcSearchEnd,  part1)) != nil)
+    {
+        if ((end = strchr(begin, '(')) != nil)
+        {
+            copyFromTo(f.funcName, begin, end);
+            cleanValue(f.funcName);
+            int len1 = strlen(f.funcName);
+            int len2 = strlen(part2);
+
+            if (!len2 || !memcmp(f.funcName + (len1 - len2), part2, len2))
+            {
+                result          = begin;
+                funcSearchEnd   = result + strlen(f.funcName);
+
+            }
+            else
+            {
+                funcSearchEnd   = result + strlen(part1);
+                result          = findNextFunction(f, part1, part2);
+            }
+        }
+    }
+
+    return result;
+}
 
 void Parser::copyFromTo(char *         dest, 
                         char *         begin,
@@ -90,130 +124,6 @@ void Parser::cleanValue(char *         value)
 
     //printf("'%s'\n", value);
 }
-char * Parser::findNextFunction(Function &     func,
-                                const char *   part1,
-                                const char *   part2)
-{
-    char *              result = 0;
-    char *              begin;
-    char *              end;
-
-    if ((begin = strstr(funcSearchEnd,  part1)) != nil)
-    {
-        if ((end = strchr(begin, '(')) != nil)
-        {
-            copyFromTo(func.funcName, begin, end);
-            cleanValue(func.funcName);
-            int len1 = strlen(func.funcName);
-            int len2 = strlen(part2);
-
-            if (!memcmp(func.funcName + (len1 - len2), part2, len2))
-            {
-                result      = begin;
-                funcSearchEnd   = result + strlen(func.funcName);
-
-            }
-            else
-            {
-                funcSearchEnd   = result + strlen(part1);
-                result      = findNextFunction(func, part1, part2);
-            }
-        }
-    }
-
-    return result;
-}
-
-void Parser::resetFunctions(bool first)
-{
-    for (int i = 0; i < int(sizeof(funcs) / sizeof(Function)); i++)
-    {
-        funcs[i].type = PARAMTYPE_unknown;
-        funcs[i].line = 0;
-        *funcs[i].funcName = 0;
-        *funcs[i].name = 0;
-        *funcs[i].unit = 0;
-
-        if (!first)
-        {
-            if (!funcs[i].paramsRaw)
-                free(funcs[i].paramsRaw);
-
-            if (!funcs[i].descRaw)
-                free(funcs[i].descRaw);
-        }
-
-        funcs[i].paramsRaw = 0;
-        funcs[i].descRaw = 0;
-
-
-        funcs[i].defaultVal = 0;
-        funcs[i].maxVal = 0;
-        funcs[i].minVal = 0;
-
-        funcs[i].defaultValF = 0;
-        funcs[i].maxValF = 0;
-        funcs[i].minValF = 0;
-
-        funcs[i].enumsCount = 0;
-    }
-    
-    numOfFuncs = 0;
-}
-bool Parser::getOptions()
-{
-    bool        result = true;
-
-    char * on;
-
-    resetFunctions(false);
-
-    while (result && ((on = findNextFunction(funcs[numOfFuncs], "get_option_", "_val")) != nil))
-    {
-        // printf("parser.cpp:162 - stage %d\n", stage);
-        // stage++;
-
-        char * name = funcs[numOfFuncs].funcName;
-
-        if (!strcmp(name, "get_option_int_val"))
-        {
-            funcs[numOfFuncs].type = PARAMTYPE_int;
-        }
-        else if (!strcmp(name, "get_option_string_val"))
-        {
-            funcs[numOfFuncs].type = PARAMTYPE_string;
-        }
-        else if (!strcmp(name, "get_option_float_val"))
-        {
-            funcs[numOfFuncs].type = PARAMTYPE_float;
-        }
-        else if (!strcmp(name, "get_option_flag_val"))
-        {
-            funcs[numOfFuncs].type = PARAMTYPE_flag;
-        }
-        else if (!strcmp(name, "get_option_enum_val"))
-        {
-            funcs[numOfFuncs].type = PARAMTYPE_enum;
-        }
-        else if (!strcmp(name, "get_option_color_val"))
-        {
-            funcs[numOfFuncs].type = PARAMTYPE_color;
-        }
-
-        if (!parseFunctionParams(funcs[numOfFuncs], on))
-        {
-            result = false;
-        }
-        else if (++numOfFuncs >= MAX_PARAMS)
-        {
-            printf("error: number of parameters exeed possible number (%d)\n", MAX_PARAMS);
-
-            result = false;
-        }
-    }
-
-    return result;
-}
 char * Parser::backstrstrGlobal(char *         haystack,
                                 const char *   needle)
 {
@@ -252,324 +162,6 @@ char * Parser::backstrstr(char *         haystack,
 
     return result;
 }
-bool Parser::extractDesc(Function &     func,
-                         char *         function)
-{
-    bool        result = false;
-    char *      begin;
-    char *      end;
-
-    if ((end = backstrstr(function, "*/")) != nil)
-    {
-        if ((begin = backstrstr(end, "/*")) != nil)
-        {
-            begin += 2;
-
-            if (dupFromTo(func.descRaw, begin, end) > 0)
-            {
-                cleanValue(func.descRaw);
-                result = true;
-            }
-            else
-                printf("error: cannot get desc body for func %s(%d)\n", func.name, func.line);
-        }
-        else
-            printf("error: cannot get desc begin for func %s(%d)\n", func.name, func.line);
-    }
-    else
-        printf("error: cannot get desc end for func %s(%d)\n", func.name, func.line);
-
-    return result;
-}
-bool Parser::extractIntParam(Function &     func,
-                             int            idx,
-                             char *         value)
-{
-    bool result = true;
-    char * end_ptr;
-
-    switch (idx)
-    {
-        case 0:
-            // skip
-            break;
-
-        case 1:
-            strcpy(func.name, value);
-            break;
-        
-        case 2:
-            strcpy(func.unit, value);
-            break;
-        
-        case 3:
-            func.defaultVal = strtol(value, &end_ptr, 10);
-            //result = errno != EINVAL;
-            break;
-        
-        case 4:
-            func.minVal = strtol(value, &end_ptr, 10);
-            //result = errno != EINVAL;
-            break;
-
-        case 5:
-            func.maxVal = strtol(value, &end_ptr, 10);
-            //result = errno != EINVAL;
-            break;
-
-        default:
-            result = false;
-            break;
-    }
-
-    return result;
-}
-bool Parser::extractFloatParam(Function &     func,
-                               int            idx,
-                               char *         value)
-{
-    bool result = true;
-
-    switch (idx)
-    {
-        case 0:
-            // skip
-            break;
-
-        case 1:
-            strcpy(func.name, value);
-            break;
-        
-        case 2:
-            func.defaultValF = atof(value);
-            //result = errno == ERANGE;
-            break;
-        
-        case 3:
-            func.minValF = atof(value);
-            //result = errno != ERANGE;
-            break;
-
-        case 4:
-            func.maxValF = atof(value);
-            //result = errno != ERANGE;
-            break;
-
-        default:
-            result = false;
-            break;
-    }
-
-    return result;
-}
-bool Parser::extractFlagParam(Function &     func,
-                             int            idx,
-                             char *         value)
-{
-    bool result = true;
-
-    switch (idx)
-    {
-        case 0:
-            // skip
-            break;
-
-        case 1:
-            strcpy(func.name, value);
-            break;
-        
-        default:
-            result = false;
-            break;
-    }
-
-    return result;
-}
-bool Parser::extractStringParam(Function &     func,
-                                int            idx,
-                                char *         value)
-{
-    bool result = true;
-
-    switch (idx)
-    {
-        case 0:
-            // skip
-            break;
-
-        case 1:
-            strcpy(func.name, value);
-            break;
-        
-        default:
-            result = false;
-            break;
-    }
-
-    return result;
-}
-bool Parser::extractEnumParam(Function &     func,
-                                int            idx,
-                                char *         value)
-{
-    bool result = true;
-
-    switch (idx)
-    {
-        case 0:
-            // skip
-            break;
-
-        case 1:
-            strcpy(func.name, value);
-            break;
-        
-        default:
-            if (func.enumsCount < DEF_MAX_ENUMS)
-            {
-                func.enums[func.enumsCount] = (char*)malloc (strlen(value) + 1);
-                strcpy(func.enums[func.enumsCount], value);
-                func.enumsCount++;
-            }
-            else
-                result = false;
-            break;
-    }
-
-    //printf("extractEnumParam = %d\n", result);
-
-    return result;
-}
-bool Parser::extractColorParam(Function &     func,
-                               int            idx,
-                               char *         value)
-{
-    bool result = true;
-
-    switch (idx)
-    {
-        case 0:
-            // skip - output
-            break;
-
-        case 1:
-            // skip - slot number
-            break;
-
-        case 2:
-            strcpy(func.name, value);
-            break;
-
-        case 3:
-            strcpy(func.defaultValStr, value);
-            break;
-
-        default:
-            result = false;
-            break;
-    }
-
-    //printf("extractEnumParam = %d\n", result);
-
-    return result;
-}
-bool Parser::extractParams(Function &     func)
-{
-    bool        result  = true;
-    char *      begin   = func.paramsRaw;
-    int         idx     = 0;
-    char *      end;
-    char        tmp     [ 1024 ];
-
-    while (result && ((end = strchr(begin, ',')) != nil))
-    {
-        copyFromTo(tmp, begin, end);
-
-        cleanValue(tmp);
-
-        //printf("param %d = '%s'\n", idx, tmp);
-
-        switch (func.type)
-        {
-            case PARAMTYPE_int:
-                result = extractIntParam(func, idx, tmp);
-                break;
-            
-            case PARAMTYPE_flag:
-                result = extractFlagParam(func, idx, tmp);
-                break;
-
-            case PARAMTYPE_string:
-                result = extractStringParam(func, idx, tmp);
-                break;
-
-            case PARAMTYPE_float:
-                result = extractFloatParam(func, idx, tmp);
-                break;
-
-            case PARAMTYPE_enum:
-                result = extractEnumParam(func, idx, tmp);
-                break;
-
-            case PARAMTYPE_color:
-                result = extractColorParam(func, idx, tmp);
-                break;
-
-
-            default:
-                break;
-        }
-
-        begin = end + 1;
-        idx++;
-    }
-
-    return result;
-}
-
-bool Parser::parseFunctionParams(Function &     func,
-                                 char *         function)
-{
-    bool        result = false;
-    char *      params;
-    char *      end;
-
-    if ((params = strchr(function, '(')) != nil)
-    {
-//        printf("parseFunctionParams stage %d\n", stage);
-
-        params++;
-        if ((end = strchr(params, ')')) != nil)
-        {
-            if (dupFromTo(func.paramsRaw, params, end) > 0)
-            {
-                int len = strlen(func.paramsRaw);
-                func.paramsRaw[ len + 0 ] = ',';
-                func.paramsRaw[ len + 1 ] = 0;
-
-                if (extractParams(func))
-                {
-                    if (extractDesc(func, function))
-                    {
-                        result = true;
-                    }
-                    else
-                        printf("error: cannot extract desc for func %s(%d)\n", func.name, func.line);
-                }
-                else
-                    printf("error: cannot extract params for func %s(%d)\n", func.name, func.line);
-            }
-            else
-                printf("error: cannot get params body for func %s(%d)\n", func.name, func.line);
-        }
-        else
-            printf("error: cannot get params end for func %s(%d)\n", func.name, func.line);
-    }
-    else
-        printf("error: cannot get params begin for func %s(%d)\n", func.name, func.line);
-
-    return result;
-}
 const char * Parser::parse(char * source)
 {
     const char *            result  = 0;
@@ -581,7 +173,7 @@ const char * Parser::parse(char * source)
 
     //manifesto.append("[");
 
-    resetFunctions(true);
+    resetOptions(true);
 
     do
     {
@@ -596,7 +188,8 @@ const char * Parser::parse(char * source)
                 break;
 
             default:
-                if (getOptions())
+                if (  getOptions()  &&
+                      getReports()  )
                 {
                     if (generateManifestoForModule())
                     {
@@ -623,19 +216,19 @@ const char * Parser::parse(char * source)
 bool Parser::generateManifestoForModule()
 {
     bool            result      = true;
-    Function *      f;
+    Option *      f;
     char            tmp     [ 1024 ];
 
     snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n\t\t\"options\": [\n", mod.name, mod.descRaw);
     manifesto.append(tmp);
 
-    for (int i = 0; i < numOfFuncs; i++)
+    for (int i = 0; i < numOfOpts; i++)
     {
-        f = &funcs[i];
+        f = &opts[i];
 
         switch (f->type)
         {
-            case PARAMTYPE_int:
+            case OPTTYPE_int:
                 snprintf(tmp, sizeof(tmp), 
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
@@ -655,7 +248,7 @@ bool Parser::generateManifestoForModule()
                    
                 break;
         
-            case PARAMTYPE_float:
+            case OPTTYPE_float:
                 snprintf(tmp, sizeof(tmp), 
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
@@ -673,7 +266,7 @@ bool Parser::generateManifestoForModule()
                    
                 break;
         
-            case PARAMTYPE_flag:
+            case OPTTYPE_flag:
                 snprintf(tmp, sizeof(tmp), 
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
@@ -685,7 +278,7 @@ bool Parser::generateManifestoForModule()
                    
                 break;
         
-            case PARAMTYPE_string:
+            case OPTTYPE_string:
                 snprintf(tmp, sizeof(tmp), 
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
@@ -697,7 +290,7 @@ bool Parser::generateManifestoForModule()
                    
                 break;
         
-            case PARAMTYPE_enum:
+            case OPTTYPE_enum:
                 snprintf(tmp, sizeof(tmp), 
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
@@ -726,7 +319,7 @@ bool Parser::generateManifestoForModule()
                   
                 break;
 
-            case PARAMTYPE_color:
+            case OPTTYPE_color:
                 snprintf(tmp, sizeof(tmp), 
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
@@ -814,28 +407,6 @@ bool Parser::getModuleDesc(char *         moduleBegin)
 
     return result;
 }
-/*
-bool Parser::getModuleName(char *         begin)
-{
-    bool            result      = false;
-    char *          on          = begin;
-    
-    while ((on != modSearchEnd) && (*on > ' '))
-    {
-        on--;
-    }
-
-    if (on != modSearchEnd)
-    {
-        copyFromTo(mod.name, on, begin);
-        cleanValue(mod.name);
-
-        result = true;
-    }
-
-    return result;
-}
-*/
 bool Parser::getModuleName(char *         begin)
 {
     bool            result      = false;
@@ -882,10 +453,10 @@ int Parser::findNextModule()
                     printf("error: cannot get name of module\n");
             }
             else
-                printf("error: cannot get end of module configure function\n");
+                printf("error: cannot get end of module configure Option\n");
         }
         else
-            printf("error: cannot get begin of module configure function\n");
+            printf("error: cannot get begin of module configure Option\n");
     }
     else 
         result = 0;

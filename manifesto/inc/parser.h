@@ -23,14 +23,30 @@
 
 typedef enum
 {
-    PARAMTYPE_unknown,
-    PARAMTYPE_int,
-    PARAMTYPE_flag,
-    PARAMTYPE_string,
-    PARAMTYPE_float,
-    PARAMTYPE_enum,
-    PARAMTYPE_color,
-} PARAMTYPE;
+    RPTT_unknown,
+    RPTT_int,
+    RPTT_float,
+    RPTT_string,
+    RPTT_ratio,
+} RPTT;
+
+typedef enum
+{
+    OPTTYPE_unknown,
+    OPTTYPE_int,
+    OPTTYPE_flag,
+    OPTTYPE_string,
+    OPTTYPE_float,
+    OPTTYPE_enum,
+    OPTTYPE_color,
+} OPTTYPE;
+
+
+typedef struct __tag_FUNCSEARCH
+{
+        char            funcName                [ 64 ];
+
+} FUNCSEARCH;
 
 
 // ---------------------------------------------------------------------------
@@ -48,12 +64,12 @@ public:
         char *          descRaw;
 }; 
 
-class Function
+class Option
 {
 public:
-        PARAMTYPE       type;
+        FUNCSEARCH      s;
+        OPTTYPE         type;
         int             line;
-        char            funcName                [ 64 ];
         char            name                    [ 64 ];
         char            unit                    [ 32 ];
 
@@ -75,6 +91,24 @@ public:
         char *          enums                   [ DEF_MAX_ENUMS ];
 };  
 
+class Report
+{
+public:
+        FUNCSEARCH      s;
+        RPTT            type;
+        int             line;
+        char            name                    [ 64 ];
+        char            unit                    [ 32 ];
+
+        char *          paramsRaw;
+        char *          descRaw;
+
+        int             maxVal;
+        int             minVal;
+
+        float           maxValF;
+        float           minValF;
+};  
 
 class Parser
 {
@@ -87,11 +121,13 @@ private:
         char *          funcSearchEnd;
         char *          modSearchEnd;
 
-        int             numOfFuncs;
+        int             numOfOpts;
+        int             numOfReps;
 
         Module          mod;
 
-        Function        funcs                   [ MAX_PARAMS ];
+        Option          opts                   [ MAX_PARAMS ];
+        Report          reps                   [ MAX_PARAMS ];
 
         char *          backstrstrGlobal        (char *         haystack,
                                                  const char *   needle);
@@ -112,49 +148,51 @@ private:
 
         void            resetSearching          ();
 
-        char *          findNextFunction        (Function &     func,
+        char *          findNextFunction        (FUNCSEARCH &   f,
                                                  const char *   part1,
                                                  const char *   part2);
 
         bool            getOptions              ();
 
-        bool            extractIntParam         (Function &     func,
+        bool            extractOptIntParam      (Option &       opt,
                                                  int            idx,
                                                  char *         value);
 
-        bool            extractFloatParam       (Function &     func,
+        bool            extractOptFloatParam    (Option &       opt,
                                                  int            idx,
                                                  char *         value);
 
-        bool            extractFlagParam        (Function &     func,
+        bool            extractOptFlagParam     (Option &       opt,
                                                  int            idx,
                                                  char *         value);
 
-        bool            extractStringParam      (Function &     func,
+        bool            extractOptStringParam   (Option &       opt,
                                                  int            idx,
                                                  char *         value);
 
-        bool            extractEnumParam        (Function &     func,
+        bool            extractOptEnumParam     (Option &       opt,
                                                  int            idx,
                                                  char *         value);
 
-        bool            extractColorParam       (Function &     func,
+        bool            extractOptColorParam    (Option &       opt,
                                                  int            idx,
                                                  char *         value);
 
-        bool            extractParams           (Function &     func);
+        bool            extractOptParams        (Option &       opt);
 
-        bool            extractDesc             (Function &     func,
+        bool            extractOptDesc          (Option &       opt,
                                                  char *         on);
 
-        bool            parseFunctionParams     (Function &     func,
+        bool            parseOptiosParams       (Option &       opt,
                                                  char *         on);
 
         bool            generateManifestoForModule();
 
         void            cleanValue              (char *         value);
 
-        void            resetFunctions          (bool           first);
+        void            resetOptions            (bool           first);
+
+        void            resetReports            (bool           first);
 
         int             findNextModule          ();
 
@@ -164,10 +202,22 @@ private:
 
         bool            getModuleDesc           (char *         begin);
 
+
+        bool            getReports              ();
+
+        bool            parseReportParams       (Report &       rep,
+                                                 char *         repot);
+
+        bool            extractRepParams        (Report &       rep);
+
+        bool            extractRepParam         (Report &       rep,
+                                                 int            idx,
+                                                 char *         value);
+
 public:
                         Parser                  ()
                         {
-                            numOfFuncs = 0;
+                            numOfOpts = 0;
                         }
 
         const char *    parse                   (char *         source);
@@ -176,7 +226,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// -------------------------------- FUNCTIONS --------------------------------
+// -------------------------------- OptionS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
 #endif // #define __PARSER_H__

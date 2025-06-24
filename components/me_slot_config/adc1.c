@@ -319,11 +319,11 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 
 	/* Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале
 	*/
-	ch->ratioReport = stdreport_regirster(slot_num, "unit", NULL, RPTT_ratio, ch->MIN_VAL, ch->MAX_VAL);
+	ch->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", NULL, ch->MIN_VAL, ch->MAX_VAL);
 
 	/* Возвращает текущее сырое целочисленное значение канала
 	*/
-	ch->rawReport 	= stdreport_regirster(slot_num, "unit", NULL, RPTT_int);
+	ch->rawReport 	= stdreport_register(RPTT_int, slot_num, "unit", NULL);
 
 	ch->currentReport = flag_float_output ?  ch->ratioReport : ch->rawReport;
 }

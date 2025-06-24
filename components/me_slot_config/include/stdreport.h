@@ -54,7 +54,7 @@ typedef struct __tag_STDREPORTRATIO
 
 void                stdreport_initialize        ();
 
-int                 stdreport_regirster         (int                slot_num, 
+int                 stdreport_register         (int                slot_num, 
                                                  const char *       unit,
                                                  const char *       defaultTopic,
                                                  RPTT               output_type,
