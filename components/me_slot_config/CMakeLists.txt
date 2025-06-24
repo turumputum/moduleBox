@@ -24,6 +24,7 @@ endforeach()
 
 idf_component_register(SRCS 
 						"executor.c"
+                        "stdreport.c"
 
 						"flywheel.c"
                         "sensor_2ch.c" 

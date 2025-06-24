@@ -44,6 +44,7 @@
 #include "CRSF.h"
 #include <stdarg.h>
 #include <rgbHsv.h>
+#include <stdreport.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -73,6 +74,8 @@ adc_channel_t SLOT_ADC_MAP[6]={
 int init_slots(void){
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
+
+	stdreport_initialize();
 	reporter_init();
 
 	for(int i=0;i<NUM_OF_SLOTS; i++){

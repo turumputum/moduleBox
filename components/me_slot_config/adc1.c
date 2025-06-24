@@ -25,6 +25,7 @@
 #include "stateConfig.h"
 #include "me_slot_config.h"
 #include "reporter.h"
+#include <stdreport.h>
 
 #include "esp_adc/adc_continuous.h"
 
@@ -81,7 +82,6 @@ typedef struct __tag_ADC1_CHANNEL
 
     uint16_t 				MIN_VAL;
     uint16_t 				MAX_VAL;
-    uint8_t 				flag_float_output;
 	uint8_t 				inverse;
 	float 					k;
 	uint16_t 				dead_band;
@@ -90,6 +90,10 @@ typedef struct __tag_ADC1_CHANNEL
 	char *					custom_topic;
 	int 					flag_custom_topic;
 	int 					divider;
+
+	int 					currentReport;
+	int 					ratioReport;
+	int 					rawReport;
 
 } ADC1_CHANNEL, * PADC1_CHANNEL; 
 
@@ -271,8 +275,8 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 		если указан - будет выводиться значение с плавающей точкой,
 		иначе - целочисленное
 	*/
-	ch->flag_float_output = get_option_flag_val(slot_num, "floatOutput");
-	ESP_LOGD(TAG, "S%d: Set float output = %d", slot_num, ch->flag_float_output);
+	int flag_float_output = get_option_flag_val(slot_num, "floatOutput");
+	ESP_LOGD(TAG, "S%d: Set float output = %d", slot_num, flag_float_output);
 
 	/* Определяет верхний порог значений */
 	ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 4095, 0, 4095);
@@ -311,6 +315,17 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 
 		ch->divider = 0;
 	}
+
+
+	/* Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале
+	*/
+	ch->ratioReport = stdreport_regirster(slot_num, "unit", NULL, RPTT_ratio, ch->MIN_VAL, ch->MAX_VAL);
+
+	/* Возвращает текущее сырое целочисленное значение канала
+	*/
+	ch->rawReport 	= stdreport_regirster(slot_num, "unit", NULL, RPTT_int);
+
+	ch->currentReport = flag_float_output ?  ch->ratioReport : ch->rawReport;
 }
 
 void adc1_task(void *arg)
@@ -320,8 +335,6 @@ void adc1_task(void *arg)
 	TickType_t 		lastReportTime 	= 0;
 	PADC1_CHANNEL	ch 				= &adc1_channels[slot_num];
 	uint8_t 		result			[ EXAMPLE_READ_LEN ] = {0};
-
-	char tmpString[255];
 
 	configure_adc1(ch, slot_num);
 
@@ -400,11 +413,11 @@ void adc1_task(void *arg)
 
 						if (!(slot < 0))
 						{
+// ========================================= channels iteration =========================================
+
 							PADC1_CHANNEL 	ch 		= &adc1_channels[slot];
 
 							//ESP_LOGD(TAG, "slot %d = %d", slot, (int)data);
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 							if (ch->averagingCount < oversumple)
 							{
@@ -430,38 +443,13 @@ void adc1_task(void *arg)
 									   													 	)
 								{
 									ch->prev_result = ch->result;
-									//ESP_LOGD(TAG, "analog val:%d , allow_delta:%d", resault, MAX_VAL-MIN_VAL);
 
-									int str_len;//=strlen(me_config.deviceName)+strlen("/tachometer_")+8;
-									char *str;// = (char*)malloc(str_len * sizeof(char));
-
-									float f_res = 0;
-									if(ch->flag_float_output){
-										f_res = ch->result;
-										if(f_res>ch->MAX_VAL)f_res=ch->MAX_VAL;
-										if(f_res<ch->MIN_VAL)f_res=ch->MIN_VAL;
-										f_res-=ch->MIN_VAL;
-										f_res = (float)f_res/(ch->MAX_VAL-ch->MIN_VAL);
-									}
-
-									//memset(tmpString, 0, strlen(tmpString));
-
-									if(ch->flag_float_output){
-										//sprintf(str,"%s/analog_%d:%f", me_config.deviceName, slot_num, f_res);
-										sprintf(tmpString,"%f", f_res);
-									}else{
-										//sprintf(str,"%s/analog_%d:%d", me_config.deviceName, slot_num, resault);
-										sprintf(tmpString,"%d", ch->result);
-									}
-
-									//ESP_LOGD(TAG, "slot %d result = %s", ch->slot_num, tmpString);
+									stdreport_i(ch->currentReport, ch->result);
 
 									lastReportTime = xTaskGetTickCount();
-									report(tmpString, ch->slot_num);
-									//free(str); 
 								}
 							}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ======================================================================================================
 						}
 					}
 
@@ -497,34 +485,3 @@ const char * get_manifest_adc1()
 {
 	return manifesto;
 }
-
-typedef enum
-{
-	RPT_blob		= 0,
-	RPT_string,
-	RPT_int,
-	RPT_float
-} RPT;
-
-void test()
-{
-	// ADC1_CHANNEL		c = {0};
-
-	// int 				slot_num = 1;
-
-	// // Эта строка будет в конфигурации, 
-	// // из неё мы выбираем всю инфу для манифеста
-
-	// /* Текущее значение входа с плавающей точкой
-	// */
-	// с.floatReport = regirster_stdreport(slot_num, RPT_float, "unit", "topicPoUmolchaniu");
-
-
-	// float value = 1.0;
-
-	// // А это собственно сам отчёт. 
-	// // что делать со сзначением по ссылке уже указано при регистрации
-	// stdreport(с.floatReport, &value);
-}
-
-
