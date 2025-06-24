@@ -22,7 +22,7 @@ const char * CONFIGURE_BEGIN = "void configure_";
 // -------------------------------- OptionS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-char * Parser::findNextFunction(FUNCSEARCH &    f,
+char * Parser::findNextFunction(Common &        c,
                                 const char *    part1,
                                 const char *    part2)
 {
@@ -34,21 +34,21 @@ char * Parser::findNextFunction(FUNCSEARCH &    f,
     {
         if ((end = strchr(begin, '(')) != nil)
         {
-            copyFromTo(f.funcName, begin, end);
-            cleanValue(f.funcName);
-            int len1 = strlen(f.funcName);
+            copyFromTo(c.funcName, begin, end);
+            cleanValue(c.funcName);
+            int len1 = strlen(c.funcName);
             int len2 = strlen(part2);
 
-            if (!len2 || !memcmp(f.funcName + (len1 - len2), part2, len2))
+            if (!len2 || !memcmp(c.funcName + (len1 - len2), part2, len2))
             {
                 result          = begin;
-                funcSearchEnd   = result + strlen(f.funcName);
+                funcSearchEnd   = result + strlen(c.funcName);
 
             }
             else
             {
                 funcSearchEnd   = result + strlen(part1);
-                result          = findNextFunction(f, part1, part2);
+                result          = findNextFunction(c, part1, part2);
             }
         }
     }
@@ -162,6 +162,35 @@ char * Parser::backstrstr(char *         haystack,
 
     return result;
 }
+bool Parser::extractCommonDesc(Common &     c,
+                               char *         Option)
+{
+    bool        result = false;
+    char *      begin;
+    char *      end;
+
+    if ((end = backstrstr(Option, "*/")) != nil)
+    {
+        if ((begin = backstrstr(end, "/*")) != nil)
+        {
+            begin += 2;
+
+            if (dupFromTo(c.descRaw, begin, end) > 0)
+            {
+                cleanValue(c.descRaw);
+                result = true;
+            }
+            else
+                printf("error: cannot get desc body for opt %s(%d)\n", c.name, c.line);
+        }
+        else
+            printf("error: cannot get desc begin for opt %s(%d)\n", c.name, c.line);
+    }
+    else
+        printf("error: cannot get desc end for opt %s(%d)\n", c.name, c.line);
+
+    return result;
+}
 const char * Parser::parse(char * source)
 {
     const char *            result  = 0;
@@ -174,6 +203,7 @@ const char * Parser::parse(char * source)
     //manifesto.append("[");
 
     resetOptions(true);
+    resetReports(true);
 
     do
     {
@@ -199,7 +229,7 @@ const char * Parser::parse(char * source)
                         printf("error generating manifest for module %s\n", mod.name);
                 }
                 else
-                    printf("error parsing for options\n");
+                    printf("error parsing for options or report\n");
                 break;
         }
 
@@ -216,134 +246,17 @@ const char * Parser::parse(char * source)
 bool Parser::generateManifestoForModule()
 {
     bool            result      = true;
-    Option *      f;
     char            tmp     [ 1024 ];
 
-    snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n\t\t\"options\": [\n", mod.name, mod.descRaw);
+    snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n", mod.name, mod.descRaw);
     manifesto.append(tmp);
 
-    for (int i = 0; i < numOfOpts; i++)
+    if (generateManifestoOfOptions() && generateManifestoOfReports())
     {
-        f = &opts[i];
-
-        switch (f->type)
-        {
-            case OPTTYPE_int:
-                snprintf(tmp, sizeof(tmp), 
-                        "\t\t\t{\n"
-                        "\t\t\t\t\"name\": \"%s\",\n"
-                        "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"int\",\n"
-                        "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t\t\"valueDefault\": %d,\n"
-                        "\t\t\t\t\"valueMax\": %d,\n"
-                        "\t\t\t\t\"valueMin\": %d\n"
-                        "\t\t\t},\n",
-                        f->name,
-                        f->descRaw,
-                        f->unit,
-                        f->defaultVal,
-                        f->maxVal,
-                        f->minVal);
-                   
-                break;
-        
-            case OPTTYPE_float:
-                snprintf(tmp, sizeof(tmp), 
-                        "\t\t\t{\n"
-                        "\t\t\t\t\"name\": \"%s\",\n"
-                        "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"float\",\n"
-                        "\t\t\t\t\"valueDefault\": %g,\n"
-                        "\t\t\t\t\"valueMax\": %g,\n"
-                        "\t\t\t\t\"valueMin\": %g\n"
-                        "\t\t\t},\n",
-                        f->name,
-                        f->descRaw,
-                        f->defaultValF,
-                        f->maxValF,
-                        f->minValF);
-                   
-                break;
-        
-            case OPTTYPE_flag:
-                snprintf(tmp, sizeof(tmp), 
-                        "\t\t\t{\n"
-                        "\t\t\t\t\"name\": \"%s\",\n"
-                        "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"flag\",\n"
-                        "\t\t\t},\n",
-                        f->name,
-                        f->descRaw);
-                   
-                break;
-        
-            case OPTTYPE_string:
-                snprintf(tmp, sizeof(tmp), 
-                        "\t\t\t{\n"
-                        "\t\t\t\t\"name\": \"%s\",\n"
-                        "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"string\",\n"
-                        "\t\t\t},\n",
-                        f->name,
-                        f->descRaw);
-                   
-                break;
-        
-            case OPTTYPE_enum:
-                snprintf(tmp, sizeof(tmp), 
-                        "\t\t\t{\n"
-                        "\t\t\t\t\"name\": \"%s\",\n"
-                        "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"enum\",\n"
-                        "\t\t\t\t\"values\": [ ",
-                        f->name,
-                        f->descRaw);
-
-                manifesto.append(tmp);
-
-                if (f->enumsCount > 1)
-                {
-                    for (int i = 0; i < f->enumsCount - 1; i++)
-                    {
-                        if (i)
-                            snprintf(tmp, sizeof(tmp), ", \"%s\"", f->enums[i]);
-                        else
-                            snprintf(tmp, sizeof(tmp), "\"%s\"", f->enums[i]);
-
-                        manifesto.append(tmp);
-                    }
-                }                
-
-                snprintf(tmp, sizeof(tmp), "%s", " ]\n\t\t\t},\n");
-                  
-                break;
-
-            case OPTTYPE_color:
-                snprintf(tmp, sizeof(tmp), 
-                        "\t\t\t{\n"
-                        "\t\t\t\t\"name\": \"%s\",\n"
-                        "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"color\",\n"
-                        "\t\t\t\t\"valueDefault\": \"%s\",\n"
-                        "\t\t\t},\n",
-                        f->name,
-                        f->descRaw,
-                        f->defaultValStr);
-                   
-                break;
-
-
-            default:
-                break;
-        }
-
+        snprintf(tmp, sizeof(tmp), "%s", "\t},\n");
         manifesto.append(tmp);
+        result = true;
     }
-
-    snprintf(tmp, sizeof(tmp), "\t},\n");
-    manifesto.append(tmp);
-
 
     return result;
 }

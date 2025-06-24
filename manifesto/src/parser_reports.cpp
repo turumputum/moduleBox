@@ -18,10 +18,10 @@ void Parser::resetReports(bool first)
 {
     for (int i = 0; i < int(sizeof(reps) / sizeof(Report)); i++)
     {
-        *reps[i].s.funcName = 0;
+        *reps[i].c.funcName = 0;
+        reps[i].c.line = 0;
         reps[i].type = RPTT_unknown;
-        reps[i].line = 0;
-        *reps[i].name = 0;
+        *reps[i].c.name = 0;
         *reps[i].unit = 0;
 
         if (!first)
@@ -29,12 +29,12 @@ void Parser::resetReports(bool first)
             if (!reps[i].paramsRaw)
                 free(reps[i].paramsRaw);
 
-            if (!reps[i].descRaw)
-                free(reps[i].descRaw);
+            if (!reps[i].c.descRaw)
+                free(reps[i].c.descRaw);
         }
 
         reps[i].paramsRaw = 0;
-        reps[i].descRaw = 0;
+        reps[i].c.descRaw = 0;
 
 
         reps[i].maxVal = 0;
@@ -104,7 +104,7 @@ bool Parser::extractRepParams(Report &     rep)
 
         cleanValue(tmp);
 
-        printf("param %d = '%s'\n", idx, tmp);
+        //printf("param %d = '%s'\n", idx, tmp);
 
         switch (rep.type)
         {
@@ -140,30 +140,6 @@ bool Parser::extractRepParams(Report &     rep)
                 }
                 break;
 
-            // case OPTTYPE_int:
-            //     result = extractOptIntParam(opt, idx, tmp);
-            //     break;
-            
-            // case OPTTYPE_flag:
-            //     result = extractOptFlagParam(opt, idx, tmp);
-            //     break;
-
-            // case OPTTYPE_string:
-            //     result = extractOptStringParam(opt, idx, tmp);
-            //     break;
-
-            // case OPTTYPE_float:
-            //     result = extractOptFloatParam(opt, idx, tmp);
-            //     break;
-
-            // case OPTTYPE_enum:
-            //     result = extractOptEnumParam(opt, idx, tmp);
-            //     break;
-
-            // case OPTTYPE_color:
-            //     result = extractOptColorParam(opt, idx, tmp);
-            //     break;
-
             default:
                 break;
         }
@@ -196,24 +172,24 @@ bool Parser::parseReportParams(Report &     rep,
 
                 if (extractRepParams(rep))
                 {
-                    // if (extractOptDesc(rep, report))
-                    // {
-                    //     result = true;
-                    // }
-                    // else
-                    //     printf("error: cannot extractOpt desc for opt %s(%d)\n", rep.name, rep.line);
+                    if (extractCommonDesc(rep.c, report))
+                    {
+                        result = true;
+                    }
+                    else
+                        printf("error: cannot extract desc for rep %s(%d)\n", rep.c.name, rep.c.line);
                 }
                 else
-                    printf("error: cannot extractOpt params for opt %s(%d)\n", rep.name, rep.line);
+                    printf("error: cannot extract params for rep %s(%d)\n", rep.c.name, rep.c.line);
             }
             else
-                printf("error: cannot get params body for opt %s(%d)\n", rep.name, rep.line);
+                printf("error: cannot get params body for rep %s(%d)\n", rep.c.name, rep.c.line);
         }
         else
-            printf("error: cannot get params end for opt %s(%d)\n", rep.name, rep.line);
+            printf("error: cannot get params end for rep %s(%d)\n", rep.c.name, rep.c.line);
     }
     else
-        printf("error: cannot get params begin for opt %s(%d)\n", rep.name, rep.line);
+        printf("error: cannot get params begin for rep %s(%d)\n", rep.c.name, rep.c.line);
 
     return result;
 }
@@ -225,35 +201,8 @@ bool Parser::getReports()
 
     resetReports(false);
 
-    while (result && ((on = findNextFunction(reps[numOfReps].s, "stdreport_register", "")) != nil))
+    while (result && ((on = findNextFunction(reps[numOfReps].c, "stdreport_register", "")) != nil))
     {
-        //char * name = reps[numOfReps].s.funcName;
-
-        // if (!strcmp(name, "get_option_int_val"))
-        // {
-        //     reps[numOfReps].type = OPTTYPE_int;
-        // }
-        // else if (!strcmp(name, "get_option_string_val"))
-        // {
-        //     reps[numOfReps].type = OPTTYPE_string;
-        // }
-        // else if (!strcmp(name, "get_option_float_val"))
-        // {
-        //     reps[numOfReps].type = OPTTYPE_float;
-        // }
-        // else if (!strcmp(name, "get_option_flag_val"))
-        // {
-        //     reps[numOfReps].type = OPTTYPE_flag;
-        // }
-        // else if (!strcmp(name, "get_option_enum_val"))
-        // {
-        //     reps[numOfReps].type = OPTTYPE_enum;
-        // }
-        // else if (!strcmp(name, "get_option_color_val"))
-        // {
-        //     reps[numOfReps].type = OPTTYPE_color;
-        // }
-
         if (!parseReportParams(reps[numOfReps], on))
         {
             result = false;
@@ -265,6 +214,83 @@ bool Parser::getReports()
             result = false;
         }
     }
+
+    return result;
+}
+bool Parser::generateManifestoOfReports()
+{
+    bool            result      = true;
+    Report *        f;
+    char            tmp     [ 1024 ];
+
+    snprintf(tmp, sizeof(tmp), "%s", "\t\t\"reports\": [\n");
+    manifesto.append(tmp);
+
+    for (int i = 0; i < numOfReps; i++)
+    {
+        f = &reps[i];
+
+        switch (f->type)
+        {
+    // RPTT_unknown,
+    // RPTT_int,
+    // RPTT_float,
+    // RPTT_string,
+    // RPTT_ratio,
+
+            case RPTT_int:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"int\",\n"
+                        "\t\t\t\t\"unit\": \"%s\",\n"
+                        "\t\t\t},\n",
+                        f->c.descRaw,
+                        f->unit);
+                break;
+        
+            case RPTT_float:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"float\",\n"
+                        "\t\t\t\t\"unit\": \"%s\",\n"
+                        "\t\t\t},\n",
+                        f->c.descRaw,
+                        f->unit);
+                break;
+
+            case RPTT_string:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"string\",\n"
+                        "\t\t\t\t\"unit\": \"%s\",\n"
+                        "\t\t\t},\n",
+                        f->c.descRaw,
+                        f->unit);
+                break;
+
+            case RPTT_ratio:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"ratio\",\n"
+                        "\t\t\t\t\"unit\": \"%s\",\n"
+                        "\t\t\t},\n",
+                        f->c.descRaw,
+                        f->unit);
+                break;
+
+            default:
+                break;
+        }
+
+        manifesto.append(tmp);
+    }
+
+    snprintf(tmp, sizeof(tmp), "\t\t],\n");
+    manifesto.append(tmp);
 
     return result;
 }

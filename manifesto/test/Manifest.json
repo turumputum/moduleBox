@@ -1,145 +1,171 @@
-[
-	{
-		"mode": "adc1"
-		"description": "Модуль реализует поддержку первого ADC"
-		"options": [
-			{
-				"name": "floatOutput",
-				"description": "Флаг определяет формат воводящего значения, 
-		  если указан - будет выводиться значение с плавающей точкой,
-		  иначе - целочисленное",
-				"valueType": "flag",
-			},
-			{
-				"name": "maxVal",
-				"description": "Определяет верхний порог значений",
-				"valueType": "int",
-				"unit": "",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "minVal",
-				"description": "Определяет нижний порог значений",
-				"valueType": "int",
-				"unit": "",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "inverse",
-				"description": "Флаг задаёт инвертирование значений",
-				"valueType": "flag",
-			},
-			{
-				"name": "filterK",
-				"description": "Коэфициент фильтрации",
-				"valueType": "float",
-				"valueDefault": 0,
-				"valueMax": 5,
-				"valueMin": 0
-			},
-			{
-				"name": "deadBand",
-				"description": "Фильтрация "дребезга" - определяет порог срабатывания",
-				"valueType": "int",
-				"unit": "",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "periodic",
-				"description": "Задаёт периодичночть отсчётов в миллисекундах",
-				"valueType": "int",
-				"unit": "ms",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "topic",
-				"description": "Определяет топик для MQTT сообщений",
-				"valueType": "string",
-			},
-			{
-				"name": "dividerMode",
-				"description": "Задаёт режим делителя",
-				"valueType": "string",
-			},
-	},
-
-	{
-		"mode": "adc2"
-		"description": "Модуль реализует поддержку второго ADC"
-		"options": [
-			{
-				"name": "floatOutput",
-				"description": "Флаг определяет формат воводящего значения, 
-		  если указан - будет выводиться значение с плавающей точкой,
-		  иначе - целочисленное",
-				"valueType": "flag",
-			},
-			{
-				"name": "maxVal",
-				"description": "Определяет верхний порог значений",
-				"valueType": "int",
-				"unit": "",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "minVal",
-				"description": "Определяет нижний порог значений",
-				"valueType": "int",
-				"unit": "",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "inverse",
-				"description": "Флаг задаёт инвертирование значений",
-				"valueType": "flag",
-			},
-			{
-				"name": "filterK",
-				"description": "Коэфициент фильтрации",
-				"valueType": "float",
-				"valueDefault": 0,
-				"valueMax": 5,
-				"valueMin": 0
-			},
-			{
-				"name": "deadBand",
-				"description": "Фильтрация "дребезга" - определяет порог срабатывания",
-				"valueType": "int",
-				"unit": "",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "periodic",
-				"description": "Задаёт периодичночть отсчётов в миллисекундах",
-				"valueType": "int",
-				"unit": "ms",
-				"valueDefault": 10,
-				"valueMax": 4096,
-				"valueMin": 1
-			},
-			{
-				"name": "topic",
-				"description": "Определяет топик для MQTT сообщений",
-				"valueType": "string",
-			},
-			{
-				"name": "dividerMode",
-				"description": "Задаёт режим делителя",
-				"valueType": "string",
-			},
-	},
-]
+static const char manifesto[] ="\n"
+"	{\n"
+"		\"mode\": \"adc1\"\n"
+"		\"description\": \"Модуль реализует поддержку первого ADC\"\n"
+"		\"options\": [\n"
+"			{\n"
+"				\"name\": \"floatOutput\",\n"
+"				\"description\": \"Флаг определяет формат воводящего значения, \n"
+"		  если указан - будет выводиться значение с плавающей точкой,\n"
+"		  иначе - целочисленное\",\n"
+"				\"valueType\": \"flag\",\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"maxVal\",\n"
+"				\"description\": \"Определяет верхний порог значений\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"minVal\",\n"
+"				\"description\": \"Определяет нижний порог значений\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"inverse\",\n"
+"				\"description\": \"Флаг задаёт инвертирование значений\",\n"
+"				\"valueType\": \"flag\",\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"filterK\",\n"
+"				\"description\": \"Коэфициент фильтрации\",\n"
+"				\"valueType\": \"float\",\n"
+"				\"valueDefault\": 0,\n"
+"				\"valueMax\": 5,\n"
+"				\"valueMin\": 0\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"deadBand\",\n"
+"				\"description\": \"Фильтрация \"дребезга\" - определяет порог срабатывания\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"periodic\",\n"
+"				\"description\": \"Задаёт периодичночть отсчётов в миллисекундах\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"ms\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"topic\",\n"
+"				\"description\": \"Определяет топик для MQTT сообщений\",\n"
+"				\"valueType\": \"string\",\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"dividerMode\",\n"
+"				\"description\": \"Задаёт режим делителя\",\n"
+"				\"valueType\": \"string\",\n"
+"			},\n"
+"		],\n"
+"		\"reports\": [\n"
+"			{\n"
+"				\"description\": \"Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале\",\n"
+"				\"valueType\": \"ratio\",\n"
+"				\"unit\": \"\",\n"
+"			},\n"
+"			{\n"
+"				\"description\": \"Возвращает текущее сырое целочисленное значение канала\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"			},\n"
+"		],\n"
+"	},\n"
+"\n"
+"	{\n"
+"		\"mode\": \"adc2\"\n"
+"		\"description\": \"Модуль реализует поддержку второго ADC\"\n"
+"		\"options\": [\n"
+"			{\n"
+"				\"name\": \"floatOutput\",\n"
+"				\"description\": \"Флаг определяет формат воводящего значения, \n"
+"		  если указан - будет выводиться значение с плавающей точкой,\n"
+"		  иначе - целочисленное\",\n"
+"				\"valueType\": \"flag\",\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"maxVal\",\n"
+"				\"description\": \"Определяет верхний порог значений\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"minVal\",\n"
+"				\"description\": \"Определяет нижний порог значений\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"inverse\",\n"
+"				\"description\": \"Флаг задаёт инвертирование значений\",\n"
+"				\"valueType\": \"flag\",\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"filterK\",\n"
+"				\"description\": \"Коэфициент фильтрации\",\n"
+"				\"valueType\": \"float\",\n"
+"				\"valueDefault\": 0,\n"
+"				\"valueMax\": 5,\n"
+"				\"valueMin\": 0\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"deadBand\",\n"
+"				\"description\": \"Фильтрация \"дребезга\" - определяет порог срабатывания\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"periodic\",\n"
+"				\"description\": \"Задаёт периодичночть отсчётов в миллисекундах\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"ms\",\n"
+"				\"valueDefault\": 10,\n"
+"				\"valueMax\": 4096,\n"
+"				\"valueMin\": 1\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"topic\",\n"
+"				\"description\": \"Определяет топик для MQTT сообщений\",\n"
+"				\"valueType\": \"string\",\n"
+"			},\n"
+"			{\n"
+"				\"name\": \"dividerMode\",\n"
+"				\"description\": \"Задаёт режим делителя\",\n"
+"				\"valueType\": \"string\",\n"
+"			},\n"
+"		],\n"
+"		\"reports\": [\n"
+"			{\n"
+"				\"description\": \"Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале\",\n"
+"				\"valueType\": \"ratio\",\n"
+"				\"unit\": \"\",\n"
+"			},\n"
+"			{\n"
+"				\"description\": \"Возвращает текущее сырое целочисленное значение канала\",\n"
+"				\"valueType\": \"int\",\n"
+"				\"unit\": \"\",\n"
+"			},\n"
+"		],\n"
+"	},\n"
+"";

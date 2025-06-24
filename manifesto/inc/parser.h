@@ -42,11 +42,14 @@ typedef enum
 } OPTTYPE;
 
 
-typedef struct __tag_FUNCSEARCH
+typedef struct __tag_Common
 {
+        int             line;
+        char *          descRaw;
+        char            name                    [ 64 ];
         char            funcName                [ 64 ];
 
-} FUNCSEARCH;
+} Common;
 
 
 // ---------------------------------------------------------------------------
@@ -67,14 +70,12 @@ public:
 class Option
 {
 public:
-        FUNCSEARCH      s;
+        Common          c;
         OPTTYPE         type;
-        int             line;
         char            name                    [ 64 ];
         char            unit                    [ 32 ];
 
         char *          paramsRaw;
-        char *          descRaw;
 
         int             defaultVal;
         int             maxVal;
@@ -94,14 +95,11 @@ public:
 class Report
 {
 public:
-        FUNCSEARCH      s;
+        Common          c;
         RPTT            type;
-        int             line;
-        char            name                    [ 64 ];
         char            unit                    [ 32 ];
 
         char *          paramsRaw;
-        char *          descRaw;
 
         int             maxVal;
         int             minVal;
@@ -148,7 +146,7 @@ private:
 
         void            resetSearching          ();
 
-        char *          findNextFunction        (FUNCSEARCH &   f,
+        char *          findNextFunction        (Common &       c,
                                                  const char *   part1,
                                                  const char *   part2);
 
@@ -180,6 +178,9 @@ private:
 
         bool            extractOptParams        (Option &       opt);
 
+        bool            extractCommonDesc       (Common &       c,
+                                                 char *         opt);
+
         bool            extractOptDesc          (Option &       opt,
                                                  char *         on);
 
@@ -187,6 +188,10 @@ private:
                                                  char *         on);
 
         bool            generateManifestoForModule();
+
+        bool            generateManifestoOfOptions();
+
+        bool            generateManifestoOfReports();
 
         void            cleanValue              (char *         value);
 

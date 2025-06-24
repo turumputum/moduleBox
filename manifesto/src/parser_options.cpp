@@ -14,46 +14,13 @@
 // -------------------------------- OptionS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-// char * Parser::findNextOption(Option &     opt,
-//                                 const char *   part1,
-//                                 const char *   part2)
-// {
-//     char *              result = 0;
-//     char *              begin;
-//     char *              end;
-
-//     if ((begin = strstr(stageSearchEnd,  part1)) != nil)
-//     {
-//         if ((end = strchr(begin, '(')) != nil)
-//         {
-//             copyFromTo(opt.funcName, begin, end);
-//             cleanValue(opt.funcName);
-//             int len1 = strlen(opt.funcName);
-//             int len2 = strlen(part2);
-
-//             if (!memcmp(opt.funcName + (len1 - len2), part2, len2))
-//             {
-//                 result      = begin;
-//                 stageSearchEnd   = result + strlen(opt.funcName);
-
-//             }
-//             else
-//             {
-//                 stageSearchEnd   = result + strlen(part1);
-//                 result      = findNextOption(opt, part1, part2);
-//             }
-//         }
-//     }
-
-//     return result;
-// }
 void Parser::resetOptions(bool first)
 {
     for (int i = 0; i < int(sizeof(opts) / sizeof(Option)); i++)
     {
-        *opts[i].s.funcName = 0;
+        *opts[i].c.funcName = 0;
         opts[i].type = OPTTYPE_unknown;
-        opts[i].line = 0;
+        opts[i].c.line = 0;
         *opts[i].name = 0;
         *opts[i].unit = 0;
 
@@ -62,12 +29,12 @@ void Parser::resetOptions(bool first)
             if (!opts[i].paramsRaw)
                 free(opts[i].paramsRaw);
 
-            if (!opts[i].descRaw)
-                free(opts[i].descRaw);
+            if (!opts[i].c.descRaw)
+                free(opts[i].c.descRaw);
         }
 
         opts[i].paramsRaw = 0;
-        opts[i].descRaw = 0;
+        opts[i].c.descRaw = 0;
 
 
         opts[i].defaultVal = 0;
@@ -82,35 +49,6 @@ void Parser::resetOptions(bool first)
     }
     
     numOfOpts = 0;
-}
-bool Parser::extractOptDesc(Option &     opt,
-                         char *         Option)
-{
-    bool        result = false;
-    char *      begin;
-    char *      end;
-
-    if ((end = backstrstr(Option, "*/")) != nil)
-    {
-        if ((begin = backstrstr(end, "/*")) != nil)
-        {
-            begin += 2;
-
-            if (dupFromTo(opt.descRaw, begin, end) > 0)
-            {
-                cleanValue(opt.descRaw);
-                result = true;
-            }
-            else
-                printf("error: cannot get desc body for opt %s(%d)\n", opt.name, opt.line);
-        }
-        else
-            printf("error: cannot get desc begin for opt %s(%d)\n", opt.name, opt.line);
-    }
-    else
-        printf("error: cannot get desc end for opt %s(%d)\n", opt.name, opt.line);
-
-    return result;
 }
 bool Parser::extractOptIntParam(Option &     opt,
                              int            idx,
@@ -365,12 +303,12 @@ bool Parser::getOptions()
 
     resetOptions(false);
 
-    while (result && ((on = findNextFunction(opts[numOfOpts].s, "get_option_", "_val")) != nil))
+    while (result && ((on = findNextFunction(opts[numOfOpts].c, "get_option_", "_val")) != nil))
     {
         // printf("parser.cpp:162 - stage %d\n", stage);
         // stage++;
 
-        char * name = opts[numOfOpts].s.funcName;
+        char * name = opts[numOfOpts].c.funcName;
 
         if (!strcmp(name, "get_option_int_val"))
         {
@@ -433,24 +371,157 @@ bool Parser::parseOptiosParams(Option &     opt,
 
                 if (extractOptParams(opt))
                 {
-                    if (extractOptDesc(opt, option))
+                    if (extractCommonDesc(opt.c, option))
                     {
                         result = true;
                     }
                     else
-                        printf("error: cannot extract desc for opt %s(%d)\n", opt.name, opt.line);
+                        printf("error: cannot extract desc for opt %s(%d)\n", opt.name, opt.c.line);
                 }
                 else
-                    printf("error: cannot extract params for opt %s(%d)\n", opt.name, opt.line);
+                    printf("error: cannot extract params for opt %s(%d)\n", opt.name, opt.c.line);
             }
             else
-                printf("error: cannot get params body for opt %s(%d)\n", opt.name, opt.line);
+                printf("error: cannot get params body for opt %s(%d)\n", opt.name, opt.c.line);
         }
         else
-            printf("error: cannot get params end for opt %s(%d)\n", opt.name, opt.line);
+            printf("error: cannot get params end for opt %s(%d)\n", opt.name, opt.c.line);
     }
     else
-        printf("error: cannot get params begin for opt %s(%d)\n", opt.name, opt.line);
+        printf("error: cannot get params begin for opt %s(%d)\n", opt.name, opt.c.line);
+
+    return result;
+}
+bool Parser::generateManifestoOfOptions()
+{
+    bool            result      = true;
+    Option *        f;
+    char            tmp     [ 1024 ];
+
+    snprintf(tmp, sizeof(tmp), "%s", "\t\t\"options\": [\n");
+    manifesto.append(tmp);
+
+    for (int i = 0; i < numOfOpts; i++)
+    {
+        f = &opts[i];
+
+        switch (f->type)
+        {
+            case OPTTYPE_int:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"int\",\n"
+                        "\t\t\t\t\"unit\": \"%s\",\n"
+                        "\t\t\t\t\"valueDefault\": %d,\n"
+                        "\t\t\t\t\"valueMax\": %d,\n"
+                        "\t\t\t\t\"valueMin\": %d\n"
+                        "\t\t\t},\n",
+                        f->name,
+                        f->c.descRaw,
+                        f->unit,
+                        f->defaultVal,
+                        f->maxVal,
+                        f->minVal);
+                   
+                break;
+        
+            case OPTTYPE_float:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"float\",\n"
+                        "\t\t\t\t\"valueDefault\": %g,\n"
+                        "\t\t\t\t\"valueMax\": %g,\n"
+                        "\t\t\t\t\"valueMin\": %g\n"
+                        "\t\t\t},\n",
+                        f->name,
+                        f->c.descRaw,
+                        f->defaultValF,
+                        f->maxValF,
+                        f->minValF);
+                   
+                break;
+        
+            case OPTTYPE_flag:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"flag\",\n"
+                        "\t\t\t},\n",
+                        f->name,
+                        f->c.descRaw);
+                   
+                break;
+        
+            case OPTTYPE_string:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"string\",\n"
+                        "\t\t\t},\n",
+                        f->name,
+                        f->c.descRaw);
+                   
+                break;
+        
+            case OPTTYPE_enum:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"enum\",\n"
+                        "\t\t\t\t\"values\": [ ",
+                        f->name,
+                        f->c.descRaw);
+
+                manifesto.append(tmp);
+
+                if (f->enumsCount > 1)
+                {
+                    for (int i = 0; i < f->enumsCount - 1; i++)
+                    {
+                        if (i)
+                            snprintf(tmp, sizeof(tmp), ", \"%s\"", f->enums[i]);
+                        else
+                            snprintf(tmp, sizeof(tmp), "\"%s\"", f->enums[i]);
+
+                        manifesto.append(tmp);
+                    }
+                }                
+
+                snprintf(tmp, sizeof(tmp), "%s", " ]\n\t\t\t},\n");
+                  
+                break;
+
+            case OPTTYPE_color:
+                snprintf(tmp, sizeof(tmp), 
+                        "\t\t\t{\n"
+                        "\t\t\t\t\"name\": \"%s\",\n"
+                        "\t\t\t\t\"description\": \"%s\",\n"
+                        "\t\t\t\t\"valueType\": \"color\",\n"
+                        "\t\t\t\t\"valueDefault\": \"%s\",\n"
+                        "\t\t\t},\n",
+                        f->name,
+                        f->c.descRaw,
+                        f->defaultValStr);
+                   
+                break;
+
+
+            default:
+                break;
+        }
+
+        manifesto.append(tmp);
+    }
+
+    snprintf(tmp, sizeof(tmp), "\t\t],\n");
+    manifesto.append(tmp);
 
     return result;
 }
