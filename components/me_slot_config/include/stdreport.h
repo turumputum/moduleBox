@@ -30,7 +30,6 @@ typedef enum
 
 typedef struct __tag_STDREPORT
 {
-    uint32_t                meaningful  : 1;
     uint32_t                slot_num    : 3;
     uint32_t                outType     : 3;
 

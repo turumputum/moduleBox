@@ -444,9 +444,11 @@ void adc1_task(void *arg)
 								{
 									ch->prev_result = ch->result;
 
-									//printf("@@@@@@@ slot %d, value %d\n", ch->slot_num, ch->result);
+									//printf("@@@@@@@ >> slot %d, value %d\n", ch->slot_num, ch->result);
 
 									stdreport_i(ch->currentReport, ch->result);
+
+									//printf("@@@@@@@ << slot %d, value %d\n", ch->slot_num, ch->result);
 
 									lastReportTime = xTaskGetTickCount();
 								}
