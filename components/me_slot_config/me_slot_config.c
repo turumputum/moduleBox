@@ -394,6 +394,8 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 			{
 				ESP_LOGW(TAG, "Color wrong format:%s", dup);
 			}
+			else
+				result = ESP_OK;
 		}
 		else
 		{
