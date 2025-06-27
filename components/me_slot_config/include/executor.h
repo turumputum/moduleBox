@@ -1,4 +1,16 @@
+// ***************************************************************************
+// TITLE
+//
+// PROJECT
+//     moduleBox
+// ***************************************************************************
+
+
+#ifndef __EXECUTOR_H__
+#define __EXECUTOR_H__
+
 #define MAX_STRING_LENGTH 255
+
 
 typedef struct {
 	char str[MAX_STRING_LENGTH];
@@ -19,3 +31,8 @@ void exec_led(int slot_num, int payload);
 void init_led(int slot_num);
 void init_optorelay(int slot_num);
 void init_3n_mosfet(int slot_num);
+
+
+
+#endif // #define __EXECUTOR_H__
+
