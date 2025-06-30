@@ -204,6 +204,7 @@ const char * Parser::parse(char * source)
 
     resetOptions(true);
     resetReports(true);
+    resetCommands(true);
 
     do
     {
@@ -219,7 +220,8 @@ const char * Parser::parse(char * source)
 
             default:
                 if (  getOptions()  &&
-                      getReports()  )
+                      getReports()  && 
+                      getCommands() )
                 {
                     if (generateManifestoForModule())
                     {
@@ -229,7 +231,7 @@ const char * Parser::parse(char * source)
                         printf("error generating manifest for module %s\n", mod.name);
                 }
                 else
-                    printf("error parsing for options or report\n");
+                    printf("error parsing for options, report or command\n");
                 break;
         }
 
@@ -251,7 +253,9 @@ bool Parser::generateManifestoForModule()
     snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n", mod.name, mod.descRaw);
     manifesto.append(tmp);
 
-    if (generateManifestoOfOptions() && generateManifestoOfReports())
+    if (  generateManifestoOfOptions()  && 
+          generateManifestoOfReports()  &&
+          generateManifestoOfCommands() )
     {
         snprintf(tmp, sizeof(tmp), "%s", "\t},\n");
         manifesto.append(tmp);

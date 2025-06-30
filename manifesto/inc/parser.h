@@ -41,6 +41,15 @@ typedef enum
     OPTTYPE_color,
 } OPTTYPE;
 
+typedef enum
+{
+    PARAMT_none = 0,
+    PARAMT_int,
+    PARAMT_float,
+    PARAMT_string
+} PARAMT;
+
+
 
 typedef struct __tag_Common
 {
@@ -108,6 +117,19 @@ public:
         float           minValF;
 };  
 
+class Command
+{
+public:
+        Common          c;
+        char            name                    [ 32 ];
+
+        char *          paramsRaw;
+
+        int             paramsCount;
+        PARAMT          params                  [ DEF_MAX_ENUMS ];
+};  
+
+
 class Parser
 {
 private:
@@ -121,11 +143,13 @@ private:
 
         int             numOfOpts;
         int             numOfReps;
+        int             numOfCmds;
 
         Module          mod;
 
         Option          opts                   [ MAX_PARAMS ];
         Report          reps                   [ MAX_PARAMS ];
+        Command         cmds                   [ MAX_PARAMS ];
 
         char *          backstrstrGlobal        (char *         haystack,
                                                  const char *   needle);
@@ -192,12 +216,15 @@ private:
         bool            generateManifestoOfOptions();
 
         bool            generateManifestoOfReports();
+        bool            generateManifestoOfCommands();
 
         void            cleanValue              (char *         value);
 
         void            resetOptions            (bool           first);
 
         void            resetReports            (bool           first);
+
+        void            resetCommands           (bool           first);
 
         int             findNextModule          ();
 
@@ -210,6 +237,9 @@ private:
 
         bool            getReports              ();
 
+        bool            getCommands             ();
+
+
         bool            parseReportParams       (Report &       rep,
                                                  char *         repot);
 
@@ -218,6 +248,13 @@ private:
         bool            extractRepParam         (Report &       rep,
                                                  int            idx,
                                                  char *         value);
+
+        bool            parseCommandParams      (Command &      cmd,
+                                                 char *         command);
+
+        bool            extractCmdParams        (Command &      cmd);
+
+        PARAMT          extractCmdParamType     (char *         value);
 
 public:
                         Parser                  ()

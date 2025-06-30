@@ -161,6 +161,15 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
 
     if (xQueueReceive(me_state.command_queue[cmd->slot_num], &cmd->msg, TO) == pdPASS)
     {
+        // printf("MSG HEX: ");
+        // for (int i = 0; i < 50; i++)
+        // {
+        //     printf("%x ", cmd->msg.str[i]);
+        // }
+        // printf("\n");
+
+        params->count = 0;
+
         if ((keyword = strchr(cmd->msg.str, ':')) != NULL)
         {
             ++keyword;
@@ -189,45 +198,45 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
                 keyword = NULL;
             }
             
-            printf("@@@@@ COMMAND: keyword = '%s'\n", keyword ? keyword : "<<nope>>");
-
-            printf("params = %d\n", params->count);
-
-
-            for (int i = 0; i < params->count; i++)
-            {
-                printf("param %d, type: %s, value: ", i, paramt[params->p[i].type]);
-
-                switch (params->p[i].type)
-                {
-                    case PARAMT_int:
-                        printf("%d", (int)params->p[i].data);
-                        break;
-                
-                    case PARAMT_float:
-                        printf("%f", (float)params->p[i].data);
-                        break;
-                
-                    default:
-                        printf("'%s'", (char*)params->p[i].data);
-                        break;
-                }
-                
-                printf("\n");
-            }
+            //printf("@@@@@ COMMAND: keyword = '%s'\n", keyword ? keyword : "<<nope>>");
+            //printf("params = %d\n", params->count);
+            // for (int i = 0; i < params->count; i++)
+            // {
+            //     printf("param %d, type: %s, value: ", i, paramt[params->p[i].type]);
+            //     switch (params->p[i].type)
+            //     {
+            //         case PARAMT_int:
+            //             printf("%d", (int)params->p[i].data);
+            //             break;
+            //         case PARAMT_float:
+            //             printf("%f", (float)params->p[i].data);
+            //             break;
+            //         default:
+            //             printf("'%s'", (char*)params->p[i].data);
+            //             break;
+            //     }
+            //     printf("\n");
+            // }
 
             if (keyword)
             {
-                printf("stage 1\n");
-                for (int i = 0; i < cmd->count; i++)
+                for (int i = 0; (i < cmd->count) && (-1 == result); i++)
                 {
-                    printf("stage 2\n");
-
                     if (!strcasecmp(cmd->keywords[i].keyword, keyword))
                     {
-                        printf("stage 3: %d\n", i);
-                        result = cmd->keywords[i].id;
-                        break;
+                        if (cmd->count == params->count)
+                        {
+                            result = cmd->keywords[i].id;
+
+                            for (int j = 0; (j < cmd->count) && (-1 != result); j++)
+                            {
+                                if (cmd->keywords[i].t[j] != params->p[j].type)
+                                {
+                                    //printf("stage 4: WRONG TYPE!!!\n");
+                                    result = -1;
+                                }
+                            }
+                        }
                     }
                 }
             }

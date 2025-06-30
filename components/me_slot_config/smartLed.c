@@ -342,16 +342,16 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     /* Установить новый целевой цвет. 
        Цвет задаётся десятичными значениями R G B через пробел
     */
-    stdcommand_register(&c->cmds, MYCMD_setRGB, "setrgb", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новый режим анимации цветов
        Допустимые значения: default, flash, glitch, swiper, rainbow, run
     */
-    stdcommand_register(&c->cmds, MYCMD_setMode, "setmode", PARAMT_string);
+    stdcommand_register(&c->cmds, MYCMD_setMode, "setMode", PARAMT_string);
 
     /* Установить новое значение приращения
     */
-    stdcommand_register(&c->cmds, MYCMD_setIncrement, "setincrement", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setIncrement, "setIncrement", PARAMT_int);
 }
 void smartLed_task(void *arg){
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
@@ -398,56 +398,47 @@ void smartLed_task(void *arg){
 
     while (1) {
 
+
         switch (stdcommand_receive(&c->cmds, &params, 0))
         {
-            case 0: // Unknown or absent keyword
-                if ((params.count > 0) && (params.p[0].type == PARAMT_int))
-                {
-                    c->state = params.p[0].data;
-                    if(c->ledMode==MODE_RUN){
-                        init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
-                    }
-                    if(c->state==0){
-                        currentBright = targetBright-1;
-                    }
-                    ESP_LOGD(TAG, "Slot:%d Change state to:%d freeHeap:%d",slot_num, c->state, xPortGetFreeHeapSize());
-                }
-                break;
+        //     case 0: // Unknown or absent keyword
+        //         if ((params.count == 1) && (params.p[0].type == PARAMT_int))
+        //         {
+        //             c->state = params.p[0].data;
+        //             if(c->ledMode==MODE_RUN){
+        //                 init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+        //             }
+        //             if(c->state==0){
+        //                 currentBright = targetBright-1;
+        //             }
+        //             ESP_LOGD(TAG, "Slot:%d Change state to:%d freeHeap:%d",slot_num, c->state, xPortGetFreeHeapSize());
+        //         }
+        //         break;
 
-            case MYCMD_setRGB:
-                if (  (params.count == 3)               && 
-                      (params.p[0].type == PARAMT_int)  &&
-                      (params.p[1].type == PARAMT_int)  &&
-                      (params.p[2].type == PARAMT_int)  )
-                {
-                    c->targetRGB.r = params.p[0].data;
-                    c->targetRGB.g = params.p[1].data;
-                    c->targetRGB.b = params.p[2].data;
+        //     case MYCMD_setRGB:
+        //         c->targetRGB.r = params.p[0].data;
+        //         c->targetRGB.g = params.p[1].data;
+        //         c->targetRGB.b = params.p[2].data;
 
-                    ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
-                }
-                break;
+        //         ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
+        //         break;
 
-            case MYCMD_setMode:
-                if ((params.count > 0) && (params.p[0].type == PARAMT_string))
-                {
-                    c->ledMode = modeToEnum((char*)params.p[0].data);
-                    if(c->ledMode==MODE_RUN)
-                    {
-                        init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
-                    }
-                }
-                break;
+        //     case MYCMD_setMode:
+        //         c->ledMode = modeToEnum((char*)params.p[0].data);
+        //         if(c->ledMode==MODE_RUN)
+        //         {
+        //             init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+        //         }
+        //         break;
 
-            case MYCMD_setIncrement:
-                if ((params.count > 0) && (params.p[0].type == PARAMT_int))
-                {
-                    c->increment = params.p[0].data;
-                    ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
-                }
-                break;
+        //     case MYCMD_setIncrement:
+        //         c->increment = params.p[0].data;
+        //         ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
+        //         break;
 
             default:
+                ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
+                //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
                 break;                
         }
 
