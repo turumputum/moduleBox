@@ -44,7 +44,7 @@ typedef struct __tag_SMARTLEDCONFIG
     int16_t                 minBright;
     uint16_t                refreshPeriod;
     RgbColor                targetRGB;
-    uint8_t                 ledMode;
+    int                     ledMode;
     int                     floatReport;
     int                     numOfPos;
     uint16_t                effectLen;
@@ -345,9 +345,8 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новый режим анимации цветов
-       Допустимые значения: default, flash, glitch, swiper, rainbow, run
     */
-    stdcommand_register(&c->cmds, MYCMD_setMode, "setMode", PARAMT_string);
+    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "setMode", "default", "flash", "glitch", "swiper", "rainbow", "run");
 
     /* Установить новое значение приращения
     */
@@ -398,46 +397,52 @@ void smartLed_task(void *arg){
 
     while (1) {
 
-
         switch (stdcommand_receive(&c->cmds, &params, 0))
         {
-        //     case 0: // Unknown or absent keyword
-        //         if ((params.count == 1) && (params.p[0].type == PARAMT_int))
-        //         {
-        //             c->state = params.p[0].data;
-        //             if(c->ledMode==MODE_RUN){
-        //                 init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
-        //             }
-        //             if(c->state==0){
-        //                 currentBright = targetBright-1;
-        //             }
-        //             ESP_LOGD(TAG, "Slot:%d Change state to:%d freeHeap:%d",slot_num, c->state, xPortGetFreeHeapSize());
-        //         }
-        //         break;
+            case -1: // none
+                break;
 
-        //     case MYCMD_setRGB:
-        //         c->targetRGB.r = params.p[0].data;
-        //         c->targetRGB.g = params.p[1].data;
-        //         c->targetRGB.b = params.p[2].data;
+            case 0: // Unknown or absent keyword
+                if ((params.count == 1) && (params.p[0].type == PARAMT_int))
+                {
+                    c->state = params.p[0].data;
+                    if(c->ledMode==MODE_RUN){
+                        init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+                    }
+                    if(c->state==0){
+                        currentBright = targetBright-1;
+                    }
+                    ESP_LOGD(TAG, "Slot:%d Change state to:%d freeHeap:%d",slot_num, c->state, xPortGetFreeHeapSize());
+                }
+                break;
 
-        //         ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
-        //         break;
+            case MYCMD_setRGB:
+                c->targetRGB.r = params.p[0].data;
+                c->targetRGB.g = params.p[1].data;
+                c->targetRGB.b = params.p[2].data;
 
-        //     case MYCMD_setMode:
-        //         c->ledMode = modeToEnum((char*)params.p[0].data);
-        //         if(c->ledMode==MODE_RUN)
-        //         {
-        //             init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
-        //         }
-        //         break;
+                ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
+                break;
 
-        //     case MYCMD_setIncrement:
-        //         c->increment = params.p[0].data;
-        //         ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
-        //         break;
+            case MYCMD_setMode:
+                c->ledMode = params.enumResult;
+                
+                if(c->ledMode==MODE_RUN)
+                {
+                    ESP_LOGD(TAG, "Slot:%d init run effect", slot_num); 
+
+                    init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+                }
+                break;
+
+            case MYCMD_setIncrement:
+                c->increment = params.p[0].data;
+                ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
+                break;
+
 
             default:
-                ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
+                //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: \n");
                 //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
                 break;                
         }

@@ -419,7 +419,6 @@ void report(char *msg, int slot_num){
 	//free(send_message.str);
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 }
-
 void reportState(){
 	char tmpStr[512];  // Increased buffer size for JSON
     

@@ -30,7 +30,8 @@ typedef enum
     PARAMT_none = 0,
     PARAMT_int,
     PARAMT_float,
-    PARAMT_string
+    PARAMT_string,
+    PARAMT_enum
 } PARAMT;
 
 
@@ -43,6 +44,7 @@ typedef struct __tag_STDCOMMANDPARAM
 typedef struct __tag_STDCOMMAND_PARAMS
 {
     int                     count;
+    int                     enumResult;
     STDCOMMANDPARAM         p                   [ STDCOMMAN_MAX_PARAMS ];
 } STDCOMMAND_PARAMS, * PSTDCOMMAND_PARAMS;
 
@@ -50,7 +52,9 @@ typedef struct __tag_STDCOMMAND_KEYWORD
 {
     const char *            keyword;
     int                     id;
-    PARAMT                  t                   [ STDCOMMAN_MAX_PARAMS ];
+    PARAMT                  type;
+    int                     count;
+    char *                  p                   [ STDCOMMAN_MAX_PARAMS ];
 } STDCOMMAND_KEYWORD, * PSTDCOMMAND_KEYWORD;
 
 typedef struct __tag_STDCOMMANDS
@@ -67,6 +71,11 @@ do {                                                                            
     _stdcommand_register(a,b,c, sizeof(parameters)/sizeof(PARAMT), __VA_ARGS__); \
 } while(0)
 
+#define stdcommand_register_enum(a,b,c,...)                                     \
+do {                                                                            \
+    char * parameters[] = {__VA_ARGS__};                                        \
+    _stdcommand_register_enum(a,b,c, sizeof(parameters)/sizeof(char*), __VA_ARGS__); \
+} while(0)
 
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
@@ -76,7 +85,13 @@ void                stdcommand_init             (PSTDCOMMANDS       cmd,
                                                  int                slot_num);
 
 
-void                _stdcommand_register        (PSTDCOMMANDS       cmd,
+int                 _stdcommand_register        (PSTDCOMMANDS       cmd,
+                                                 int                id,
+                                                 const char *       keyword,
+                                                 int                count,
+                                                 ...);
+
+int                 _stdcommand_register_enum   (PSTDCOMMANDS       cmd,
                                                  int                id,
                                                  const char *       keyword,
                                                  int                count,

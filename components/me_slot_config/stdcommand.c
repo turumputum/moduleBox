@@ -11,6 +11,7 @@
 #include "freertos/semphr.h"
 #include <stateConfig.h>
 #include <string.h>
+#include "esp_log.h"
 
 #include <stdcommand.h>
 
@@ -18,13 +19,16 @@
 // ---------------------------------- DATA -----------------------------------
 // -----|-------------------|-------------------------------------------------
 
+static const char *TAG = "MAIN";
+
 extern stateStruct me_state;
 
 const char * paramt[] = {
 "none",
 "int",
 "float",
-"string"
+"string",
+"enum"
 };
 
 // ---------------------------------------------------------------------------
@@ -38,12 +42,13 @@ void stdcommand_init(PSTDCOMMANDS       cmd,
 
     cmd->slot_num = slot_num;
 }
-void _stdcommand_register(PSTDCOMMANDS       cmd,
+int _stdcommand_register(PSTDCOMMANDS       cmd,
                          int                id,
                          const char *       keyword,
                          int                count,
                         ...)
 {
+    int             result  = 1;
     int             i       = cmd->count;
     va_list         list;
 
@@ -51,18 +56,61 @@ void _stdcommand_register(PSTDCOMMANDS       cmd,
 
     cmd->keywords[i].keyword    = keyword;
     cmd->keywords[i].id         = id;
+    cmd->keywords[i].type       = PARAMT_none;
+    cmd->keywords[i].count      = count;
 
     //printf("add keyword: %s\n", keyword);
 
-    for (int j = 0; j < count; j++)
+    for (int j = 0; (j < count) && (result > 0); j++)
     {
-        cmd->keywords[i].t[j] = va_arg(list, int);
-        //printf("    param %s\n", paramt[cmd->keywords[i].t[j]]);
+        cmd->keywords[i].p[j] = va_arg(list, int);
+
+        if (cmd->keywords[i].p[j] == PARAMT_enum)
+        {
+            ESP_LOGD(TAG, "stdcommand: %s parameter unacceptable\n", paramt[(int)cmd->keywords[i].p[j]]);
+            result = -1;
+        }
     }
 
     cmd->count++;
    
    va_end(list);
+
+   return result;
+}               
+int _stdcommand_register_enum(PSTDCOMMANDS       cmd,
+                              int                id,
+                              const char *       keyword,
+                              int                count,
+                              ...)
+{
+    int             result  = 1;
+    int             i       = cmd->count;
+    va_list         list;
+
+    va_start(list, count);
+
+    cmd->keywords[i].keyword    = keyword;
+    cmd->keywords[i].id         = id;
+    cmd->keywords[i].type       = PARAMT_enum;
+    cmd->keywords[i].count      = count;
+
+    //printf("add keyword: %s\n", keyword);
+
+    for (int j = 0; (j < count) && (result > 0); j++)
+    {
+        if ((cmd->keywords[i].p[j] = strdup(va_arg(list, char *))) == NULL)
+        {
+            ESP_LOGD(TAG, "stdcommand: %s parameter unacceptable\n", paramt[(int)cmd->keywords[i].p[j]]);
+            result = -1;
+        }
+    }
+
+    cmd->count++;
+   
+    va_end(list);
+
+    return result;
 }               
 static PARAMT _checkType(const char * value)
 {
@@ -224,13 +272,32 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
                 {
                     if (!strcasecmp(cmd->keywords[i].keyword, keyword))
                     {
-                        if (cmd->count == params->count)
+                        if (  (cmd->keywords[i].type == PARAMT_enum)    && 
+                              (params->count == 1)                      && 
+                              (params->p[0].type == PARAMT_string)      )
+                        {
+                            params->enumResult = -1;
+
+                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 == params->enumResult); j++)
+                            {
+                                if (!strcasecmp(cmd->keywords[i].p[j], (char*)params->p[0].data))
+                                {
+                                    params->enumResult = j;
+                                }
+                            }
+
+                            if (params->enumResult >= 0)
+                            {
+                                result = cmd->keywords[i].id;
+                            }
+                        }
+                        else if (cmd->keywords[i].count == params->count)
                         {
                             result = cmd->keywords[i].id;
 
-                            for (int j = 0; (j < cmd->count) && (-1 != result); j++)
+                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 != result); j++)
                             {
-                                if (cmd->keywords[i].t[j] != params->p[j].type)
+                                if (cmd->keywords[i].p[j] != params->p[j].type)
                                 {
                                     //printf("stage 4: WRONG TYPE!!!\n");
                                     result = -1;
