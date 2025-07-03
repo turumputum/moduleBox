@@ -1,6 +1,7 @@
 #!/bin/bash
 
-PORT=USB0
+. .USB_settings
+
 PREFIX=.
 
 if [[ "$PWD" == *"sbin"* ]]; then

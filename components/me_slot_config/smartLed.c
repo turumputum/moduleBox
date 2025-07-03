@@ -396,7 +396,6 @@ void smartLed_task(void *arg){
     waitForWorkPermit(slot_num);
 
     while (1) {
-
         switch (stdcommand_receive(&c->cmds, &params, 0))
         {
             case -1: // none
@@ -442,8 +441,8 @@ void smartLed_task(void *arg){
 
 
             default:
-                //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: \n");
-                //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
+                //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: %s\n", );
+                printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
                 break;                
         }
 

@@ -1,6 +1,6 @@
 
 
-file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c"  )
+file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c" "smartLed.c"  )
 
 foreach(SOURCE_FILE ${MODULE_FILES})
 # Define the output file for the custom command (e.g., a generated header)
@@ -26,7 +26,6 @@ idf_component_register(SRCS
 						"executor.c"
                         "stdreport.c"
                         "stdcommand.c"
-						"smartLed.c"
 						"flywheel.c"
                         "sensor_2ch.c" 
 
