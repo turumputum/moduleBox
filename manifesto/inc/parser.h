@@ -46,7 +46,8 @@ typedef enum
     PARAMT_none = 0,
     PARAMT_int,
     PARAMT_float,
-    PARAMT_string
+    PARAMT_string,
+    PARAMT_enum
 } PARAMT;
 
 
@@ -125,8 +126,10 @@ public:
 
         char *          paramsRaw;
 
+        PARAMT          type;
+
         int             paramsCount;
-        PARAMT          params                  [ DEF_MAX_ENUMS ];
+        char *          params                  [ DEF_MAX_ENUMS ];
 };  
 
 
@@ -252,7 +255,12 @@ private:
         bool            parseCommandParams      (Command &      cmd,
                                                  char *         command);
 
+        bool            parseCommandParamsEnum  (Command &      cmd,
+                                                 char *         command);
+
         bool            extractCmdParams        (Command &      cmd);
+
+        bool            extractCmdParamsEnum    (Command &      cmd);
 
         PARAMT          extractCmdParamType     (char *         value);
 
