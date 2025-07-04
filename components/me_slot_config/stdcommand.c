@@ -266,49 +266,46 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
             //     printf("\n");
             // }
 
-            if (keyword)
+            for (int i = 0; (i < cmd->count) && (-1 == result); i++)
             {
-                for (int i = 0; (i < cmd->count) && (-1 == result); i++)
+                if (  (!keyword && !cmd->keywords[i].keyword)               || 
+                      (keyword && cmd->keywords[i].keyword && 
+                        !strcasecmp(cmd->keywords[i].keyword, keyword))     )
                 {
-                    if (!strcasecmp(cmd->keywords[i].keyword, keyword))
+                    if (  (cmd->keywords[i].type == PARAMT_enum)    && 
+                          (params->count == 1)                      && 
+                          (params->p[0].type == PARAMT_string)      )
                     {
-                        if (  (cmd->keywords[i].type == PARAMT_enum)    && 
-                              (params->count == 1)                      && 
-                              (params->p[0].type == PARAMT_string)      )
+                        params->enumResult = -1;
+
+                        for (int j = 0; (j < cmd->keywords[i].count) && (-1 == params->enumResult); j++)
                         {
-                            params->enumResult = -1;
-
-                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 == params->enumResult); j++)
+                            if (!strcasecmp(cmd->keywords[i].p[j], (char*)params->p[0].data))
                             {
-                                if (!strcasecmp(cmd->keywords[i].p[j], (char*)params->p[0].data))
-                                {
-                                    params->enumResult = j;
-                                }
-                            }
-
-                            if (params->enumResult >= 0)
-                            {
-                                result = cmd->keywords[i].id;
+                                params->enumResult = j;
                             }
                         }
-                        else if (cmd->keywords[i].count == params->count)
+
+                        if (params->enumResult >= 0)
                         {
                             result = cmd->keywords[i].id;
+                        }
+                    }
+                    else if (cmd->keywords[i].count == params->count)
+                    {
+                        result = cmd->keywords[i].id;
 
-                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 != result); j++)
+                        for (int j = 0; (j < cmd->keywords[i].count) && (-1 != result); j++)
+                        {
+                            if (cmd->keywords[i].p[j] != params->p[j].type)
                             {
-                                if (cmd->keywords[i].p[j] != params->p[j].type)
-                                {
-                                    //printf("stage 4: WRONG TYPE!!!\n");
-                                    result = -1;
-                                }
+                                //printf("stage 4: WRONG TYPE!!!\n");
+                                result = -1;
                             }
                         }
                     }
                 }
             }
-            else
-                result = 0;
         }
     }
 

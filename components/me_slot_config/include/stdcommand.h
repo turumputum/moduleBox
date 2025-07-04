@@ -38,7 +38,7 @@ typedef enum
 typedef struct __tag_STDCOMMANDPARAM
 {
     PARAMT                  type;
-    uint32_t                data;
+    int32_t                 data;
 } STDCOMMANDPARAM;
 
 typedef struct __tag_STDCOMMAND_PARAMS

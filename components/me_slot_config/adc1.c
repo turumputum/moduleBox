@@ -35,6 +35,7 @@
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
+#undef  LOG_LOCAL_LEVEL
 #define LOG_LOCAL_LEVEL 	ESP_LOG_DEBUG
 
 #define MODE_3V3 			0
@@ -377,7 +378,7 @@ void adc1_task(void *arg)
 
 	uint8_t oversumple = 150;
 
-	uint32_t tmp = 0;
+	//uint32_t tmp = 0;
 //--------------------------------------------------
 
 	adc1_init();
@@ -398,7 +399,7 @@ void adc1_task(void *arg)
 	#define EXAMPLE_ADC_UNIT                    ADC_UNIT_1
 	#define _EXAMPLE_ADC_UNIT_STR(unit)         #unit
 
-				char unit[] = EXAMPLE_ADC_UNIT_STR(EXAMPLE_ADC_UNIT);
+				//char unit[] = EXAMPLE_ADC_UNIT_STR(EXAMPLE_ADC_UNIT);
 
 				while (adc_continuous_read(adc1_handle, result, EXAMPLE_READ_LEN, &ret_num, 0) == ESP_OK)
 				{
@@ -489,3 +490,4 @@ const char * get_manifest_adc1()
 {
 	return manifesto;
 }
+

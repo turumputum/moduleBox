@@ -53,11 +53,14 @@ typedef struct __tag_SMARTLEDCONFIG
     STDCOMMANDS             cmds;
 } SMARTLEDCONFIG, * PSMARTLEDCONFIG; 
 
-enum
+typedef enum
 {
-    MYCMD_setRGB = 1,
+    MYCMD_default = 0,
+    MYCMD_setRGB,
     MYCMD_setMode,
     MYCMD_setIncrement,
+    MYCMD_setPos,
+    MYCMD_swipe
 } MYCMD;
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,7 @@ extern stateStruct me_state;
 
 //#define LED_STRIP_RMT_DEFAULT_MEM_BLOCK_SYMBOLS 48
 
+#undef LOG_LOCAL_LEVEL
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "SMART_LED";
 
@@ -339,6 +343,11 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
 
+    /* Числовое значение.
+       задаёт текущее состояние светодиода (вкл/выкл)
+    */
+    stdcommand_register(&c->cmds, MYCMD_default, NULL, PARAMT_int);
+
     /* Установить новый целевой цвет. 
        Цвет задаётся десятичными значениями R G B через пробел
     */
@@ -371,7 +380,7 @@ void smartLed_task(void *arg){
     uint8_t led_strip_pixels[c->num_of_led * 3];
 
     if(c->ledMode==MODE_RUN){
-        init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+        init_runEffect(&led_strip_pixels[0], c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
     }
 
 
@@ -401,18 +410,15 @@ void smartLed_task(void *arg){
             case -1: // none
                 break;
 
-            case 0: // Unknown or absent keyword
-                if ((params.count == 1) && (params.p[0].type == PARAMT_int))
-                {
-                    c->state = params.p[0].data;
-                    if(c->ledMode==MODE_RUN){
-                        init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
-                    }
-                    if(c->state==0){
-                        currentBright = targetBright-1;
-                    }
-                    ESP_LOGD(TAG, "Slot:%d Change state to:%d freeHeap:%d",slot_num, c->state, xPortGetFreeHeapSize());
+            case MYCMD_default:
+                c->state = params.p[0].data;
+                if(c->ledMode==MODE_RUN){
+                    init_runEffect(&led_strip_pixels[0], c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
                 }
+                if(c->state==0){
+                    currentBright = targetBright-1;
+                }
+                ESP_LOGD(TAG, "Slot:%d Change state to:%d freeHeap:%d",slot_num, c->state, xPortGetFreeHeapSize());
                 break;
 
             case MYCMD_setRGB:
@@ -430,7 +436,7 @@ void smartLed_task(void *arg){
                 {
                     ESP_LOGD(TAG, "Slot:%d init run effect", slot_num); 
 
-                    init_runEffect(&led_strip_pixels, c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+                    init_runEffect(&led_strip_pixels[0], c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
                 }
                 break;
 
@@ -442,7 +448,7 @@ void smartLed_task(void *arg){
 
             default:
                 //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: %s\n", );
-                printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
+                //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
                 break;                
         }
 
@@ -748,74 +754,42 @@ void processLedEffect(swiperLed_HandleTypeDef *swiperLed) {
 
 	//return swiperLed.state;
 }
+void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
+{
+    stdcommand_init(&c->cmds, slot_num);
 
+    /* Количенство светодиодов
+    */
+    c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 16, 1, 1024);
+    ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",c->num_of_led, slot_num);
 
+    /* Максимальное значение яркости
+    */
+    c->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
+    if(c->maxBright>255)c->maxBright=255;
+    if(c->maxBright<0)c->maxBright=0;
+    ESP_LOGD(TAG, "Set maxBright:%d for slot:%d", c->maxBright, slot_num);
 
-void swiperLed_task(void *arg){
-    
-	int slot_num = *(int*) arg;
-	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
+    /* Минимальное значение яркости
+    */
+    c->minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 4095);
+    if(c->minBright<0)c->minBright=0;
+    if(c->minBright>255)c->minBright=255;
+    ESP_LOGD(TAG, "Set minBright:%d for slot:%d", c->minBright, slot_num);
 
-	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+    /* Период обновления 
+    */
+    c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 25, 1, 4096));
+    ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", c->refreshPeriod, slot_num);
 
-    if(rmt_semaphore==NULL){
-        rmt_semaphore = xSemaphoreCreateCounting(2, 2);
+    /* Начальный цвет
+    */
+    if (get_option_color_val(&c->targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Wrong color value slot:%d", slot_num);
     }
-    
-    uint16_t num_of_led=16;
-    if (strstr(me_config.slot_options[slot_num], "numOfLed") != NULL) {
-		num_of_led = get_option_int_val(slot_num, "numOfLed", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",num_of_led, slot_num);
-	}
+    ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", c->targetRGB.r, c->targetRGB.g, c->targetRGB.b, slot_num);
 
-    float maxBright = 1.0;
-    if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-		maxBright = (float)get_option_int_val(slot_num, "maxBright", "", 10, 1, 4096)/255;
-        if(maxBright>1.0)maxBright=1.0;
-		ESP_LOGD(TAG, "Set maxBright:%f for slot:%d",maxBright, slot_num);
-	}
-
-    float minBright = 0.0;
-    if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-		minBright = (float)get_option_int_val(slot_num, "minBright", "", 10, 1, 4096)/255;
-        if(minBright<0.0)minBright=0.0;
-		ESP_LOGD(TAG, "Set minBright:%f for slot:%d",minBright, slot_num);
-	}
-
-    uint16_t refreshPeriod = 25;
-    if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
-		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
-	}
-    	
-    RgbColor targetRGB={
-        .r=0,
-        .g=0,
-        .b=250
-    };
-    //HsvColor HSV;
-    if (strstr(me_config.slot_options[slot_num], "RGBcolor") != NULL) {
-        char strDup[strlen(me_config.slot_options[slot_num])];
-        strcpy(strDup, me_config.slot_options[slot_num]);
-        char* payload=NULL;
-        char* cmd = strstr(strDup, "RGBcolor");
-        cmd = strtok_r(cmd, ":", &payload);
-        ESP_LOGD(TAG, "Set cmd:%s RGB_color:%s for slot:%d", cmd,payload, slot_num);
-        if(strstr(payload, ",")!= NULL) {
-            payload = strtok(payload, ",");
-        }
-        parseRGB(&targetRGB, payload);
-		//HSV = RgbToHsv(targetRGB);
-    }
-    ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", targetRGB.r, targetRGB.g, targetRGB.b, slot_num);
-
-    uint8_t led_strip_pixels[num_of_led * 3];
-
-    rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
-    rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
-    //rmt_slot_heap.tx_chan_config.flags.io_od_mode = true;
-    rmt_new_led_strip_encoder(&rmt_slot_heap.encoder_config, &rmt_slot_heap.led_encoder);
-  
     if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "ledTopic");
@@ -828,11 +802,45 @@ void swiperLed_task(void *arg){
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
 
+    /* Анимация эфекта
+    */
+    stdcommand_register_enum(&c->cmds, MYCMD_swipe, "swipe", "up", "down", "left", "right");
+}
+void swiperLed_task(void *arg)
+{
+    PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    STDCOMMAND_PARAMS       params = { 0 };
+   
+	int slot_num = *(int*) arg;
+	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
+
+	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    if(rmt_semaphore==NULL){
+        rmt_semaphore = xSemaphoreCreateCounting(2, 2);
+    }
+    
+    configure_button_swiperLed(c, slot_num);
+
+    RgbColor targetRGB={
+        .r=0,
+        .g=0,
+        .b=250
+    };
+
+    uint8_t led_strip_pixels[c->num_of_led * 3];
+
+    rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
+    rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
+    //rmt_slot_heap.tx_chan_config.flags.io_od_mode = true;
+    rmt_new_led_strip_encoder(&rmt_slot_heap.encoder_config, &rmt_slot_heap.led_encoder);
+  
+
     swiperLed_HandleTypeDef swiperLed;
-    swiperLed.num_led = num_of_led;
+    swiperLed.num_led = c->num_of_led;
     swiperLed.pixelBuffer = led_strip_pixels;
-    swiperLed.maxBright = maxBright;
-    swiperLed.minBright = minBright;
+    swiperLed.maxBright = c->maxBright;
+    swiperLed.minBright = c->minBright;
     swiperLed.RGB.r = targetRGB.r;
     swiperLed.RGB.g = targetRGB.g;
     swiperLed.RGB.b = targetRGB.b;
@@ -854,26 +862,32 @@ void swiperLed_task(void *arg){
     waitForWorkPermit(slot_num);
 
     while (1) {
-        command_message_t msg;
-        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
-            char* payload;
-            char* cmd = strtok_r(msg.str, ":", &payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]+1);
 
-            ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            
-            if(strstr(cmd, "swipe")!=NULL){
-                if(strstr(payload, "up")!=NULL){
-                    setLedEffect(&swiperLed, SWIPE_UP, LED_EFFECT_LENGTH);
-                }else if(strstr(payload, "down")!=NULL){
-                    setLedEffect(&swiperLed, SWIPE_DOWN, LED_EFFECT_LENGTH);
-                }else if(strstr(payload, "left")!=NULL){
-                    setLedEffect(&swiperLed, SWIPE_LEFT, LED_EFFECT_LENGTH);
-                }else if(strstr(payload, "right")!=NULL){
-                    setLedEffect(&swiperLed, SWIPE_RIGHT, LED_EFFECT_LENGTH);
+        switch (stdcommand_receive(&c->cmds, &params, 0))
+        {
+            case -1: // none
+                break;
+
+            case MYCMD_swipe:
+                switch (params.enumResult)
+                {
+                    case 0:// up
+                        setLedEffect(&swiperLed, SWIPE_UP, LED_EFFECT_LENGTH);
+                        break;
+                    case 1:// down
+                        setLedEffect(&swiperLed, SWIPE_DOWN, LED_EFFECT_LENGTH);
+                        break;
+                    case 2:// left
+                        setLedEffect(&swiperLed, SWIPE_LEFT, LED_EFFECT_LENGTH);
+                        break;
+                    default:// right or so
+                        setLedEffect(&swiperLed, SWIPE_RIGHT, LED_EFFECT_LENGTH);
+                        break;
                 }
-            } 
+                break;
+
+            default:
+                break;                
         }
     
         if(swiperLed.state == LED_RUN){
@@ -882,7 +896,7 @@ void swiperLed_task(void *arg){
         }
           
         
-        vTaskDelayUntil(&lastWakeTime, refreshPeriod);
+        vTaskDelayUntil(&lastWakeTime, c->refreshPeriod);
         //vTaskDelay(pdMS_TO_TICKS(refreshPeriod));
     }
 }
@@ -973,6 +987,8 @@ void calcRingBrightness(uint8_t *pixelMass, RgbColor color, uint16_t num_of_led,
 */
 void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
 {
+    stdcommand_init(&c->cmds, slot_num);
+
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
@@ -1058,13 +1074,29 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
+
+    /* Числовое значение.
+       задаёт текущее состояние светодиода (вкл/выкл)
+    */
+    stdcommand_register(&c->cmds, MYCMD_default, NULL, PARAMT_int);
+
+    /* Установить новый целевой цвет. 
+       Цвет задаётся десятичными значениями R G B через пробел
+    */
+    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+
+    /* Установить новую текущую позичию
+    */
+    stdcommand_register(&c->cmds, MYCMD_setPos, "setPos", PARAMT_int);
+
 }
 void ledRing_task(void *arg){
     
-    SMARTLEDCONFIG      c;
+    PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
     uint8_t prevState=255;
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
+    STDCOMMAND_PARAMS       params = { 0 };
 
 	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
@@ -1072,12 +1104,12 @@ void ledRing_task(void *arg){
         rmt_semaphore = xSemaphoreCreateCounting(2, 2);
     }
 
-    configure_button_ledRing(&c, slot_num);
+    configure_button_ledRing(c, slot_num);
 
-    uint8_t current_pixels_mass[c.num_of_led * 3];
-    memset(current_pixels_mass, 0, c.num_of_led * 3);
-    uint8_t target_pixels_mass[c.num_of_led * 3];
-    memset(target_pixels_mass, 0, c.num_of_led * 3);
+    uint8_t current_pixels_mass[c->num_of_led * 3];
+    memset(current_pixels_mass, 0, c->num_of_led * 3);
+    uint8_t target_pixels_mass[c->num_of_led * 3];
+    memset(target_pixels_mass, 0, c->num_of_led * 3);
 
     rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
     rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
@@ -1089,10 +1121,10 @@ void ledRing_task(void *arg){
     //     currentBrightness[i]= (state==0) ? minBright: maxBright;
     // }
 
-    float currentPos=c.numOfPos-1+c.offset;
-    float targetPos=c.offset;
+    float currentPos=c->numOfPos-1+c->offset;
+    float targetPos=c->offset;
 
-    float fIncrement = (float)c.increment/255;
+    float fIncrement = (float)c->increment/255;
     
     //vTaskDelay(pdMS_TO_TICKS(1000));
     TickType_t lastWakeTime = xTaskGetTickCount(); 
@@ -1100,66 +1132,72 @@ void ledRing_task(void *arg){
     waitForWorkPermit(slot_num);
 
     while(1){
-        command_message_t temp_msg;
-        command_message_t msg;
-        uint8_t recv_state=0;
+        // command_message_t temp_msg;
+        // command_message_t msg;
+        // uint8_t recv_state=0;
 
-        while(xQueueReceive(me_state.command_queue[slot_num], &temp_msg, 0) == pdPASS) {
-            msg = temp_msg;
-            recv_state=1;
-        }
-        //if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-        if(recv_state==1){
-            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
-            char* payload;
-            char* cmd = strtok_r(msg.str, ":", &payload);
-            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
-                c.state = atoi(payload);
-                ESP_LOGD(TAG, "Change state to:%d", c.state);
-            }else{
-                cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
-                if(strstr(cmd, "setRGB")!=NULL){
-                    parseRGB(&c.targetRGB, payload);
-                }else if(strstr(cmd, "setPos")!=NULL){
-                    if(c.dir==1){
-                        targetPos = atoi(payload)+c.offset;
-                    }else{
-                        targetPos = c.numOfPos-1-atoi(payload)+c.offset;
-                    }
-                    if(targetPos<0){
-                        targetPos=targetPos+(c.numOfPos);
-                    }else if(targetPos>c.numOfPos-1){
-                        targetPos=targetPos-(c.numOfPos);
-                    }
+        switch (stdcommand_receive(&c->cmds, &params, 0))
+        {
+            case -1: // none
+                break;
+
+            case MYCMD_default:
+                c->state = params.p[0].data;
+                ESP_LOGD(TAG, "Change state to:%d", c->state);
+                break;
+
+            case MYCMD_setRGB:
+                c->targetRGB.r = params.p[0].data;
+                c->targetRGB.g = params.p[1].data;
+                c->targetRGB.b = params.p[2].data;
+
+                ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
+                break;
+
+            case MYCMD_setPos:
+                if(c->dir==1){
+                    targetPos = params.p[0].data+c->offset;
+                }else{
+                    targetPos = c->numOfPos-1-params.p[0].data+c->offset;
                 }
-            }
+                if(targetPos<0){
+                    targetPos=targetPos+(c->numOfPos);
+                }else if(targetPos>c->numOfPos-1){
+                    targetPos=targetPos-(c->numOfPos);
+                }
+                break;
+
+
+            default:
+                //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: %s\n", );
+                //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
+                break;                
         }
 
-        if(c.state==1){
-            if(c.state!=prevState){
-                prevState=c.state;
+        if(c->state==1){
+            if(c->state!=prevState){
+                prevState=c->state;
                 //ESP_LOGD(TAG, "Set state to 0");
                 //float fMinB = (float)minBright/255;
-                float fMaxB = (float)c.maxBright/255;
-                for(int i = 0; i < c.num_of_led; i++) {
-                    target_pixels_mass[i*3] = gamma_8[(uint8_t)(c.targetRGB.g * fMaxB)];
-                    target_pixels_mass[i*3+1] = gamma_8[(uint8_t)(c.targetRGB.r * fMaxB)];
-                    target_pixels_mass[i*3+2] = gamma_8[(uint8_t)(c.targetRGB.b * fMaxB)]; 
+                float fMaxB = (float)c->maxBright/255;
+                for(int i = 0; i < c->num_of_led; i++) {
+                    target_pixels_mass[i*3] = gamma_8[(uint8_t)(c->targetRGB.g * fMaxB)];
+                    target_pixels_mass[i*3+1] = gamma_8[(uint8_t)(c->targetRGB.r * fMaxB)];
+                    target_pixels_mass[i*3+2] = gamma_8[(uint8_t)(c->targetRGB.b * fMaxB)]; 
                 }
             }   
         }else{
-            if(c.state!=prevState){
-                prevState=c.state;
+            if(c->state!=prevState){
+                prevState=c->state;
                 currentPos = targetPos-fIncrement;
             }
 
-            if(c.ledMode==MODE_RUN){
-                targetPos += fIncrement*c.dir;
+            if(c->ledMode==MODE_RUN){
+                targetPos += fIncrement*c->dir;
                 if(targetPos<0){
-                    targetPos=targetPos+(c.numOfPos);
-                }else if(targetPos>c.numOfPos-1){
-                    targetPos=targetPos-(c.numOfPos);
+                    targetPos=targetPos+(c->numOfPos);
+                }else if(targetPos>c->numOfPos-1){
+                    targetPos=targetPos-(c->numOfPos);
                 }
             }
             
@@ -1168,22 +1206,22 @@ void ledRing_task(void *arg){
                 if(fabs(currentPos-targetPos)<fIncrement){
                     currentPos = targetPos;
                 }else{
-                    if(fabs(currentPos-targetPos)<c.numOfPos/2){
+                    if(fabs(currentPos-targetPos)<c->numOfPos/2){
                         currentPos = (currentPos>targetPos) ? currentPos-fIncrement : currentPos+fIncrement;
                     }else{
                         currentPos = (currentPos>targetPos) ? currentPos+fIncrement : currentPos-fIncrement;
                     }
                     if(currentPos<0){
-                        currentPos=currentPos+(c.numOfPos);
-                    }else if(currentPos>c.numOfPos-1){
-                        currentPos=currentPos-(c.numOfPos);
+                        currentPos=currentPos+(c->numOfPos);
+                    }else if(currentPos>c->numOfPos-1){
+                        currentPos=currentPos-(c->numOfPos);
                     }
                 }
-                calcRingBrightness(&target_pixels_mass, c.targetRGB, c.num_of_led, currentPos, c.effectLen, c.numOfPos, c.maxBright, c.minBright);
+                calcRingBrightness(&target_pixels_mass[0], c->targetRGB, c->num_of_led, currentPos, c->effectLen, c->numOfPos, c->maxBright, c->minBright);
             }
         }
-        ledUpdate(&current_pixels_mass, &target_pixels_mass, c.num_of_led*3, c.increment, &rmt_slot_heap, slot_num);
-        vTaskDelayUntil(&lastWakeTime, c.refreshPeriod);
+        ledUpdate(&current_pixels_mass[0], &target_pixels_mass[0], c->num_of_led*3, c->increment, &rmt_slot_heap, slot_num);
+        vTaskDelayUntil(&lastWakeTime, c->refreshPeriod);
     }
 }
 
@@ -1220,6 +1258,8 @@ uint8_t colorChek(uint8_t currentColor, uint8_t targetColor, uint8_t increment){
 */
 void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
 {
+    stdcommand_init(&c->cmds, slot_num);
+
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
@@ -1295,10 +1335,20 @@ void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
+
+    /* Установить новый целевой цвет. 
+       Цвет задаётся десятичными значениями R G B через пробел
+    */
+    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+
+    /* Установить новую текущую позичию
+    */
+    stdcommand_register(&c->cmds, MYCMD_setPos, "setPos", PARAMT_int);
 }
 void ledBar_task(void *arg)
 {
-    SMARTLEDCONFIG      c;
+    PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    STDCOMMAND_PARAMS       params = { 0 };
     
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
@@ -1309,9 +1359,9 @@ void ledBar_task(void *arg)
         rmt_semaphore = xSemaphoreCreateCounting(2, 2);
     }
 
-    uint8_t prevState=255;
+    //uint8_t prevState=255;
 
-    configure_button_ledBar(&c, slot_num);
+    configure_button_ledBar(c, slot_num);
 
     RgbColor currentRGB={
         .r=0,
@@ -1319,12 +1369,12 @@ void ledBar_task(void *arg)
         .b=0
     };
 
-    uint8_t current_bright_mass[c.num_of_led];
-    memset(current_bright_mass, 0, c.num_of_led);
-    uint8_t target_bright_mass[c.num_of_led];
-    memset(target_bright_mass, 0, c.num_of_led);
+    uint8_t current_bright_mass[c->num_of_led];
+    memset(current_bright_mass, 0, c->num_of_led);
+    uint8_t target_bright_mass[c->num_of_led];
+    memset(target_bright_mass, 0, c->num_of_led);
 
-    uint8_t led_strip_pixels[c.num_of_led * 3];
+    uint8_t led_strip_pixels[c->num_of_led * 3];
 
     rmt_led_heap_t rmt_slot_heap = RMT_LED_HEAP_DEFAULT();
     rmt_slot_heap.tx_chan_config.gpio_num = pin_num;
@@ -1335,7 +1385,7 @@ void ledBar_task(void *arg)
     // for(int i=0;i<num_of_led;i++){
     //     currentBrightness[i]= (state==0) ? minBright: maxBright;
     // }
-    float ledToPosRatio = (float)c.num_of_led/c.numOfPos;
+    float ledToPosRatio = (float)c->num_of_led/c->numOfPos;
 
     float currentPos=-1;
     int targetPos=0;
@@ -1348,52 +1398,55 @@ void ledBar_task(void *arg)
 
     waitForWorkPermit(slot_num);
     while(1){
-        command_message_t msg;
+        switch (stdcommand_receive(&c->cmds, &params, 0))
+        {
+            case -1: // none
+                break;
 
-        while(xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS) {
-            char* payload;
-            char* cmd = strtok_r(msg.str, ":", &payload);
-            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
-                
-                
-            }else{
-                cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
-                if(strstr(cmd, "setRGB")!=NULL){
-                    parseRGB(&c.targetRGB, payload);
-                }else if(strstr(cmd, "setPos")!=NULL){
-                    if(strstr(payload, "+")!= NULL) {
-                        targetPos += atoi(payload);
-                    }else if(strstr(payload, "-")!= NULL) {
-                        targetPos -= atoi(payload);
-                    }else{
-                        targetPos = atoi(payload);
-                    }
-                    if(targetPos>c.numOfPos) targetPos=c.numOfPos;
-                    ESP_LOGD(TAG, "Change pos to:%d", targetPos);
-                    // brightCorrection
+            case 0: // Unknown or absent keyword
+                if ((params.count == 1) && (params.p[0].type == PARAMT_int))
+                {
+                    c->state = params.p[0].data;
+                    ESP_LOGD(TAG, "Change state to:%d", c->state);
                 }
-            }
+                break;
+
+            case MYCMD_setRGB:
+                c->targetRGB.r = params.p[0].data;
+                c->targetRGB.g = params.p[1].data;
+                c->targetRGB.b = params.p[2].data;
+
+                ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
+                break;
+
+            case MYCMD_setPos:
+                targetPos += params.p[0].data;
+                if(targetPos>c->numOfPos) targetPos=c->numOfPos;
+                ESP_LOGD(TAG, "Change pos to:%d", targetPos);
+                break;
+
+            default:
+                break;                
         }
 
         if(targetPos!=currentPos){
             currentPos=targetPos;
             float ledPos = (ledToPosRatio * currentPos);
-            for(int i=0;i<c.num_of_led;i++){
-                int curentLedPos = i + c.offset;
-                if(curentLedPos>c.num_of_led-1){
-                    curentLedPos = curentLedPos - c.num_of_led;
+            for(int i=0;i<c->num_of_led;i++){
+                int curentLedPos = i + c->offset;
+                if(curentLedPos>c->num_of_led-1){
+                    curentLedPos = curentLedPos - c->num_of_led;
                 }
                 if((i == (int)ledPos)&&(i>0)){
                     float ratio = ledPos - (int)ledPos;
-                    target_bright_mass[curentLedPos]=(int)(c.maxBright*ratio);
-                    if(target_bright_mass[curentLedPos]<c.minBright){
-                        target_bright_mass[curentLedPos]=c.minBright;
+                    target_bright_mass[curentLedPos]=(int)(c->maxBright*ratio);
+                    if(target_bright_mass[curentLedPos]<c->minBright){
+                        target_bright_mass[curentLedPos]=c->minBright;
                     }
                 }else if(i>(int)ledPos-1){
-                    target_bright_mass[curentLedPos]=c.minBright;
+                    target_bright_mass[curentLedPos]=c->minBright;
                 }else{
-                    target_bright_mass[curentLedPos]=c.maxBright;
+                    target_bright_mass[curentLedPos]=c->maxBright;
                 }
             }
             // printf("targetMass:");
@@ -1410,22 +1463,22 @@ void ledBar_task(void *arg)
 
         }
 
-        if(memcmp(&currentRGB, &c.targetRGB, sizeof(RgbColor))){
-            if(currentRGB.r!=c.targetRGB.r){
-                currentRGB.r = colorChek(currentRGB.r, c.targetRGB.r, c.increment);
+        if(memcmp(&currentRGB, &c->targetRGB, sizeof(RgbColor))){
+            if(currentRGB.r!=c->targetRGB.r){
+                currentRGB.r = colorChek(currentRGB.r, c->targetRGB.r, c->increment);
                 flag_ledUpdate=true;
             }
-            if(currentRGB.g!=c.targetRGB.g){
-                currentRGB.g = colorChek(currentRGB.g, c.targetRGB.g, c.increment);
+            if(currentRGB.g!=c->targetRGB.g){
+                currentRGB.g = colorChek(currentRGB.g, c->targetRGB.g, c->increment);
                 flag_ledUpdate=true;
             }
-            if(currentRGB.b!=c.targetRGB.b){
-                currentRGB.b = colorChek(currentRGB.b, c.targetRGB.b, c.increment);
+            if(currentRGB.b!=c->targetRGB.b){
+                currentRGB.b = colorChek(currentRGB.b, c->targetRGB.b, c->increment);
                 flag_ledUpdate=true;
             }
         }
 
-        for(int i=0;i<c.num_of_led;i++){
+        for(int i=0;i<c->num_of_led;i++){
             if(target_bright_mass[i]!=current_bright_mass[i]){
                 
                 flag_ledUpdate=true;
@@ -1435,23 +1488,23 @@ void ledBar_task(void *arg)
                             goto end_loop;
                         }
                     }
-                    if(abs(target_bright_mass[i]-current_bright_mass[i])<c.increment){
+                    if(abs(target_bright_mass[i]-current_bright_mass[i])<c->increment){
                         current_bright_mass[i] = target_bright_mass[i];
                     }else{
-                        current_bright_mass[i] = current_bright_mass[i] + c.increment;
+                        current_bright_mass[i] = current_bright_mass[i] + c->increment;
                     }
                     break;
                 }else{
-                    if(i<c.num_of_led-1){
+                    if(i<c->num_of_led-1){
                         if(current_bright_mass[i+1]!=target_bright_mass[i+1]){
                             //ESP_LOGD(TAG, "skip:%d nextTarget:%d nextBright:%d", i, target_bright_mass[i+1], current_bright_mass[i+1]);
                             goto end_loop;
                         }
                     }
-                    if(abs(target_bright_mass[i]-current_bright_mass[i])<c.increment){
+                    if(abs(target_bright_mass[i]-current_bright_mass[i])<c->increment){
                         current_bright_mass[i] = target_bright_mass[i];
                     }else{
-                        current_bright_mass[i] = current_bright_mass[i] - c.increment;
+                        current_bright_mass[i] = current_bright_mass[i] - c->increment;
                     }
                     //ESP_LOGD(TAG, "Changed bright i:%d target:%d current:%d", i, target_bright_mass[i], current_bright_mass[i]);
                     break;
@@ -1461,10 +1514,10 @@ void ledBar_task(void *arg)
         }
 
         if(flag_ledUpdate){
-            for(int i=0;i<c.num_of_led;i++){
+            for(int i=0;i<c->num_of_led;i++){
                 int index = i;
-                if(c.dir<0){
-                    index = c.num_of_led - i - 1;
+                if(c->dir<0){
+                    index = c->num_of_led - i - 1;
                 }
                 float  tmpBright = (float)current_bright_mass[i]/255;
                 led_strip_pixels[index*3] = gamma_8[(uint8_t)(currentRGB.r * tmpBright)];
@@ -1477,7 +1530,7 @@ void ledBar_task(void *arg)
             rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
         }
 
-        vTaskDelayUntil(&lastWakeTime, c.refreshPeriod);
+        vTaskDelayUntil(&lastWakeTime, c->refreshPeriod);
     }
 }
 
@@ -1491,5 +1544,3 @@ const char * get_manifest_smartLed()
 {
 	return manifesto;
 }
-
-

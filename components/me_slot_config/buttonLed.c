@@ -24,12 +24,20 @@
 
 #include "esp_log.h"
 #include "me_slot_config.h"
+#include <stdcommand.h>
 
 #include <generated_files/buttonLed.h>
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
 // -|-----------------------|-------------------------------------------------
+
+
+typedef enum
+{
+    MYCMD_default = 0,
+} MYCMD;
+
 
 typedef struct __tag_BUTTONLEDCONFIG
 {
@@ -42,6 +50,7 @@ typedef struct __tag_BUTTONLEDCONFIG
 	uint16_t 				refreshPeriod;
 	int 					animate;
 
+	STDCOMMANDS             cmds;
 } BUTTONLEDCONFIG, * PBUTTONLEDCONFIG; 
 
 
@@ -55,6 +64,7 @@ extern stateStruct me_state;
 
 extern const uint8_t gamma_8[256];
 
+#undef  LOG_LOCAL_LEVEL
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "BUTTONS";
 
@@ -86,22 +96,21 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
 */
 void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 {
+    stdcommand_init(&ch->cmds, slot_num);
+
 	if (mode == 0) // Button
 	{
-		if (strstr(me_config.slot_options[slot_num], "buttonInverse")!=NULL){
-			/* Флаг определяет инверсию кнопки
-			*/
-			ch->button_inverse = get_option_flag_val(slot_num, "buttonInverse");
-		}
+		/* Флаг определяет инверсию кнопки
+		*/
+		ch->button_inverse = get_option_flag_val(slot_num, "buttonInverse");
 
-		if (strstr(me_config.slot_options[slot_num], "buttonDebounceGap") != NULL) {
-			/* Глубина фильтра дребезга
-			*/
-			ch->debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "", 10, 1, 4096);
-			ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",ch->debounce_gap, slot_num);
-		}
+		/* Глубина фильтра дребезга
+		*/
+		ch->debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "", 10, 1, 4096);
+		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",ch->debounce_gap, slot_num);
 
-		if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) {
+		if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) 
+		{
 			/* Топик для событий кнопки
 			*/
 			char * custom_topic = get_option_string_val(slot_num, "buttonTopic");
@@ -116,60 +125,42 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 	}
 	else
 	{
-		if (strstr(me_config.slot_options[slot_num], "ledInverse")!=NULL){
-			/* Флаг определяет инверсию кнопки
-			*/
-			ch->led_inverse = get_option_flag_val(slot_num, "ledInverse");
-		}
+		/* Флаг определяет инверсию кнопки
+		*/
+		ch->led_inverse = get_option_flag_val(slot_num, "ledInverse");
 
-		ch->fade_increment = 255;
-		if (strstr(me_config.slot_options[slot_num], "increment") != NULL) {
-			/* Интенсивность затухание свечения
-			*/
-			ch->fade_increment = get_option_int_val(slot_num, "increment", "", 10, 1, 4096);
-			ESP_LOGD(TAG, "Set fade_increment:%d for slot:%d",ch->fade_increment, slot_num);
-		}
+		/* Интенсивность затухание свечения
+		*/
+		ch->fade_increment = get_option_int_val(slot_num, "increment", "", 255, 1, 4096);
+		ESP_LOGD(TAG, "Set fade_increment:%d for slot:%d",ch->fade_increment, slot_num);
 
-		ch->maxBright = 255;
-		if (strstr(me_config.slot_options[slot_num], "maxBright") != NULL) {
-			/* Максимальное свечение
-			*/
-			ch->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
-			if(ch->maxBright>255)ch->maxBright=255;
-			if(ch->maxBright<0)ch->maxBright=0;
-			ESP_LOGD(TAG, "Set maxBright:%d for slot:%d", ch->maxBright, slot_num);
-		}
+		/* Максимальное свечение
+		*/
+		ch->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
+		if(ch->maxBright>255)ch->maxBright=255;
+		if(ch->maxBright<0)ch->maxBright=0;
+		ESP_LOGD(TAG, "Set maxBright:%d for slot:%d", ch->maxBright, slot_num);
 
-		ch->minBright = 0;
-		if (strstr(me_config.slot_options[slot_num], "minBright") != NULL) {
-			/* Минимальное свечение
-			*/
-			ch->minBright = get_option_int_val(slot_num, "minBright", "", 10, 1, 4096);
-			if(ch->minBright>255)ch->minBright=255;
-			if(ch->minBright<0)ch->minBright=0;
-			ESP_LOGD(TAG, "Set minBright:%d for slot:%d", ch->minBright, slot_num);
-		}
+		/* Минимальное свечение
+		*/
+		ch->minBright = get_option_int_val(slot_num, "minBright", "", 0, 1, 4096);
+		if(ch->minBright>255)ch->minBright=255;
+		if(ch->minBright<0)ch->minBright=0;
+		ESP_LOGD(TAG, "Set minBright:%d for slot:%d", ch->minBright, slot_num);
 
-		ch->refreshPeriod = 40;
-		if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-			/* Период обновления
-			*/
-			ch->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 10, 1, 4096));
-			ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",ch->refreshPeriod, slot_num);
-		}
+		/* Период обновления
+		*/
+		ch->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",ch->refreshPeriod, slot_num);
 
-		ch->animate = NONE;
-
-		if (strstr(me_config.slot_options[slot_num], "ledMode") != NULL) {
-			/* Задаёт режим анимации */
-			if ((ch->animate = get_option_enum_val(slot_num, "ledMode", "none", "flash", "glitch", NULL)) < 0)
-			{
-				ESP_LOGE(TAG, "animate: unricognized value");
-				ch->animate = NONE;
-			}
-			else
-				ESP_LOGD(TAG, "Custom animate: %d", ch->animate);
+		/* Задаёт режим анимации */
+		if ((ch->animate = get_option_enum_val(slot_num, "ledMode", "none", "flash", "glitch", NULL)) < 0)
+		{
+			ESP_LOGE(TAG, "animate: unricognized value");
+			ch->animate = NONE;
 		}
+		else
+			ESP_LOGD(TAG, "Custom animate: %d", ch->animate);
 
 		if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 			char* custom_topic=NULL;
@@ -185,6 +176,11 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 			ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 		}
 	}
+
+    /* Числовое значение.
+       задаёт текущее состояние светодиода (вкл/выкл)
+    */
+    stdcommand_register(&ch->cmds, MYCMD_default, NULL, PARAMT_int);
 }
 
 void button_task(void *arg)
@@ -331,7 +327,7 @@ void start_button_task(int slot_num){
 }
 
 
-void checkBright(uint8_t *currentBright, uint8_t targetBright, uint8_t fade_increment){
+void checkBright(int16_t *currentBright, uint8_t targetBright, uint8_t fade_increment){
 	if(*currentBright!=targetBright){
         if(*currentBright < targetBright){
             if((targetBright - *currentBright) < fade_increment){
@@ -354,7 +350,8 @@ void led_task(void *arg){
     uint32_t startTick = xTaskGetTickCount();
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
-    uint8_t state = 0;
+    //uint8_t state = 0;
+    STDCOMMAND_PARAMS       params = { 0 };
 
 	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
@@ -398,22 +395,29 @@ void led_task(void *arg){
 
 	
 
-	TickType_t lastWakeTime = xTaskGetTickCount(); 
+	//TickType_t lastWakeTime = xTaskGetTickCount(); 
 
 	waitForWorkPermit(slot_num);
 	
     while (1) {
 
-        command_message_t msg;
-        if (xQueueReceive(me_state.command_queue[slot_num], &msg, c.refreshPeriod) == pdPASS){
-            ESP_LOGD(TAG, "LED Input command %s for slot:%d", msg.str, slot_num);
-			int val = atoi(msg.str+strlen(me_state.action_topic_list[slot_num])+1);
-			if(val!=c.led_inverse){
-				targetBright = c.maxBright;
-			}else{
-				targetBright = c.minBright;
-			}
-        }
+        switch (stdcommand_receive(&c.cmds, &params, c.refreshPeriod))
+        {
+            case -1: // none
+                break;
+
+            case MYCMD_default:
+				int val = params.p[0].data;
+				if(val!=c.led_inverse){
+					targetBright = c.maxBright;
+				}else{
+					targetBright = c.minBright;
+				}
+				break;
+
+			default:
+				break;
+		}
 
         if (c.animate == FLASH){
             if(currentBright<=c.minBright){
@@ -454,3 +458,4 @@ const char * get_manifest_buttonLed()
 {
 	return manifesto;
 }
+
