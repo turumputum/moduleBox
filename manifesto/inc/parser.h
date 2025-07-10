@@ -47,7 +47,8 @@ typedef enum
     PARAMT_int,
     PARAMT_float,
     PARAMT_string,
-    PARAMT_enum
+    PARAMT_enum,
+    PARAMT_unknown = 255
 } PARAMT;
 
 

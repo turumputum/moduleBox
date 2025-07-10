@@ -1,0 +1,8 @@
+https://community.platformio.org/t/debugging-esp32-s3-devkitc-1-and-esp-prog/28444/7
+
+Burning DIS_USB_JTAG eFuse will permanently disable the connection between USB_SERIAL_JTAG and the JTAG port of the ESP32-S3. JTAG interface can then be connected to GPIO39-GPIO42. Note that USB CDC functionality of USB_SERIAL_JTAG will still be usable, i.e., flashing and monitoring over USB CDC will still work.
+Burning STRAP_JTAG_SEL eFuse will enable selection of JTAG interface by a strapping pin, GPIO3. If the strapping pin is low when ESP32-S3 is reset, JTAG interface will use GPIO39-GPIO42. If the strapping pin is high, USB_SERIAL_JTAG will be used as the JTAG interface.
+
+
+z/common/sbin/esp/BURN_STRAP_JTAG_SEL-cannot_be_undone.sh
+

@@ -18,7 +18,7 @@
 #include "me_slot_config.h"
 #include "reporter.h"
 
-#include <generated_files/analog.h>
+#include <generated_files/gen_analog.h>
 
 
 extern uint8_t SLOTS_PIN_MAP[10][4];

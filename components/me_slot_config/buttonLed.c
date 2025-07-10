@@ -26,7 +26,7 @@
 #include "me_slot_config.h"
 #include <stdcommand.h>
 
-#include <generated_files/buttonLed.h>
+#include <generated_files/gen_buttonLed.h>
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------

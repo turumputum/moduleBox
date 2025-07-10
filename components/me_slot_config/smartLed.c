@@ -27,7 +27,7 @@
 
 #include <stdcommand.h>
 
-#include <generated_files/smartLed.h>
+#include <generated_files/gen_smartLed.h>
 
 
 // ---------------------------------------------------------------------------
@@ -448,7 +448,6 @@ void smartLed_task(void *arg){
 
             default:
                 //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: %s\n", );
-                //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
                 break;                
         }
 

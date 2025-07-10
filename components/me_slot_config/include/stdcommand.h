@@ -44,6 +44,7 @@ typedef struct __tag_STDCOMMANDPARAM
 typedef struct __tag_STDCOMMAND_PARAMS
 {
     int                     count;
+    bool                    nonstricktTypes;
     int                     enumResult;
     STDCOMMANDPARAM         p                   [ STDCOMMAN_MAX_PARAMS ];
 } STDCOMMAND_PARAMS, * PSTDCOMMAND_PARAMS;

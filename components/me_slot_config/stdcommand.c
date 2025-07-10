@@ -63,13 +63,19 @@ int _stdcommand_register(PSTDCOMMANDS       cmd,
 
     for (int j = 0; (j < count) && (result > 0); j++)
     {
-        cmd->keywords[i].p[j] = va_arg(list, int);
+        cmd->keywords[i].p[j] = (char*)va_arg(list, int);
 
-        if (cmd->keywords[i].p[j] == PARAMT_enum)
+        if (cmd->keywords[i].p[j] == (char*)PARAMT_enum)
         {
             ESP_LOGD(TAG, "stdcommand: %s parameter unacceptable\n", paramt[(int)cmd->keywords[i].p[j]]);
             result = -1;
         }
+    }
+
+    // Special case for "none" parameters
+    if ((1 == cmd->keywords[i].count) &&  (PARAMT_none == cmd->keywords[i].p[0]))
+    {
+        cmd->keywords[i].count = 0;
     }
 
     cmd->count++;
@@ -266,6 +272,7 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
             //     printf("\n");
             // }
 
+
             for (int i = 0; (i < cmd->count) && (-1 == result); i++)
             {
                 if (  (!keyword && !cmd->keywords[i].keyword)               || 
@@ -291,16 +298,19 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
                             result = cmd->keywords[i].id;
                         }
                     }
-                    else if (cmd->keywords[i].count == params->count)
+                    else if (params->nonstricktTypes || (cmd->keywords[i].count == params->count))
                     {
                         result = cmd->keywords[i].id;
 
-                        for (int j = 0; (j < cmd->keywords[i].count) && (-1 != result); j++)
+                        if (!params->nonstricktTypes)
                         {
-                            if (cmd->keywords[i].p[j] != params->p[j].type)
+                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 != result); j++)
                             {
-                                //printf("stage 4: WRONG TYPE!!!\n");
-                                result = -1;
+                                if (cmd->keywords[i].p[j] != (char*)params->p[j].type)
+                                {
+                                    //printf("stage 4: WRONG TYPE!!!\n");
+                                    result = -1;
+                                }
                             }
                         }
                     }

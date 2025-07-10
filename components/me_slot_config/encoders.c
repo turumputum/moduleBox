@@ -21,7 +21,7 @@
 #include "executor.h"
 #include "esp_rom_sys.h"
 
-#include <generated_files/encoders.h>
+#include <generated_files/gen_encoders.h>
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------

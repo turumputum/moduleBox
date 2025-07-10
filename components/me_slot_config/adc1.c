@@ -29,7 +29,7 @@
 
 #include "esp_adc/adc_continuous.h"
 
-#include <generated_files/adc1.h>
+#include <generated_files/gen_adc1.h>
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
