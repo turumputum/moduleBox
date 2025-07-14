@@ -14,6 +14,9 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
+#include <me_debug.h>
+
+
 #include "esp_log.h"
 #include "sdkconfig.h"
 //#define FORCE_SD_40MHZ
@@ -90,8 +93,12 @@ int spisd_init() {
 
 	gpio_pad_select_gpio(47);
 	gpio_set_direction(47, GPIO_MODE_INPUT);
+
+#ifndef JTAG_USED
 	gpio_pad_select_gpio(40);
 	gpio_set_direction(40, GPIO_MODE_INPUT);
+#endif // #ifndef JTAG_USED
+
 	gpio_pad_select_gpio(21);
 	gpio_set_direction(21, GPIO_MODE_INPUT);
 	if((gpio_get_level(47)!=1)||(gpio_get_level(40)!=1)||(gpio_get_level(21)!=1)){
@@ -105,7 +112,9 @@ int spisd_init() {
 
 	slot_config.clk = 47;
 	slot_config.cmd = 21;
+#ifndef JTAG_USED
 	slot_config.d0 = 40;
+#endif // #ifndef JTAG_USED
 	// slot_config.d1 = 38;
 	// slot_config.d2 = 39;
 	// slot_config.d3 = 40;

@@ -441,20 +441,13 @@ extern int network_get_active_interfaces();
 	return result;
 }
 
-void app_main(void)
+void app_main(void)	
 {
 
 	setLogLevel(4);
 	me_state.free_i2c_num=0;
 	ESP_LOGD(TAG, "Start up");
 	ESP_LOGD(TAG, "free Heap size %d", xPortGetFreeHeapSize());
-
-	// while (1)
-	// {
-	// 	// FIXME
-	// 	ESP_LOGD(TAG, "waiting for debug...");
-	// 	vTaskDelay(pdMS_TO_TICKS(1000));
-	// }
 
 	// initLeds();
 	board_init(); // USB hardware
