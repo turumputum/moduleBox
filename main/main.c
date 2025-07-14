@@ -451,7 +451,7 @@ void app_main(void)
 
 	// while (1)
 	// {
-	// 	// FIXM
+	// 	// FIXME
 	// 	ESP_LOGD(TAG, "waiting for debug...");
 	// 	vTaskDelay(pdMS_TO_TICKS(1000));
 	// }

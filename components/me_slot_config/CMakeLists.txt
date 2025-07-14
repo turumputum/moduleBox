@@ -2,7 +2,7 @@
 
 file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c" "smartLed.c"  )
 
-include(${CMAKE_SOURCE_DIR}/CMakeManifest.txt OPTIONAL)
+include(${CMAKE_SOURCE_DIR}/CMakeManifest.txt)
 
 idf_component_register(SRCS 
 						"executor.c"
