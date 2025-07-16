@@ -449,6 +449,12 @@ void app_main(void)
 	ESP_LOGD(TAG, "Start up");
 	ESP_LOGD(TAG, "free Heap size %d", xPortGetFreeHeapSize());
 
+	// for (int i = 0; i < 10; i++)
+	// {
+	// 	ESP_LOGD(TAG, "Wait a little...");
+	// 	vTaskDelay(pdMS_TO_TICKS(1000));
+	// }
+
 	// initLeds();
 	board_init(); // USB hardware
 

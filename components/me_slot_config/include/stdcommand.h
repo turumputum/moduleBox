@@ -38,13 +38,15 @@ typedef enum
 typedef struct __tag_STDCOMMANDPARAM
 {
     PARAMT                  type;
-    int32_t                 data;
+    const char *            p;
+    float                   f;
+    int32_t                 i;
 } STDCOMMANDPARAM;
 
 typedef struct __tag_STDCOMMAND_PARAMS
 {
+    int                     skipTypeChecking;
     int                     count;
-    bool                    nonstricktTypes;
     int                     enumResult;
     STDCOMMANDPARAM         p                   [ STDCOMMAN_MAX_PARAMS ];
 } STDCOMMAND_PARAMS, * PSTDCOMMAND_PARAMS;

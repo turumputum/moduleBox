@@ -265,13 +265,13 @@ void rgb_ledc_task(void *arg){
 
 
             case MYCMD_default:
-                c->state = params.p[0].data;
+                c->state = params.p[0].i;
                 break;
 
             case MYCMD_setRGB:
-                c->targetRGB.r = params.p[0].data;
-                c->targetRGB.g = params.p[1].data;
-                c->targetRGB.b = params.p[2].data;
+                c->targetRGB.r = params.p[0].i;
+                c->targetRGB.g = params.p[1].i;
+                c->targetRGB.b = params.p[2].i;
 
                 ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
                 break;
@@ -281,16 +281,16 @@ void rgb_ledc_task(void *arg){
                 break;
 
             case MYCMD_setIncrement:
-                c->increment = params.p[0].data;
+                c->increment = params.p[0].i;
                 ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
                 break;
 
             case MYCMD_setMaxBright:
-                c->max_bright = params.p[0].data;
+                c->max_bright = params.p[0].i;
                 break;
 
             case MYCMD_setMinBright:
-                c->min_bright = params.p[0].data;
+                c->min_bright = params.p[0].i;
                 break;
 
             default:

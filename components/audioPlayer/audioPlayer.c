@@ -74,8 +74,7 @@ typedef struct __tag_AUDIOCONFIG
 
 typedef enum
 {
-    MYCMD_default = 0,
-	MYCMD_play,
+	MYCMD_play = 0,
 	MYCMD_stop,
 	MYCMD_shift,
 	MYCMD_setVolume
@@ -269,6 +268,7 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
        
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
+
 }
 
 void audio_task(void *arg) {
@@ -279,7 +279,7 @@ void audio_task(void *arg) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
     STDCOMMAND_PARAMS       params = { 0 };
 
-	params.nonstricktTypes = true;
+	params.skipTypeChecking = true;
 
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
 	//ESP_LOGD(TAG, "Start codec chip");
@@ -405,24 +405,21 @@ void audio_task(void *arg) {
 	{
 		// if (xQueueReceiveLast(me_state.command_queue[slot_num], &cmd, 5) == pdPASS)
 		int cmd = stdcommand_receive(&c->cmds, &params, 5);
-		char * cmd_arg = ((params.count > 0) && (params.p[0].type == PARAMT_string)) ? params.p[0].data : "0";
+		char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
 
         switch (cmd)
         {
             case -1: // none
                 break;
 
-            case MYCMD_default:
-				break;
-
             case MYCMD_play:
-				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), currentTrack);
+				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), c->currentTrack);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(c->play_to_end==1)){
 					ESP_LOGD(TAG, "skip restart track");
 				}else{
-					//ESP_LOGD(TAG, "before shift:%d", me_state.currentTrack);
+					ESP_LOGD(TAG, "before shift:%d, cmd_arg = '%s'", me_state.currentTrack, cmd_arg);
 					trackShift(cmd_arg);
-					//ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
+					ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
 					vTaskDelay(pdMS_TO_TICKS(c->play_delay));
 					if(audioPlay(me_state.currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);
@@ -459,7 +456,7 @@ void audio_task(void *arg) {
             case MYCMD_setVolume:
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
-					setVolume_num(params.p[0].data);
+					setVolume_num(params.p[0].i);
 				}
 				break;
 		}

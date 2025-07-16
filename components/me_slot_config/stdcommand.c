@@ -31,10 +31,6 @@ const char * paramt[] = {
 "enum"
 };
 
-// ---------------------------------------------------------------------------
-// -------------------------------- FUNCTIONS --------------------------------
-// -----------------|---------------------------(|------------------|---------
-
 void stdcommand_init(PSTDCOMMANDS       cmd,
                      int                slot_num)
 {
@@ -59,23 +55,15 @@ int _stdcommand_register(PSTDCOMMANDS       cmd,
     cmd->keywords[i].type       = PARAMT_none;
     cmd->keywords[i].count      = count;
 
-    //printf("add keyword: %s\n", keyword);
-
     for (int j = 0; (j < count) && (result > 0); j++)
     {
-        cmd->keywords[i].p[j] = (char*)va_arg(list, int);
+        cmd->keywords[i].p[j] = (char*)(va_arg(list, int));
 
         if (cmd->keywords[i].p[j] == (char*)PARAMT_enum)
         {
             ESP_LOGD(TAG, "stdcommand: %s parameter unacceptable\n", paramt[(int)cmd->keywords[i].p[j]]);
             result = -1;
         }
-    }
-
-    // Special case for "none" parameters
-    if ((1 == cmd->keywords[i].count) &&  (PARAMT_none == cmd->keywords[i].p[0]))
-    {
-        cmd->keywords[i].count = 0;
     }
 
     cmd->count++;
@@ -164,7 +152,7 @@ static PARAMT _checkType(const char * value)
 
     return t;
 }
-static char * _skip_spaces(char * value)
+static const char * _skip_spaces(const char * value)
 {
     unsigned char * on = (unsigned char *)value;
 
@@ -176,33 +164,58 @@ static char * _skip_spaces(char * value)
     return (char*)on;
 }
 static int _add_param(PSTDCOMMAND_PARAMS params,
-                      char * value)
+                      const char * value)
 {
     int         result  = 1;
     int         i       = params->count;
 
     value = _skip_spaces(value);
-
-    params->p[i].type = _checkType(value);
+    params->p[i].type   = _checkType(value);
+    params->p[i].p      = value;
 
     switch (params->p[i].type)
     {
         case PARAMT_int:
-            params->p[i].data = (int)atoi(value);
+            params->p[i].i = atoi(value);
             break;
         
         case PARAMT_float:
-            params->p[i].data = (float)atof(value);
+            params->p[i].f = (float)atof(value);
             break;
         
         default:
-            params->p[i].data = (PARAMSIZE)value;
             break;
     }
 
     params->count++;
 
     return result;    
+}
+static int _checkTypesCompability(PARAMT got, PARAMT desired)
+{
+    int             result = 0;
+
+    switch (desired)
+    {
+        case PARAMT_float:
+            result = ( (PARAMT_float == got)    || 
+                       (PARAMT_int   == got)    );
+            break;
+    
+        case PARAMT_int:
+            result = (PARAMT_int == got);
+            break;
+
+        case PARAMT_enum:
+        case PARAMT_string:
+            result = 1;
+            break;
+
+        default:
+            break;
+    }
+
+    return result;
 }
 int stdcommand_receive(PSTDCOMMANDS       cmd,
                        PSTDCOMMAND_PARAMS params,
@@ -212,22 +225,18 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
     char *              keyword;
     char *              delim;
     char *              value           = NULL;
+    char *              space;
+    char                tmp             [ 128 ];
 
     if (xQueueReceive(me_state.command_queue[cmd->slot_num], &cmd->msg, TO) == pdPASS)
     {
-        // printf("MSG HEX: ");
-        // for (int i = 0; i < 50; i++)
-        // {
-        //     printf("%x ", cmd->msg.str[i]);
-        // }
-        // printf("\n");
-
-        params->count = 0;
-
         if ((keyword = strchr(cmd->msg.str, ':')) != NULL)
         {
+            params->count = 0;
+
             ++keyword;
 
+            // Separate keyword and parameters, if any
             if ((delim = strchr(keyword, ':')) != NULL)
             {
                 *delim = 0;
@@ -243,75 +252,87 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
 
                     value = _skip_spaces(++space);
                 }
-
+                
                 _add_param(params, value);
             }
-            else
-            {
-                _add_param(params, keyword);
-                keyword = NULL;
-            }
-            
-            //printf("@@@@@ COMMAND: keyword = '%s'\n", keyword ? keyword : "<<nope>>");
-            //printf("params = %d\n", params->count);
-            // for (int i = 0; i < params->count; i++)
-            // {
-            //     printf("param %d, type: %s, value: ", i, paramt[params->p[i].type]);
-            //     switch (params->p[i].type)
-            //     {
-            //         case PARAMT_int:
-            //             printf("%d", (int)params->p[i].data);
-            //             break;
-            //         case PARAMT_float:
-            //             printf("%f", (float)params->p[i].data);
-            //             break;
-            //         default:
-            //             printf("'%s'", (char*)params->p[i].data);
-            //             break;
-            //     }
-            //     printf("\n");
-            // }
 
+            keyword = (char*)_skip_spaces(keyword);            
 
+            // Searching for keyword
             for (int i = 0; (i < cmd->count) && (-1 == result); i++)
             {
-                if (  (!keyword && !cmd->keywords[i].keyword)               || 
-                      (keyword && cmd->keywords[i].keyword && 
-                        !strcasecmp(cmd->keywords[i].keyword, keyword))     )
+                if (  cmd->keywords[i].keyword                          &&
+                      !strcasecmp(cmd->keywords[i].keyword, keyword)    )
                 {
-                    if (  (cmd->keywords[i].type == PARAMT_enum)    && 
-                          (params->count == 1)                      && 
-                          (params->p[0].type == PARAMT_string)      )
+                    if (params->count)
                     {
-                        params->enumResult = -1;
-
-                        for (int j = 0; (j < cmd->keywords[i].count) && (-1 == params->enumResult); j++)
+                        if ( (cmd->keywords[i].type == PARAMT_enum) &&
+                             (params->count == 1)                   &&
+                             (params->p[0].type == PARAMT_string)   )
                         {
-                            if (!strcasecmp(cmd->keywords[i].p[j], (char*)params->p[0].data))
+                            params->enumResult = -1;
+                    
+                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 == params->enumResult); j++)
                             {
-                                params->enumResult = j;
-                            }
-                        }
-
-                        if (params->enumResult >= 0)
-                        {
-                            result = cmd->keywords[i].id;
-                        }
-                    }
-                    else if (params->nonstricktTypes || (cmd->keywords[i].count == params->count))
-                    {
-                        result = cmd->keywords[i].id;
-
-                        if (!params->nonstricktTypes)
-                        {
-                            for (int j = 0; (j < cmd->keywords[i].count) && (-1 != result); j++)
-                            {
-                                if (cmd->keywords[i].p[j] != (char*)params->p[j].type)
+                                if (!strcasecmp(cmd->keywords[i].p[j], params->p[0].p))
                                 {
-                                    //printf("stage 4: WRONG TYPE!!!\n");
-                                    result = -1;
+                                    params->enumResult = j;
                                 }
                             }
+                                
+                            if (params->enumResult >= 0)
+                            {   
+                                result = cmd->keywords[i].id;
+                            }
+                        }
+                        else if (params->skipTypeChecking)
+                        {
+                            result = i;
+                        }
+                        else  if (cmd->keywords[i].count == params->count)
+                        {
+                            int allIsOk = 1;
+                            for (int j = 0; allIsOk && (j < params->count); j++)
+                            {
+                                if (!_checkTypesCompability(params->p[j].type, (PARAMT)cmd->keywords[i].p[j]))
+                                {
+                                    allIsOk = 0;
+                                }
+                            }
+
+                            if (allIsOk)
+                            {
+                                result = i;
+                            }
+                        }
+                    }
+                    else if ((1 == cmd->keywords[i].count) && (PARAMT_none == (PARAMT)cmd->keywords[i].p[0]))
+                    {
+                        // If command with no parameters
+
+                        params->p[0].type   = PARAMT_none;
+                        params->count       = 1;
+                        result              = i;
+                    }
+                }
+            }
+
+            // If no keywork found, we should consider parameters as value without keyword
+            if (-1 == result)
+            {
+                int type = _checkType(keyword);
+
+                // Searching for registered commands without keyword
+                for (int i = 0; (i < cmd->count) && (-1 == result); i++)
+                {
+                    if (!cmd->keywords[i].keyword)
+                    {
+                        if (_checkTypesCompability(type, (PARAMT)cmd->keywords[i].p[0]))
+                        {
+                            params->count = 0;
+                            _add_param(params, keyword);
+
+                            result = i; 
                         }
                     }
                 }

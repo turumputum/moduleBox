@@ -360,6 +360,7 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     /* Установить новое значение приращения
     */
     stdcommand_register(&c->cmds, MYCMD_setIncrement, "setIncrement", PARAMT_int);
+    
 }
 void smartLed_task(void *arg){
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
@@ -411,7 +412,7 @@ void smartLed_task(void *arg){
                 break;
 
             case MYCMD_default:
-                c->state = params.p[0].data;
+                c->state = params.p[0].i;
                 if(c->ledMode==MODE_RUN){
                     init_runEffect(&led_strip_pixels[0], c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
                 }
@@ -422,9 +423,9 @@ void smartLed_task(void *arg){
                 break;
 
             case MYCMD_setRGB:
-                c->targetRGB.r = params.p[0].data;
-                c->targetRGB.g = params.p[1].data;
-                c->targetRGB.b = params.p[2].data;
+                c->targetRGB.r = params.p[0].i;
+                c->targetRGB.g = params.p[1].i;
+                c->targetRGB.b = params.p[2].i;
 
                 ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
                 break;
@@ -441,7 +442,7 @@ void smartLed_task(void *arg){
                 break;
 
             case MYCMD_setIncrement:
-                c->increment = params.p[0].data;
+                c->increment = params.p[0].i;
                 ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
                 break;
 
@@ -1141,23 +1142,23 @@ void ledRing_task(void *arg){
                 break;
 
             case MYCMD_default:
-                c->state = params.p[0].data;
+                c->state = params.p[0].i;
                 ESP_LOGD(TAG, "Change state to:%d", c->state);
                 break;
 
             case MYCMD_setRGB:
-                c->targetRGB.r = params.p[0].data;
-                c->targetRGB.g = params.p[1].data;
-                c->targetRGB.b = params.p[2].data;
+                c->targetRGB.r = params.p[0].i;
+                c->targetRGB.g = params.p[1].i;
+                c->targetRGB.b = params.p[2].i;
 
                 ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
                 break;
 
             case MYCMD_setPos:
                 if(c->dir==1){
-                    targetPos = params.p[0].data+c->offset;
+                    targetPos = params.p[0].i+c->offset;
                 }else{
-                    targetPos = c->numOfPos-1-params.p[0].data+c->offset;
+                    targetPos = c->numOfPos-1-params.p[0].i+c->offset;
                 }
                 if(targetPos<0){
                     targetPos=targetPos+(c->numOfPos);
@@ -1405,21 +1406,21 @@ void ledBar_task(void *arg)
             case 0: // Unknown or absent keyword
                 if ((params.count == 1) && (params.p[0].type == PARAMT_int))
                 {
-                    c->state = params.p[0].data;
+                    c->state = params.p[0].i;
                     ESP_LOGD(TAG, "Change state to:%d", c->state);
                 }
                 break;
 
             case MYCMD_setRGB:
-                c->targetRGB.r = params.p[0].data;
-                c->targetRGB.g = params.p[1].data;
-                c->targetRGB.b = params.p[2].data;
+                c->targetRGB.r = params.p[0].i;
+                c->targetRGB.g = params.p[1].i;
+                c->targetRGB.b = params.p[2].i;
 
                 ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
                 break;
 
             case MYCMD_setPos:
-                targetPos += params.p[0].data;
+                targetPos += params.p[0].i;
                 if(targetPos>c->numOfPos) targetPos=c->numOfPos;
                 ESP_LOGD(TAG, "Change pos to:%d", targetPos);
                 break;

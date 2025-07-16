@@ -1,7 +1,8 @@
 #!/bin/bash
 
-#PORT=USB0
-PORT=ACM0
+PORT=USB0
+#PORT=USB1
+#PORT=ACM0
 PREFIX=.
 
 if [[ "$PWD" == *"sbin"* ]]; then

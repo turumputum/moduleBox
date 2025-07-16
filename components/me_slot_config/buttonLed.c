@@ -407,7 +407,7 @@ void led_task(void *arg){
                 break;
 
             case MYCMD_default:
-				int val = params.p[0].data;
+				int val = params.p[0].i;
 				if(val!=c.led_inverse){
 					targetBright = c.maxBright;
 				}else{
