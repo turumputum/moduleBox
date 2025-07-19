@@ -15,6 +15,7 @@
 //#include <netinet/in.h>
 #include "esp_timer.h"
 #include "myMqtt.h"
+#include "LAN.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "REPORTER";
@@ -237,7 +238,9 @@ void crosslinker(char* str){
 	}
 	//ESP_LOGD(TAG, "Crosslink calc time:%lld", esp_timer_get_time() - startTick);
 }
-void send_report(char *tmpStr){
+void send_report(reporter_message_t * msg)
+{
+	char * tmpStr = msg->str;
 	usbprint(tmpStr);
 
 	//ESP_LOGE(TAG,"send_report stage 1\n");
@@ -301,14 +304,12 @@ void send_report(char *tmpStr){
 			//ESP_LOGD(TAG,"send osc OK: \n");
 		}
 	}
-	if(me_state.UDP_init_res==ESP_OK){
-		struct sockaddr_in destAddr = {0};
-		destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
-		destAddr.sin_family = 2;
-		destAddr.sin_port = htons(me_config.udpServerPort);
-		int res = sendto(me_state.udp_socket, tmpStr, strlen(tmpStr), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
+	if(me_state.UDP_init_res==ESP_OK)
+	{
+		int res = udplink_send(msg->slot_num, tmpStr);
+
 		if (res < 0){
-			ESP_LOGE(TAG,"Failed to send osc errno: %d string:%s\n", errno, tmpStr);
+			ESP_LOGE(TAG,"Failed to send UDP errno: %d string:%s\n", errno, tmpStr);
 			err++;
 			if(err>10){
 				esp_restart();
@@ -317,7 +318,7 @@ void send_report(char *tmpStr){
 		}else{
 			err--;
 			if(err<0)err=0;
-			//ESP_LOGD(TAG,"send osc OK: \n");
+			//ESP_LOGD(TAG,"send UDP OK: \n");
 		}
 	}
 }
@@ -328,7 +329,7 @@ void spread_the_word_task(void)
 	for(;;){
 		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, portMAX_DELAY) == pdPASS)
 		{
-			send_report(received_message.str);
+			send_report(&received_message);
 
 			heap_caps_free(received_message.str);
 		}	

@@ -184,58 +184,7 @@ void start_osc_recive_task(){
 	xTaskCreatePinnedToCore(osc_recive_task, "osc_recive_task", 1024 * 6, NULL, configMAX_PRIORITIES - 10, NULL,0);
 }
 
-//------------------------------UDP----------------------------------------------
-void udp_recive_task(){
-	if((strlen(me_config.udpServerAdress) < 7)||(me_config.udpMyPort < 1)){
-		ESP_LOGD(TAG, "wrong UDP config");
-		vTaskDelay(pdMS_TO_TICKS(200));
-		vTaskDelete(NULL);
-	}
 
-	me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (me_state.udp_socket < 0) {
-		printf("Failed to create socket for UDP: %d\n", errno);
-		writeErrorTxt("Failed to create socket for UDP");
-		vTaskDelete(NULL);
-	}else{
-		ESP_LOGD(TAG,"UDP socket OK num:%d", me_state.udp_socket);
-	}
-	
-	int buff_size=250;
-	char buff[buff_size];
-
-	struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
-    socklen_t socklen = sizeof(source_addr);
-
-	struct sockaddr_in dest_addr;
-	dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	dest_addr.sin_family = AF_INET;
-	dest_addr.sin_port = htons(me_config.udpMyPort);
-
-	int err = bind(me_state.udp_socket, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-	if (err < 0) {
-		ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
-	}
-
-	ESP_LOGD(TAG, "UDP revive task STARTED, on port:%d",me_config.udpMyPort);
-	me_state.UDP_init_res = ESP_OK;
-	while(1){
-		int len=recvfrom(me_state.udp_socket, buff, buff_size-1, 0,(struct sockaddr *)&source_addr, &socklen);
-		if(len<0){
-			//ESP_LOGD(TAG, "UDP incoming fail(");
-		}else{
-			//ESP_LOGD(TAG, "UDP incoming:%.*s",len, buff);
-			char strT[255];
-			sprintf(strT, "%.*s", len, buff);
-			execute(strT);
-		}
-		vTaskDelay(pdMS_TO_TICKS(20));
-	}
-}
-
-void start_udp_recive_task(){
-	xTaskCreatePinnedToCore(udp_recive_task, "udp_recive_task", 1024 * 6, NULL, configMAX_PRIORITIES - 10, NULL,0);
-}
 
 
 //------------------------------FTP----------------------------------------------

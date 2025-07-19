@@ -10,7 +10,7 @@
 #include "diskio.h"
 #include "sdcard_scan.h"
 #include <errno.h>
-
+#include "LAN.h"
 #include "audio_error.h"
 #include "audio_mem.h"
 #include "me_slot_config.h"
@@ -88,13 +88,13 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->FTP_login = strdup(value);
 	} else if (MATCH("FTP", "FTP_pass")) {
 		pconfig->FTP_pass = strdup(value);
-	} else if (MATCH("UDP", "udpServerAdress")){//-----------------------------------------------
-		pconfig->udpServerAdress = strdup(value);
-	} else if (MATCH("UDP", "udpServerPort")) {
-		pconfig->udpServerPort = atoi(value);
-	} else if (MATCH("UDP", "udpMyPort")) {
-		pconfig->udpMyPort = atoi(value);
-	} else if (MATCH("UDP", "udp_cross_link")) {
+    } else if (MATCH("UDP", "udpServerAdress")){//-----------------------------------------------
+        pconfig->udpServerAdress = strdup(value);
+    } else if (MATCH("UDP", "udpServerPort")) {
+        pconfig->udpServerPort = atoi(value);
+    } else if (MATCH("UDP", "udpMyPort")) {
+        pconfig->udpMyPort = atoi(value);
+	} else if (MATCH("UDP", "cross_link")) {
 		pconfig->udp_cross_link = strdup(value);
 	} else if (MATCH("OSC", "oscServerAdress")) {//-----------------------------------------------
 		pconfig->oscServerAdress = strdup(value);
@@ -166,11 +166,12 @@ void load_Default_Config(void) {
 
 	me_config.mqttBrokerAdress = strdup("");
 	
-	me_config.udpServerAdress = strdup("");
-	me_config.udpServerPort = 0;
-	me_config.udpMyPort = 0;
-	me_config.udp_cross_link = strdup("");
-	me_state.UDP_init_res = ESP_FAIL;
+    me_config.udpServerAdress = strdup("");
+    me_config.udpServerPort = 0;
+    me_config.udpMyPort = 0;
+    me_config.udp_cross_link = strdup("");
+    me_state.UDP_init_res = ESP_FAIL;
+
 	
 	me_config.oscServerAdress = strdup("");
 	me_config.oscServerPort = 0;
@@ -280,23 +281,21 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
-	sprintf(tmp, "\r\n[UDP] \r\n");
+    sprintf(tmp, "\r\n[UDP] \r\n");
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+    sprintf(tmp, "udpServerAdress = %s \r\n", me_config.udpServerAdress);
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+    sprintf(tmp, "udpServerPort = %d \r\n", me_config.udpServerPort);
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+    sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "cross_link = %s \r\n", me_config.udp_cross_link);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udpServerAdress = %s \r\n", me_config.udpServerAdress);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udpServerPort = %d \r\n", me_config.udpServerPort);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-
-	
-	// sprintf(tmp, "udp_cross_link = %s \r\n", me_config.udp_cross_link);
-	// fprintf(configFile, tmp);
-	// memset(tmp, 0, strlen(tmp));
 
 
 	sprintf(tmp, "\r\n[OSC] \r\n");

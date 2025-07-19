@@ -88,7 +88,6 @@ typedef struct {
 } stateStruct;
 
 
-
 typedef struct {
 	TCHAR audioFile[FILE_NAME_LEGHT];
 	TCHAR icoFile[FILE_NAME_LEGHT];
@@ -120,10 +119,10 @@ typedef struct {
 	char *FTP_login;
 	char *FTP_pass;
 
-	char *udpServerAdress;
-	uint16_t udpServerPort;
-	uint16_t udpMyPort;
-	char *udp_cross_link;
+    char *udpServerAdress;
+    uint16_t udpServerPort;
+    uint16_t udpMyPort;
+    char *udp_cross_link;
 
 	char *oscServerAdress;
 	uint16_t oscServerPort;

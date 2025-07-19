@@ -1,7 +1,7 @@
 #!/bin/bash
 
-PORT=USB0
-#PORT=USB1
+#PORT=USB0
+PORT=USB1
 #PORT=ACM0
 PREFIX=.
 
