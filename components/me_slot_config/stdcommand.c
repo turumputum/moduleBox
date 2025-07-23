@@ -226,15 +226,19 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
     char *              delim;
     char *              value           = NULL;
     char *              space;
+    int                 len;
     char                tmp             [ 128 ];
 
     if (xQueueReceive(me_state.command_queue[cmd->slot_num], &cmd->msg, TO) == pdPASS)
     {
-        if ((keyword = strchr(cmd->msg.str, ':')) != NULL)
-        {
-            params->count = 0;
+        len = strlen(me_state.action_topic_list[cmd->slot_num]);
 
-            ++keyword;
+
+        if (strlen(cmd->msg.str) > len)
+        {
+            keyword = cmd->msg.str + len + 1;
+
+            params->count = 0;
 
             // Separate keyword and parameters, if any
             if ((delim = strchr(keyword, ':')) != NULL)

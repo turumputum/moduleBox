@@ -135,7 +135,7 @@ static void parseUdpCrossLinks()
 				else
 					on = begin;
 
-				if ((begin = strchr(on, ' ')) != nil)
+				if ((begin = strchr(on, ',')) != nil)
 				{
 					*begin = 0;
 					begin++;
