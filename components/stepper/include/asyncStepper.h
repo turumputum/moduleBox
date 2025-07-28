@@ -94,6 +94,7 @@ typedef struct {
 
   int32_t targetPos;
   int32_t currentPos;
+  int32_t breakWay;
   int32_t breakPoint;
 
   int32_t accel;
@@ -128,6 +129,7 @@ typedef struct {
   .targetSpeed = 0,\
   .targetPos = 0,\
   .currentPos = 0,\
+  .breakWay = 0,\
   .accel = 100,\
 	.dir = 0,\
   .runSpeedFlag = 0,\
@@ -139,6 +141,7 @@ void stepper_getCurrentPos(stepper_t *stepper);
 void stepper_moveTo(stepper_t *stepper, int32_t pos);
 void stepper_speedUpdate(stepper_t *stepper, int32_t period);
 void stepper_stop(stepper_t *stepper);
+void stepper_break(stepper_t *stepper);
 void stepper_setZero(stepper_t *stepper);
 // void setSpeed(asyncStepper_t *stepper, int32_t spd);
 // void startStepper(asyncStepper_t *stepper);

@@ -183,7 +183,7 @@ esp_err_t rmt_new_led_strip_encoder(const led_strip_encoder_config_t *config, rm
     rmt_copy_encoder_config_t copy_encoder_config = {};
     ESP_GOTO_ON_ERROR(rmt_new_copy_encoder(&copy_encoder_config, &led_encoder->copy_encoder), err, TAG, "create copy encoder failed");
 
-    uint32_t reset_ticks = config->resolution / 1000000 * 90 / 2; // reset code duration defaults to 50us
+    uint32_t reset_ticks = config->resolution / 1000000 * 300 / 2; // reset code duration defaults to 50us
     led_encoder->reset_code = (rmt_symbol_word_t) {
         .level0 = 0,
         .duration0 = reset_ticks,
@@ -402,10 +402,12 @@ void smartLed_task(void *arg){
     };
     //state = inverse;
     TickType_t lastWakeTime = xTaskGetTickCount(); 
+    TickType_t lastUpdateTime = xTaskGetTickCount();
 
     waitForWorkPermit(slot_num);
 
     while (1) {
+<<<<<<< HEAD
         switch (stdcommand_receive(&c->cmds, &params, 0))
         {
             case -1: // none
@@ -415,6 +417,18 @@ void smartLed_task(void *arg){
                 c->state = params.p[0].i;
                 if(c->ledMode==MODE_RUN){
                     init_runEffect(&led_strip_pixels[0], c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
+=======
+        command_message_t msg;
+        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
+            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
+                state = atoi(payload);
+                if(ledMode==RUN){
+                    init_runEffect(&led_strip_pixels, num_of_led, minBright, maxBright, &targetRGB);
+>>>>>>> main
                 }
                 if(c->state==0){
                     currentBright = targetBright-1;
@@ -510,6 +524,12 @@ void smartLed_task(void *arg){
         }
 
 
+        if(forcedUpdatePeriod!=0){
+            if(xTaskGetTickCount()-lastUpdateTime>=forcedUpdatePeriod){
+                flag_ledUpdate = true;
+            }
+        }
+
         if(flag_ledUpdate){
             flag_ledUpdate = false;
             //ESP_LOGD(TAG, "sizeof(led_strip_pixels):%d", sizeof(led_strip_pixels));
@@ -523,6 +543,7 @@ void smartLed_task(void *arg){
             // printf("]\n");
             
             rmt_createAndSend(&rmt_slot_heap, led_strip_pixels, sizeof(led_strip_pixels),  slot_num);
+            lastUpdateTime = xTaskGetTickCount();
         }
 
         //uint16_t delay = refreshPeriod - pdTICKS_TO_MS(xTaskGetTickCount()-startTick);

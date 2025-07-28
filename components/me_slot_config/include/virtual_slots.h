@@ -9,3 +9,4 @@ void start_collector_task(int slot_num);
 void start_tankControl_task(int slot_num);
 void start_flywheel_task(int slot_num);
 void start_scaler_task(int slot_num);
+void start_stepper_conductor_task(int slot_num);

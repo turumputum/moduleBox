@@ -249,23 +249,16 @@ void encoderPPM_task(void *arg)
 		current_pos -= c.num_of_pos;
 	}
 
-	int offset = raw_val;
-	while(offset >= pos_length){
-		offset -= pos_length;
-	}
-	offset = -(offset); //
 	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, offset, pos_length);
 
-	#define ANTI_DEBOUNCE_INERATIONS 1
-	int anti_deb_mass_index = 0;
-	int val_mass[ANTI_DEBOUNCE_INERATIONS];
-
+	float filtredVal = 0;
+	TickType_t lastWakeTime = xTaskGetTickCount(); 
 	waitForWorkPermit(slot_num);
 
 	while (1){
-		vTaskDelay(pdMS_TO_TICKS(10));
+		//vTaskDelay(pdMS_TO_TICKS(20));
 		if (tickVals.flag){
-			raw_val = tickVals.dTime + offset + pos_length/2;
+			raw_val = tickVals.dTime + offset;
 			//raw_val = tickVals.dTime + offset;
 		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
 			raw_val = 0;
@@ -277,24 +270,49 @@ void encoderPPM_task(void *arg)
 			raw_val = c.pole;
 		}
 
-		val_mass[anti_deb_mass_index] = raw_val;
-		anti_deb_mass_index++;
-		if (anti_deb_mass_index == ANTI_DEBOUNCE_INERATIONS){
-			anti_deb_mass_index = 0;
+		if(raw_val<MIN_VAL){
+			MIN_VAL = raw_val;
+			pole = MAX_VAL - MIN_VAL;
+			pos_length = (float)pole / num_of_pos;
+		}else if(raw_val>MAX_VAL){
+			MAX_VAL = raw_val;
+			pole = MAX_VAL - MIN_VAL;
+			pos_length = (float)pole / num_of_pos;
 		}
-		int sum = 0;
-		for (int i = 1; i < ANTI_DEBOUNCE_INERATIONS; i++){
-			if (abs(val_mass[i] - val_mass[i - 1]) < 3)	{
-				sum++;
-			}
+		//raw_val = raw_val + offset;
+		//ESP_LOGD(TAG, "raw_val:%d", raw_val);
+		
+		if((filterK<1)&&(abs(raw_val-prew_filtredVal)<pole/2)){
+			filtredVal = filtredVal*(1-filterK) + raw_val*(filterK);
+			//ESP_LOGD(TAG, "filtredVal:%f raw_val:%d", filtredVal, raw_val);
+		}else{
+			filtredVal = raw_val;
 		}
-		if (sum >= (ANTI_DEBOUNCE_INERATIONS - 1)){
+
+		if(abs(filtredVal-prew_filtredVal)>deadZone){
+			prew_filtredVal = filtredVal;
+		
+		
+
+		// val_mass[anti_deb_mass_index] = raw_val;
+		// anti_deb_mass_index++;
+		// if (anti_deb_mass_index == ANTI_DEBOUNCE_INERATIONS){
+		// 	anti_deb_mass_index = 0;
+		// }
+		// int sum = 0;
+		// for (int i = 1; i < ANTI_DEBOUNCE_INERATIONS; i++){
+		// 	if (abs(val_mass[i] - val_mass[i - 1]) < 3)	{
+		// 		sum++;
+		// 	}
+		// }
+		// if (sum >= (ANTI_DEBOUNCE_INERATIONS - 1)){
 			current_pos = 0;
-			float tmpVal = raw_val;
+			float tmpVal = filtredVal;
 			while(tmpVal > pos_length){
 				current_pos++;
 				tmpVal -= pos_length;
 			}
+			//ESP_LOGD(TAG, "obrezok: %f", tmpVal);
 			//current_pos = ((raw_val- pos_length/2)/ pos_length)+zero_shift;
 			while(current_pos>=c.num_of_pos){
 				current_pos -= c.num_of_pos;
@@ -304,6 +322,7 @@ void encoderPPM_task(void *arg)
 				current_pos = c.num_of_pos-current_pos;
 			}
 		}
+			// }
 
 		//ESP_LOGD(TAG, "raw_val:%d center:%d delta:%d", raw_val, (int)(current_pos*pos_length+pos_length/2), abs(raw_val-(current_pos*pos_length+pos_length/2)) );
 
@@ -336,7 +355,18 @@ void encoderPPM_task(void *arg)
 			report(str, slot_num);
 			prev_pos = current_pos;
 		}
+
+		if(calibrationFlag){
+			sprintf(str, "/calibration: dTime:%lld pos:%d delta:%d", tickVals.dTime, current_pos, abs(raw_val-(current_pos*pos_length+pos_length/2)));
+			ESP_LOGD(TAG,"%s", str);
+			report(str, slot_num);
+		}
 		tickVals.flag = 0;
+
+		if (xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(refreshPeriod)) == pdFALSE) {
+            ESP_LOGE(TAG, "Delay missed! Adjusting wake time.");
+            lastWakeTime = xTaskGetTickCount(); // Сброс времени пробуждения
+        }
 		
 	}
 }
@@ -347,80 +377,11 @@ void start_encoderPPM_task(int slot_num)
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
 	// int slot_num = *(int*) arg;
-	xTaskCreate(encoderPPM_task, "encoderCalc", 1024 * 4, &t_slot_num, 1, NULL);
+	xTaskCreate(encoderPPM_task, "encoderCalc", 1024 * 4, &t_slot_num, 22, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "pwmEncoder init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
-
-//-------------------incremental encoder secttion--------------------------
-// void encoder_inc_task(void *arg){
-// 	int slot_num = *(int *)arg;
-// 	uint8_t a_pin_num = SLOTS_PIN_MAP[slot_num][0];
-// 	uint8_t b_pin_num = SLOTS_PIN_MAP[slot_num][1];
-
-// 	gpio_install_isr_service(0);
-// 	rotary_encoder_info_t info = {0};
-
-// 	uint8_t inverse  = 0;
-// 	if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-// 		inverse=1;
-// 	}
-// 	if(inverse){
-// 		ESP_ERROR_CHECK(rotary_encoder_init(&info, b_pin_num, a_pin_num));
-// 	}else{
-// 		ESP_ERROR_CHECK(rotary_encoder_init(&info, a_pin_num, b_pin_num));
-// 	}
-
-// 	uint8_t absolute  = 0;
-// 	if (strstr(me_config.slot_options[slot_num], "absolute")!=NULL){
-// 		absolute=1;
-// 	}
-	
-// 	uint8_t flag_custom_topic = 0;
-// 	char *custom_topic=NULL;
-// 	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
-// 		custom_topic = get_option_string_val(slot_num,"topic");
-// 		ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
-// 		flag_custom_topic=1;
-// 	}
-
-//     if(flag_custom_topic==0){
-// 		char *str = calloc(strlen(me_config.deviceName)+strlen("/encoder_")+4, sizeof(char));
-// 		sprintf(str, "%s/encoder_%d",me_config.deviceName, slot_num);
-// 		me_state.trigger_topic_list[slot_num]=str;
-// 	}else{
-// 		me_state.trigger_topic_list[slot_num]=custom_topic;
-// 	}
-
-
-
-// 	//QueueHandle_t event_queue = rotary_encoder_create_queue();
-// 	//ESP_ERROR_CHECK(rotary_encoder_set_queue(&info, event_queue));
-
-// 	int32_t pos, prev_pos=0;
-
-// 	while (1)
-// 	{
-// 		// Wait for incoming events on the event queue.
-// 		pos = info.state.position;
-
-// 		char str[40];
-// 		if(pos!=prev_pos){
-
-// 			if(absolute){
-// 				sprintf(str,"%ld", pos);
-// 			}else{
-// 				sprintf(str,"%ld",prev_pos - pos);
-// 			}
-
-// 			report(str, slot_num);
-// 			//vPortFree(str);
-// 			prev_pos = pos;
-// 		}
-// 		vTaskDelay(pdMS_TO_TICKS(20));
-// 	}
-// }
 
 void encoder_inc_task(void *arg){
     int slot_num = *(int *)arg;

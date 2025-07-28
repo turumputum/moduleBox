@@ -10,6 +10,7 @@
 #include "driver/mcpwm_prelude.h"
 #include "esp_log.h"
 #include "me_slot_config.h"
+#include "math.h"
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -30,30 +31,6 @@ static const char *TAG = "STEPPER";
 void speedStepper_init(speedStepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth){
 	stepper->_stepPin = step_pin;
     stepper->_directionPin = dir_pin;
-
-    //-----------------------pcnt init------------------------------
-    // pcnt_unit_config_t unit_config = {
-    //     .high_limit = INT16_MAX,
-    //     .low_limit = INT16_MIN,
-    //     .flags.accum_count = true, // accumulate the counter value
-    // };
-    // ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &stepper->_pcnt_unit));
-
-    // pcnt_chan_config_t chan_config = {
-    //     .edge_gpio_num = stepper->_stepPin,  // Use MCPWM step pin output
-    //     .level_gpio_num = -1,  // Direction pin
-    //     //.flags.io_loop_back = true // Enable input/output loop back mode
-    // };
-    // ESP_ERROR_CHECK(pcnt_new_channel(stepper->_pcnt_unit, &chan_config, &stepper->_pcnt_chan));
-
-    // //Настраиваем счет в зависимости от DIR
-    // ESP_ERROR_CHECK(pcnt_channel_set_edge_action(stepper->_pcnt_chan,
-    //                                               PCNT_CHANNEL_EDGE_ACTION_INCREASE,
-    //                                               PCNT_CHANNEL_EDGE_ACTION_HOLD));
-    
-    // ESP_ERROR_CHECK(pcnt_channel_set_level_action(stepper->_pcnt_chan,
-    //                                               PCNT_CHANNEL_LEVEL_ACTION_KEEP,
-    //                                               PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
 
     ///-----------------------mcpwm init------------------------------
     mcpwm_timer_config_t timer_config = {
@@ -107,21 +84,6 @@ void speedStepper_init(speedStepper_t *stepper, gpio_num_t step_pin, gpio_num_t 
 }
 
 
-// void set_stop_position(asyncStepper_t *stepper, int32_t target){
-//     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->_pcnt_unit, target));
-// }
-
-// int32_t get_position(asyncStepper_t *stepper) {
-//     int value;
-//     pcnt_unit_get_count(stepper->_pcnt_unit, &value);
-//     //ESP_LOGD(TAG, "position: %d", value);
-//     return value;
-// }
-
-// void reset_position(asyncStepper_t *stepper) {
-//     pcnt_unit_clear_count(stepper->_pcnt_unit);
-// }
-
 void speedStepper_stop(speedStepper_t *stepper) {
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->_timer, MCPWM_TIMER_STOP_FULL));
     stepper->_state=SPEED_STEPPER_STOP;
@@ -173,10 +135,10 @@ void stepper_getCurrentPos(stepper_t *stepper){
         if(delta>0){
             //переполнение в отрицательной зоне
             delta = pos -(stepper->pcnt_prevPos - INT16_MIN);
-            ESP_LOGD(TAG, "overload in negative zone");
+            //ESP_LOGD(TAG, "overload in negative zone");
         }else{
             delta = pos - (stepper->pcnt_prevPos - INT16_MAX);
-            ESP_LOGD(TAG, "overload in positive zone");
+            //ESP_LOGD(TAG, "overload in positive zone");
         }
     }
     
@@ -196,13 +158,14 @@ void stepper_stop(stepper_t *stepper) {
 }
 
 void stepper_break(stepper_t *stepper) {
+    stepper->runSpeedFlag = 0;
     stepper_getCurrentPos(stepper);
     int64_t chisl = (((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
     float znam = 2 * stepper->accel;
     float accel_distance = chisl / znam;
-    int64_t target =accel_distance*stepper->dir; 
-    stepper_moveTo(stepper, stepper->currentPos+target);
-    ESP_LOGD(TAG, "accel_distance: %f stopPoint: %lld", accel_distance, target);
+    int64_t target =stepper->currentPos + accel_distance*stepper->dir; 
+    stepper_moveTo(stepper, target);
+    ESP_LOGD(TAG, "break_distance: %f stopPoint: %lld", accel_distance, target);
 }
 
 static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_data) {
@@ -327,11 +290,11 @@ void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, u
 void stepper_checkDir(stepper_t *stepper){
     if((stepper->dir==DIR_CW)&&(stepper->currentPos > stepper->targetPos)){
         //надо менять направление вращения
-        ESP_LOGD(TAG, "Dir change needed, CW");
+        //ESP_LOGD(TAG, "Dir change needed, CW");
         stepper->targetSpeed = 0;
     }else if((stepper->dir==DIR_CCW)&&(stepper->currentPos < stepper->targetPos)){
         //надо менять направление вращения
-        ESP_LOGD(TAG, "Dir change needed, CCW");
+        //ESP_LOGD(TAG, "Dir change needed, CCW");
         stepper->targetSpeed = 0;
     }
 
@@ -356,14 +319,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     if(distance==0){
         return;
     }
-
-    //!!! убери меня если checkDir заработает
-    // stepper->dir = distance > 0 ? DIR_CW : DIR_CCW;
-    // gpio_set_level(stepper->dirPin, stepper->dir==DIR_CW ? !stepper->dirInverse : stepper->dirInverse);
-    // ESP_LOGD(TAG, "dir:%d dirInverse:%d", stepper->dir, stepper->dirInverse);
-
-    //pcnt_unit_stop(stepper->pcntUnit);
-    
+   
     pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint);
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MAX);
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MIN);
@@ -389,40 +345,44 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
         pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
     }
     //ESP_LOGD(TAG, "add watch point %d", stepper->pcnt_watchPoint);
-
     ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
     stepper->pcnt_prevPos = 0;
     
     
+    int64_t reachableSpeed = sqrt(((int64_t)(2*stepper->accel*llabs(distance))+((int64_t)stepper->currentSpeed*(int64_t)stepper->currentSpeed))/2);
+
+    if(reachableSpeed<stepper->maxSpeed){
+        stepper->targetSpeed = reachableSpeed;
+    }
+    ESP_LOGD(TAG, "reachableSpeed: %lld", reachableSpeed);
+ 
     //pcnt_unit_start(stepper->pcntUnit);
-    int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
+    //int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
+    int64_t chisl = ((int64_t)stepper->targetSpeed * (int64_t)stepper->targetSpeed);
     float znam = 2 * stepper->accel;
-    float accel_distance = chisl / znam;
-    //ESP_LOGD(TAG, "chisl:%lld znam:%f accel_distance: %f maxSpeed: %ld currentSpeed: %ld", chisl, znam, accel_distance, stepper->maxSpeed, stepper->currentSpeed);
-    if(accel_distance>abs(distance/2)){
-        accel_distance = abs(distance/2);
+    float break_distance = chisl / znam;
+    ESP_LOGD(TAG, "chisl:%lld znam:%f break_distance: %f maxSpeed: %ld currentSpeed: %ld", chisl, znam, break_distance, stepper->maxSpeed, stepper->currentSpeed);
+    if(break_distance>llabs(distance)){
+        break_distance = llabs(distance);
     }
-    int8_t dir;
-    if(stepper->currentPos > stepper->targetPos){
-        dir=1;
-    }else if(stepper->currentPos < stepper->targetPos){
-        dir=-1;
-    }
-    stepper->breakPoint = stepper->targetPos-(accel_distance * stepper->dir);
-    
+
+    stepper->breakPoint = stepper->targetPos-(break_distance*stepper->dir);
+    stepper->breakWay = break_distance;
     if(stepper->state==STOP){
         mcpwm_timer_set_period(stepper->mcpwmTimer, UINT16_MAX);
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP));
         stepper->state=RUN;
     }
 
-    ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld  state:%s", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, accel_distance, stepper->breakPoint, stepper->state==STOP?"STOP":"RUN");
+    ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld  state:%s", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, break_distance, stepper->breakPoint, stepper->state==STOP?"STOP":"RUN");
     ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld dir:%s", stepper->currentSpeed, stepper->targetSpeed, stepper->dir==DIR_CW?"CW":"CCW");
 }
 
 void stepper_speedUpdate(stepper_t *stepper, int32_t period){  
     if(stepper->runSpeedFlag==1){
-        stepper->currentPos=0;
+        if(llabs(stepper->targetPos-stepper->currentPos)<stepper->breakWay*2){
+            stepper->currentPos=0;
+        }
     }
 
     if(stepper->currentPos!=stepper->targetPos){

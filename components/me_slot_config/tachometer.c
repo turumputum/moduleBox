@@ -6,6 +6,7 @@
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/timer.h"
+#include "driver/pulse_cnt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,22 +26,67 @@ extern uint8_t led_segment;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "TACHOMETER";
 
+#define BUFFER_SIZE 50  // Default buffer size for RPM averaging
+
+typedef struct {
+    uint16_t buffer[BUFFER_SIZE];  // Store pulse counts per second
+    uint8_t head;
+    uint8_t size;
+    uint8_t buffer_size;
+} pulse_buffer_t;
+
 typedef struct
 {
-	uint8_t pulse_flag;
-	uint64_t last_tick;
+	pcnt_unit_handle_t pcnt_unit;
+	uint64_t last_accumulation_tick;
+	uint64_t last_refresh_tick;
 	uint16_t rpm;
     uint16_t prev_rpm;
+    int last_count;
+    uint32_t refresh_period;
+    uint16_t divider;
+    uint32_t glitch_filter_ns;
+    pulse_buffer_t pulse_buffer;
+    uint32_t accumulation_time_ms;
 } tachoWork_var;
 
 uint64_t debug_flag;
 
 
 
-static void IRAM_ATTR up_front_handler(void *args){
-	int slot_num = (int) args;
-	uint8_t tmp=1;
-    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+// GPIO interrupt handler removed - using pulse_cnt driver instead
+
+// Initialize pulse buffer
+static void pulse_buffer_init(pulse_buffer_t *buffer, uint8_t size) {
+    buffer->head = 0;
+    buffer->size = 0;
+    buffer->buffer_size = (size > BUFFER_SIZE) ? BUFFER_SIZE : size;
+    memset(buffer->buffer, 0, sizeof(buffer->buffer));
+}
+
+// Add pulse count to buffer
+static void pulse_buffer_add(pulse_buffer_t *buffer, uint16_t pulse_count) {
+    buffer->buffer[buffer->head] = pulse_count;
+    buffer->head = (buffer->head + 1) % buffer->buffer_size;
+    if (buffer->size < buffer->buffer_size) {
+        buffer->size++;
+    }
+}
+
+// Calculate RPM from pulse buffer (sum of pulses converted to RPM)
+static uint16_t pulse_buffer_get_rpm(pulse_buffer_t *buffer, uint16_t divider, uint32_t accumulation_time_ms) {
+    if (buffer->size == 0) {
+        return 0;
+    }
+    
+    uint32_t total_pulses = 0;
+    for (uint8_t i = 0; i < buffer->size; i++) {
+        total_pulses += buffer->buffer[i];
+    }
+    
+    // Convert total pulses to RPM: (total_pulses * 60000) / (accumulation_time_ms * divider)
+    // accumulation_time_ms is the total time represented by the buffer
+    return (uint16_t)((total_pulses * 60000UL) / (accumulation_time_ms * divider));
 }
 
 void tachometer_task(void *arg)
@@ -50,23 +96,104 @@ void tachometer_task(void *arg)
 
 	int slot_num = *(int *)arg;
 
-	me_state.interrupt_queue[slot_num] = xQueueCreate(5, sizeof(uint8_t));
-
 	uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
-
-	gpio_reset_pin(sens_pin_num);
-	esp_rom_gpio_pad_select_gpio(sens_pin_num);
-    gpio_config_t in_conf = {};
-   	in_conf.intr_type = GPIO_INTR_POSEDGE;
-    //bit mask of the pins, use GPIO4/5 here
-    in_conf.pin_bit_mask = (1ULL<<sens_pin_num);
-    //set as input mode
-    in_conf.mode = GPIO_MODE_INPUT;
-    gpio_config(&in_conf);
-	gpio_set_intr_type(sens_pin_num, GPIO_INTR_POSEDGE);
-    gpio_install_isr_service(0);
-    tachoWork_var var;
-    ESP_ERROR_CHECK(gpio_isr_handler_add(sens_pin_num, up_front_handler, (void*)slot_num));
+	
+	// Initialize pulse counter
+	tachoWork_var var;
+	var.refresh_period = 100000; // 100ms in microseconds (default)
+	var.last_count = 0;
+	uint64_t current_time = esp_timer_get_time();
+	var.last_accumulation_tick = current_time;
+	var.last_refresh_tick = current_time;
+	var.rpm = 0;
+	var.prev_rpm = 0;
+	var.divider = 1; // Default divider
+	var.glitch_filter_ns = 10000;
+	var.accumulation_time_ms = 1000; // Default 1 second accumulation time 
+	
+	// Convert refresh_period to milliseconds for buffer calculations
+	uint32_t refresh_period_ms = var.refresh_period / 1000; // Convert microseconds to milliseconds
+	
+	// Check for refreshRate option (legacy compatibility)
+	if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
+		uint16_t refreshRate = get_option_int_val(slot_num, "refreshRate");
+		refresh_period_ms = 1000 / refreshRate; // Convert Hz to ms
+		var.refresh_period = refresh_period_ms * 1000; // Update refresh_period in microseconds
+		ESP_LOGD(TAG, "Set refreshRate:%d Hz, refreshPeriod:%lu ms for slot:%d", refreshRate, refresh_period_ms, slot_num);
+	}
+	
+	// Calculate buffer size: accumulation_time / refresh_period
+	uint8_t buffer_size = (var.accumulation_time_ms / refresh_period_ms);
+	if (buffer_size > BUFFER_SIZE) buffer_size = BUFFER_SIZE;
+	if (buffer_size < 1) buffer_size = 1;
+	
+	pulse_buffer_init(&var.pulse_buffer, buffer_size);
+	
+	ESP_LOGD(TAG, "Initial settings - Accumulation time: %lu ms, Refresh period: %lu ms, Buffer size: %d", 
+			var.accumulation_time_ms, refresh_period_ms, buffer_size);
+	
+	
+	// Check for pulse divider
+	if (strstr(me_config.slot_options[slot_num], "divider")!=NULL){
+		uint16_t divider = get_option_int_val(slot_num, "divider");
+		if (divider > 0 && divider <= 1000) { // Max 1000 pulses per revolution
+			var.divider = divider;
+		}
+	}
+	
+	// Check for glitch filter
+	if (strstr(me_config.slot_options[slot_num], "glitchFilter")!=NULL){
+		uint32_t glitch_ns = get_option_int_val(slot_num, "glitchFilter");
+		if (glitch_ns <= 100000) { // Max 100us filter
+			var.glitch_filter_ns = glitch_ns;
+			ESP_LOGD(TAG, "Set glitch filter to %lu ns", var.glitch_filter_ns);
+		}
+	}
+	
+	// Check for accumulation time
+	if (strstr(me_config.slot_options[slot_num], "accumulationTime")!=NULL){
+		uint32_t accum_time = get_option_int_val(slot_num, "accumulationTime");
+		if (accum_time >= 100 && accum_time <= 10000) { // 100ms to 10s
+			var.accumulation_time_ms = accum_time;
+			// Recalculate buffer size: accumulation_time / refresh_period
+			buffer_size = (var.accumulation_time_ms / refresh_period_ms);
+			if (buffer_size > BUFFER_SIZE) buffer_size = BUFFER_SIZE;
+			if (buffer_size < 1) buffer_size = 1;
+			pulse_buffer_init(&var.pulse_buffer, buffer_size);
+			ESP_LOGD(TAG, "Set accumulation time to %lu ms, refresh period: %lu ms, buffer size: %d", 
+					var.accumulation_time_ms, refresh_period_ms, buffer_size);
+		}
+	}
+	
+	pcnt_unit_config_t unit_config = {
+		.high_limit = 32767,
+		.low_limit = -32768,
+		.flags.accum_count = true,
+	};
+	ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &var.pcnt_unit));
+	
+	pcnt_chan_config_t chan_config = {
+		.edge_gpio_num = sens_pin_num,
+		.level_gpio_num = -1,
+		.flags.io_loop_back = false,
+	};
+	pcnt_channel_handle_t pcnt_chan = NULL;
+	ESP_ERROR_CHECK(pcnt_new_channel(var.pcnt_unit, &chan_config, &pcnt_chan));
+	
+	ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
+	ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+	
+	// Enable glitch filter for debouncing
+	if (var.glitch_filter_ns > 0) {
+		ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(var.pcnt_unit, &(pcnt_glitch_filter_config_t){
+			.max_glitch_ns = var.glitch_filter_ns,
+		}));
+		ESP_LOGD(TAG, "Glitch filter enabled: %lu ns", var.glitch_filter_ns);
+	}
+	
+	ESP_ERROR_CHECK(pcnt_unit_enable(var.pcnt_unit));
+	ESP_ERROR_CHECK(pcnt_unit_clear_count(var.pcnt_unit));
+	ESP_ERROR_CHECK(pcnt_unit_start(var.pcnt_unit));
 
     uint16_t threshold  = 0;
 	if (strstr(me_config.slot_options[slot_num], "threshold")!=NULL){
@@ -83,27 +210,10 @@ void tachometer_task(void *arg)
 		inverse=1;
 	}
 
-	// uint8_t flag_custom_topic = 0;
-	// char *custom_topic;
-	// if (strstr(me_config.slot_options[slot_num], "custom_topic")!=NULL){
-	// 	custom_topic = get_option_string_val(slot_num,"custom_topic");
-	// 	//get_option_string_val(slot_num,"custom_topic", &custom_topic);
-	// 	ESP_LOGD(TAG, "Custom topic:%s", custom_topic);
-	// 	flag_custom_topic=1;
-	// }
 
-	
-	// if(flag_custom_topic==0){
-	// 	char *str = calloc(strlen(me_config.deviceName)+strlen("/tachometer_")+4, sizeof(char));
-	// 	sprintf(str, "%s/tachometer_%d",me_config.deviceName, slot_num);
-	// 	me_state.trigger_topic_list[slot_num]=str;
-	// }else{
-	// 	me_state.trigger_topic_list[slot_num]=custom_topic;
-	// }
-
-	if (strstr(me_config.slot_options[slot_num], "tachometer_topic") != NULL) {
+	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "tachometer_topic");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -114,66 +224,29 @@ void tachometer_task(void *arg)
 	}
 
 
-	int state;
-	int _state = gpio_get_level(sens_pin_num);		
-	int runFlag = 0;
 	char str[255];
-
+	TickType_t lastWakeTime = xTaskGetTickCount();
 	waitForWorkPermit(slot_num);
 	
-	while (1)
-	{	
-		#define TIMEOUT 2000 
-		uint8_t tmp;
+	while (1)	{	
+		uint64_t current_time = esp_timer_get_time();
 		
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, TIMEOUT) == pdPASS){
-			if(gpio_get_level(sens_pin_num)){
-				if(runFlag==0){
-					runFlag=1;
-					var.last_tick=esp_timer_get_time();
-				}else{
-					uint64_t delta = esp_timer_get_time()-var.last_tick;
-					if((delta>0)&&(delta<2000000)){
-						var.rpm = (int)((float)60000000/delta);
-					}else{
-						var.rpm = 0;
-					}
-					var.last_tick = esp_timer_get_time();
-				}
-			}
-		}else{
-			runFlag=0;
-			var.rpm = 0;
-		}
+		int current_count;
+		ESP_ERROR_CHECK(pcnt_unit_get_count(var.pcnt_unit, &current_count));
+		
+		// Calculate RPM based on pulse count difference over 1 second
+		int pulse_diff = current_count - var.last_count;
+		// Add pulse count to buffer (pulses per second)
+		pulse_buffer_add(&var.pulse_buffer, (uint16_t)pulse_diff);
+		
+		// Calculate RPM from pulse buffer
+		var.rpm = pulse_buffer_get_rpm(&var.pulse_buffer, var.divider, var.accumulation_time_ms);
+		var.last_count = current_count;
+		
+		// ESP_LOGD(TAG, "Count: %d, Pulses/sec: %d, RPM: %d, Accum time: %lu ms, Buffer size: %d", 
+		// 		current_count, pulse_diff, var.rpm, var.accumulation_time_ms, var.pulse_buffer.size);
 
-			//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
-
-			// if(gpio_get_level(pin_num)){
-			// 	IN_state=IN_inverse ? 0 : 1;
-			// }else{
-			// 	IN_state=IN_inverse ? 1 : 0;
-			// }
-		// if(gpio_get_level(sens_pin_num)==0){
-		// 	var.pulse_flag=0;
-		// }
-		// if((esp_timer_get_time() - var.last_tick)>2000000){
-		// 	var.pulse_flag=1;
-		// }
-
-		// if(var.pulse_flag){
-		// 	var.pulse_flag=0;
-
-		// 	uint64_t delta = esp_timer_get_time()-var.last_tick;
-		// 	if((delta>0)&&(delta<2000000)){
-		// 		var.rpm = (int)((float)60000000/delta);
-		// 	}else{
-		// 		var.rpm = 0;
-		// 	}
-		// 	var.last_tick = esp_timer_get_time();
-		// 	//ESP_LOGD(TAG,"DEBUG:%d", var.rpm);
-		// }
-
-
+		
 		if (var.prev_rpm != var.rpm){	
 			if(threshold==0){
 				resault = var.rpm;
@@ -194,17 +267,7 @@ void tachometer_task(void *arg)
 
 		if(flag_report){
 			flag_report=0;
-			
 
-			// if(flag_custom_topic){
-			// 	str_len=strlen(custom_topic)+4;
-			// 	str = (char*)malloc(str_len * sizeof(char));
-			// 	sprintf(str,"%s:%d", custom_topic, resault);
-			// }else{
-			// 	str_len=strlen(me_config.deviceName)+strlen("/tachometer_")+8;
-			// 	str = (char*)malloc(str_len * sizeof(char));
-			// 	sprintf(str,"%s/tachometer_%d:%d", me_config.deviceName, slot_num, resault);
-			// }
 			memset(str, 0, strlen(str));
 			sprintf(str, "%d", resault);
 
@@ -212,18 +275,10 @@ void tachometer_task(void *arg)
 			//free(str); 
 		}
 			
-			
-		
-
-
-		// if(debug_flag){
-		// 	debug_flag=0;
-		// 	ESP_LOGD(TAG,"DEBUG:%llu", debug_flag);
-		// }
-		//uint64_t tmp;
-		//timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &tmp);
-		//ESP_LOGD(TAG,"DEBUG:%llu", tmp);
-        vTaskDelay(pdMS_TO_TICKS(2));
+		if (xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(refresh_period_ms)) == pdFALSE) {
+			ESP_LOGE(TAG, "Delay missed! Adjusting wake time.");
+			lastWakeTime = xTaskGetTickCount(); // Reset wake time
+		}
 	}
 }
 

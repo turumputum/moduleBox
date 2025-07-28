@@ -45,6 +45,8 @@
 #include <stdarg.h>
 #include <rgbHsv.h>
 #include <stdreport.h>
+#include "rtp_play.h"
+
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "ME_SLOT_CONFIG";
@@ -82,6 +84,8 @@ int init_slots(void){
 		ESP_LOGD(TAG,"[%d] check mode:%s", i,me_config.slot_mode[i]);
 		if(!memcmp(me_config.slot_mode[i], "audioPlayer", 11)){
 			audioInit(i);
+		}else if(!memcmp(me_config.slot_mode[i], "audioLAN", 8)){
+			start_audioLAN_task(i); 		// OK
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
 			start_button_task(i); 		// OK
 			start_ledRing_task(i); 		// OK
@@ -120,11 +124,7 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
-			start_analog_task(i);		// OK
-		}else if(!memcmp(me_config.slot_mode[i], "adc1", 4)){
-			start_adc1_task(i);			// OK
-		}else if(!memcmp(me_config.slot_mode[i], "stepperSpeed", 12)){
-			start_stepperSpeed_task(i);	// OK
+			start_analog_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);		// OK
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
@@ -185,7 +185,11 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "tankControl", 11)){
 			start_tankControl_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "furbyEye", 8)){
-			start_furbyEye_task(i);		// OK
+			start_furbyEye_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
+			start_stepper_conductor_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "encoderAS5600", 13)){
+			start_encoderAS5600_task(i);
 		}
 		
 	}

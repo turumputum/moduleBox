@@ -700,7 +700,7 @@ void start_collector_task(int slot_num) {
 
 
 //------------------------SCALER-------------------------
-//------------------------tankControl----------------------
+
 void scaler_task(void* arg) {
     int slot_num = *(int*)arg;
 
@@ -916,4 +916,169 @@ void start_tankControl_task(int slot_num) {
 	sprintf(tmpString, "tankControl_task_%d", slot_num);
 	xTaskCreatePinnedToCore(tankControl_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
     ESP_LOGD(TAG, "tankControl_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+//---------------------------------STEPPER_conductor---------------------------------
+void stepper_conductor_task(void *arg) {
+    int slot_num = *(int*) arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    // Default configuration values
+    int32_t minVal = 0;
+    if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
+        minVal = get_option_int_val(slot_num, "minVal");
+        ESP_LOGD(TAG, "Set minVal:%ld for slot:%d", minVal, slot_num);
+    }
+
+    int32_t maxVal = 32767;
+    if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
+        maxVal = get_option_int_val(slot_num, "maxVal");
+        ESP_LOGD(TAG, "Set maxVal:%ld for slot:%d", maxVal, slot_num);
+    }
+
+    uint8_t multiTurnKinematics = 0;
+    if (strstr(me_config.slot_options[slot_num], "multiTurn") != NULL) {
+        multiTurnKinematics = get_option_int_val(slot_num, "multiTurn");
+        ESP_LOGD(TAG, "Set multiTurnKinematics:%d for slot:%d", multiTurnKinematics, slot_num);
+    }
+
+    uint32_t timeout = 0; // in ms, 0 means no timeout
+    if (strstr(me_config.slot_options[slot_num], "timeout") != NULL) {
+        timeout = get_option_int_val(slot_num, "timeout");
+        ESP_LOGD(TAG, "Set timeout:%lu ms for slot:%d", timeout, slot_num);
+    }
+
+    int32_t turnSize = maxVal - minVal;
+
+    // Configure topics
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+        char* custom_topic = NULL;
+        custom_topic = get_option_string_val(slot_num, "topic");
+        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
+        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        ESP_LOGD(TAG, "topic:%s", me_state.trigger_topic_list[slot_num]);
+    } else {
+        char t_str[strlen(me_config.deviceName) + strlen("/conductor_0") + 3];
+        sprintf(t_str, "%s/conductor_%d", me_config.deviceName, slot_num);
+        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        me_state.action_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standard topic:%s", me_state.trigger_topic_list[slot_num]);
+    }
+
+    // State variables
+    int32_t currentPosition = 0;
+    int32_t targetPosition = 0;
+    int8_t isMoving = 0;
+    int64_t lastCommandTime = 0;
+    
+    // Main loop
+    while (1) {
+        command_message_t cmd;
+        
+        // Check for timeout if motor is moving and timeout is set
+        if (isMoving && timeout > 0) {
+            int64_t currentTime = esp_timer_get_time() / 1000; // Convert to ms
+            if (currentTime - lastCommandTime > timeout) {
+                ESP_LOGD(TAG, "Timeout reached, stopping motor");
+                report("/stop", slot_num);
+                lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
+                isMoving = 0;
+            }
+        }
+        
+        // Process incoming commands
+        if (xQueueReceive(me_state.command_queue[slot_num], &cmd, isMoving ? 10 : portMAX_DELAY) == pdPASS) {
+            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]) + 1;
+            
+            // Process position update from encoder
+            if (strstr(command, "currentPos:") != NULL) {
+                char *posStr = strstr(command, "currentPos:") + 11;
+                currentPosition = atoi(posStr);
+                
+                // Check if we've reached the target position
+                if (isMoving && currentPosition == targetPosition) {
+                    report("/stop", slot_num);
+                    lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
+                    isMoving = 0;
+                    ESP_LOGD(TAG, "Target position reached: %ld", currentPosition);
+                }
+            }
+            // Process target position command
+            else if (strstr(command, "targetPos:") != NULL) {
+                char *targetStr = strstr(command, "targetPos:") + 10;
+                int32_t newTargetPos = atoi(targetStr);
+                
+                // Validate target position
+                if (newTargetPos < minVal) {
+                    newTargetPos = minVal;
+                    ESP_LOGW(TAG, "Target position limited to min: %ld", minVal);
+                } else if (newTargetPos > maxVal) {
+                    newTargetPos = maxVal;
+                    ESP_LOGW(TAG, "Target position limited to max: %ld", maxVal);
+                }
+                
+                targetPosition = newTargetPos;
+                
+                // Calculate direction and send appropriate command
+                if (currentPosition != targetPosition) {
+                    int16_t direction = 0;
+                    
+                    if (multiTurnKinematics && turnSize > 0) {
+                        // Calculate shortest path for multi-turn kinematics
+                        int32_t directPath = targetPosition - currentPosition;
+                        int32_t wrapAroundPath;
+                        
+                        if (directPath > 0) {
+                            wrapAroundPath = directPath - turnSize;
+                        } else {
+                            wrapAroundPath = directPath + turnSize;
+                        }
+                        
+                        // Choose the path with the smallest absolute value
+                        if (abs(wrapAroundPath) < abs(directPath)) {
+                            direction = (wrapAroundPath > 0) ? 1 : -1;
+                        } else {
+                            direction = (directPath > 0) ? 1 : -1;
+                        }
+                        
+                        ESP_LOGD(TAG, "Multi-turn path calculation: direct=%ld, wrapAround=%ld, chosen direction=%d", 
+                                directPath, wrapAroundPath, direction);
+                    } else {
+                        // Simple direction calculation for linear movement
+                        direction = (targetPosition > currentPosition) ? 1 : -1;
+                    }
+                    
+                    // Send movement command
+                    if (direction > 0) {
+                        report("/runUp", slot_num);
+                        ESP_LOGD(TAG, "Moving up to target: %ld from current: %ld", targetPosition, currentPosition);
+                    } else {
+                        report("/runDown", slot_num);
+                        ESP_LOGD(TAG, "Moving down to target: %ld from current: %ld", targetPosition, currentPosition);
+                    }
+                    
+                    isMoving = 1;
+                    lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
+                }
+            }
+            // Process stop command
+            else if (strstr(command, "stop") != NULL) {
+                report("/stop", slot_num);
+                lastCommandTime = esp_timer_get_time() / 1000; // Convert to ms
+                isMoving = 0;
+                ESP_LOGD(TAG, "Stop command received");
+            }
+        }
+    }
+}
+
+void start_stepper_conductor_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    int t_slot_num = slot_num;
+    char tmpString[60];
+    sprintf(tmpString, "stepper_conductor_task_%d", slot_num);
+    xTaskCreatePinnedToCore(stepper_conductor_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    ESP_LOGD(TAG, "stepper_conductor_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
