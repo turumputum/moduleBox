@@ -13,6 +13,7 @@ idf_component_register(SRCS
                         "me_slot_config.c" 
                         "executor.c" 
                         "3n_mosfet.c" 
+                       
                         
                         "tachometer.c"
                        
