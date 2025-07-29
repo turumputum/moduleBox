@@ -5,6 +5,6 @@ SRC=$(wildcard src/*.cpp)
 
 
 manifesto: $(SRC)
-	g++ -g -Iinc -o .build/$@ $^ $(CFLAGS) $(LIBS)
+	g++ -g --permissive -Iinc -o .build/$@ $^ $(CFLAGS) $(LIBS)
 
 all: manifesto

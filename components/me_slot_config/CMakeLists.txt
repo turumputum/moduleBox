@@ -23,7 +23,11 @@ idf_component_register(SRCS
 
 file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c" "smartLed.c"  )
 
-include(${CMAKE_SOURCE_DIR}/CMakeManifest.txt)
+
+#if(NOT CMAKE_BUILD_EARLY_EXPANSION)
+#include(${CMAKE_SOURCE_DIR}/../CMakeManifest.txt)
+#endif()
+
 
 idf_component_register(SRCS 
 						"executor.c"

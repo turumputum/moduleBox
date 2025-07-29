@@ -6,6 +6,16 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 0.1.0
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
   espressif/ds18b20:
     component_hash: d676429d9f1f686b65ed895e418eb4b331477bcd5d63c27f43dc3d6a2de8f13b
     dependencies:
@@ -18,7 +28,7 @@ dependencies:
       type: service
     version: 0.1.1
   espressif/esp-dsp:
-    component_hash: 3e7bbd487f1357a1d4944d0c85966d049501ea281b8a4c7f93f7cfedd5b7f23d
+    component_hash: 619639efc18cfa361a9e423739b9b0ffc14991effc6c027f955c2f2c3bf1754b
     dependencies:
     - name: idf
       require: private
@@ -26,7 +36,21 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.4.12
+    version: 1.6.0
+  espressif/esp_lcd_ili9341:
+    component_hash: 31f1b793aa2110dd2ae071c21ccbff0a4eb20d9a4ee40b6294c0dc0ad9552c4e
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.2.0
   espressif/esp_websocket_client:
     component_hash: f77326f0e1c38da4e9c97e17c5d649b0dd13027f2645e720e48db269638fd622
     dependencies:
@@ -68,7 +92,7 @@ dependencies:
       type: service
     version: 1.65.0
   espressif/onewire_bus:
-    component_hash: c4c781940d8bd988432b47ac3ee68479c69e14e01fdfba0b61365b233a3ba5d6
+    component_hash: 11729fd9a5de80225177a61e9cd77de91683b8ec300e83710d5327b666dbe884
     dependencies:
     - name: idf
       require: private
@@ -76,7 +100,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.0.2
+    version: 1.0.4
   espressif/zlib:
     component_hash: d901723af51f13fc8e5824f39f32239c847956e8fd951a05266588dc5cfbb9ae
     dependencies:
@@ -90,17 +114,18 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.3.3
+    version: 5.1.6
 direct_dependencies:
 - cybergear-robotics/cybergear
 - espressif/ds18b20
 - espressif/esp-dsp
+- espressif/esp_lcd_ili9341
 - espressif/esp_websocket_client
 - espressif/jsmn
 - espressif/mdns
 - espressif/nghttp
 - espressif/zlib
 - idf
-manifest_hash: b254b47920a489c3e3a4a7b82b2cf69dc269836eb9fc5362307d4859f19ae81b
+manifest_hash: 03a785d4fe2986fe9b756a68d839bcf6b531cb6af3574abd51728dc60dce7035
 target: esp32s3
 version: 2.0.0

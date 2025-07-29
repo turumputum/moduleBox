@@ -1,0 +1,24 @@
+
+Для сборки утилиты парсера установить GCC: 
+По сылке https://jmeubank.github.io/tdm-gcc/download/ скачать архив tdm64-gcc-10.3.0-2.exe (текущая версия) и установить, 
+обязательно выбрав в опциях установки g++.
+
+Вытянуть репозитарий:
+git clone git@github.com:turumputum/moduleBox
+
+Перейти на ветку:
+git switch new_manifest
+
+Собрать парсер:
+cd moduleBox\manifesto\
+mkdir .build
+make
+
+Скопировать исполняемый файл manifesto.exe из папки .build/ туда, куда наведены системные пути поиска.
+
+
+Установить ESP32-IDF скачав по ссылке https://dl.espressif.com/dl/idf-installer/esp-idf-tools-setup-offline-5.1.6.exe 
+
+Установить ESP32-ADF, 
+cd C:\Espressif\frameworks\
+git clone --recursive https://github.com/espressif/esp-adf.git

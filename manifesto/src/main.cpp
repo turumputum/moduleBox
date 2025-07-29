@@ -93,7 +93,7 @@ BOOL axpath_create(PSTR psz_path)
             if ((psz_slash = strchr(psz_on, '/'))  != NULL)
                 *psz_slash = 0;
     
-            b_result = !mkdir(psz_copy, -1) ||
+            b_result = !mkdir(psz_copy) ||
                        (errno == EEXIST);
 
             if (psz_slash)
