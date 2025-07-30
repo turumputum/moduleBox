@@ -928,25 +928,25 @@ void stepper_conductor_task(void *arg) {
     // Default configuration values
     int32_t minVal = 0;
     if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-        minVal = get_option_int_val(slot_num, "minVal");
+        minVal = get_option_int_val(slot_num, "minVal", "", 0, 0, 4096);
         ESP_LOGD(TAG, "Set minVal:%ld for slot:%d", minVal, slot_num);
     }
 
     int32_t maxVal = 32767;
     if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-        maxVal = get_option_int_val(slot_num, "maxVal");
+        maxVal = get_option_int_val(slot_num, "maxVal", "", 32767, 0, 32767);
         ESP_LOGD(TAG, "Set maxVal:%ld for slot:%d", maxVal, slot_num);
     }
 
     uint8_t multiTurnKinematics = 0;
     if (strstr(me_config.slot_options[slot_num], "multiTurn") != NULL) {
-        multiTurnKinematics = get_option_int_val(slot_num, "multiTurn");
+        multiTurnKinematics = get_option_int_val(slot_num, "multiTurn", "", 0, 0, 4096);
         ESP_LOGD(TAG, "Set multiTurnKinematics:%d for slot:%d", multiTurnKinematics, slot_num);
     }
 
     uint32_t timeout = 0; // in ms, 0 means no timeout
     if (strstr(me_config.slot_options[slot_num], "timeout") != NULL) {
-        timeout = get_option_int_val(slot_num, "timeout");
+        timeout = get_option_int_val(slot_num, "timeout", "", 0, 0, 4096);
         ESP_LOGD(TAG, "Set timeout:%lu ms for slot:%d", timeout, slot_num);
     }
 
