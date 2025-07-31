@@ -209,7 +209,7 @@ int main(int argc, char * argv[])
 
                 if ((script = (char*)malloc(flen + 1)) != NULL)
                 {
-                    if (fread(script, flen, 1, fin))
+                    if (fread(script, 1, flen, fin) > 0)
                     {
                         *(script + flen) = 0;
                         
