@@ -93,8 +93,11 @@ BOOL axpath_create(PSTR psz_path)
             if ((psz_slash = strchr(psz_on, '/'))  != NULL)
                 *psz_slash = 0;
     
-            b_result = !mkdir(psz_copy) ||
-                       (errno == EEXIST);
+#ifdef __linux__
+            b_result = !mkdir(psz_copy, 0755) || (errno == EEXIST);
+#else
+            b_result = !mkdir(psz_copy) || (errno == EEXIST);
+#endif
 
             if (psz_slash)
             {
@@ -220,7 +223,10 @@ int main(int argc, char * argv[])
                         }
                     }
                     else
-                        printf("cannot read file %s\n", argv[1]);
+                    {
+                        perror("cannot read: ");
+                        printf("file: %s\n", argv[1]);
+                    }
                 }
                 else
                     printf("cannot allocate enought memroy for %s\n", argv[1]);
