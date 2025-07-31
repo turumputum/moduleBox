@@ -225,7 +225,7 @@ int main(int argc, char * argv[])
                     else
                     {
                         perror("cannot read: ");
-                        printf("file: %s\n", argv[1]);
+                        printf("file: %s, size %d\n", argv[1], (int)flen);
                     }
                 }
                 else
