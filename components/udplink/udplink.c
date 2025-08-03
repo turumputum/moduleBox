@@ -245,11 +245,11 @@ int udplink_send(int slot_num, const char * message)
 {
     int     result  = 0;
 
-	printf("udplink_send: stage 1\n");
+	//printf("udplink_send: stage 1\n");
 
 	if (*me_config.udpServerAdress)
 	{
-		printf("udplink_send: stage 1\n");
+		//printf("udplink_send: stage 1\n");
 
 		struct sockaddr_in destAddr = {0};
 		destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);

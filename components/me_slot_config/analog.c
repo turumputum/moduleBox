@@ -76,12 +76,12 @@ void configure_analog(PANALOG_CONFIG	ch, int slot_num)
 	}
 	if (strstr(me_config.slot_options[slot_num], "maxVal")!=NULL){
 		/* Определяет верхний порог значений */
-		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
+		ch->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 4096, 1, 4096);
 		ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", ch->MAX_VAL, slot_num);
 	}
     if (strstr(me_config.slot_options[slot_num], "minVal")!=NULL){
 		/* Определяет нижний порог значений */
-		ch->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
+		ch->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 0, 1, 4096);
 		ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", ch->MIN_VAL, slot_num);
 	}
 
@@ -128,7 +128,8 @@ void configure_analog(PANALOG_CONFIG	ch, int slot_num)
 void analog_task(void *arg)
 {
 	ANALOG_CONFIG		c = {0};
-    uint16_t raw_val;
+    c.k=1;
+	uint16_t raw_val;
     uint16_t resault=0, prev_resault=0xFFFF;
 
 	char tmpString[255];

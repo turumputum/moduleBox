@@ -267,13 +267,12 @@ void button_task(void *arg)
 			}
 
 			st->total++;
-
 			int newState = -1;
 
 			if (c.debounce_gap)	// Если таймер активен
 			{
-				if (st->flag) 	// Если сигнал был от таймера
-				{
+				// if (st->flag) 	// Если сигнал был от таймера
+				// {
 					//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
 
 					// Фильтрация дребезга заключается в следующем: 
@@ -295,7 +294,7 @@ void button_task(void *arg)
 					}
 
 					st->flag = 0;
-				}
+				// }
 			}
 			else	// Таймер не активен
 			{

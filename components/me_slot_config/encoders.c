@@ -43,6 +43,10 @@ typedef struct __tag_ENCODERCONFIG
 	uint8_t 				calibrationFlag;
 	uint16_t 				MIN_VAL;
 	uint16_t 				MAX_VAL;
+	uint16_t 				deadZone;
+	int16_t 				offset;
+	uint16_t                refreshPeriod;
+	float 					filterK;
 	int 					pole;
 	int 					num_of_pos;
 } ENCODERCONFIG, * PENCODERCONFIG; 
@@ -137,12 +141,32 @@ void configure_encoderInc(PENCODERCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "zero_shift: %d", c->zero_shift);
 	}
 
+	c->calibrationFlag = 0;
 	if (strstr(me_config.slot_options[slot_num], "calibration") != NULL){
 		/* Флаг задаёт необходимость калибровки */
 		c->calibrationFlag = get_option_flag_val(slot_num, "calibration");
 		ESP_LOGD(TAG, "calibrationFlag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}
 
+	c->filterK = 1.0;
+	if (strstr(me_config.slot_options[slot_num], "filterK") != NULL){
+		c->filterK = get_option_float_val(slot_num, "filterK",1.0);
+		ESP_LOGD(TAG, "filterK: %f", c->filterK);
+	}
+
+	c->deadZone = 10;
+	if (strstr(me_config.slot_options[slot_num], "deadZone") != NULL){
+		c->deadZone = get_option_int_val(slot_num, "deadZone","", 10, 0, 4095);
+		ESP_LOGD(TAG, "deadZone: %d", c->deadZone);
+	}
+
+	c->offset = 0;
+	if (strstr(me_config.slot_options[slot_num], "offset") != NULL){
+		c->offset = get_option_int_val(slot_num, "offset","", 0, 0, 4095);
+		ESP_LOGD(TAG, "deadZone: %d", c->offset);
+	}
+
+	c->MIN_VAL = 15;
 	if (strstr(me_config.slot_options[slot_num], "pwmMinVal") != NULL){
 		/* Минимальное значение */
 		c->MIN_VAL = get_option_int_val(slot_num, "pwmMinVal", "", 10, 1, 4096);
@@ -154,6 +178,12 @@ void configure_encoderInc(PENCODERCONFIG c, int slot_num)
 		/* Максимальное значение */
 		c->MAX_VAL = get_option_int_val(slot_num, "pwmMaxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "MAX_VAL: %d", c->MAX_VAL);
+	}
+	
+	c->refreshPeriod = 25;
+	if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
+		c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate","fps", 20, 1, 100));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",c->refreshPeriod, slot_num);
 	}
 
 	c->pole = c->MAX_VAL - c->MIN_VAL;
@@ -173,7 +203,7 @@ void configure_encoderInc(PENCODERCONFIG c, int slot_num)
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
 		/* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "encoder_topic");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -186,7 +216,8 @@ void configure_encoderInc(PENCODERCONFIG c, int slot_num)
 void encoderPPM_task(void *arg)
 {
 	ENCODERCONFIG		c 	= {0};
-
+	
+	
 	int slot_num = *(int *)arg;
 
 	char str[255];
@@ -214,27 +245,8 @@ void encoderPPM_task(void *arg)
 	configure_encoderInc(&c, slot_num);
 
 	float pos_length = (float)c.pole / c.num_of_pos;
-	uint16_t raw_val;
+	int16_t raw_val;
 	int current_pos, prev_pos = -1;
-
-
-	while(c.calibrationFlag){
-		if(tickVals.dTime>1000){
-			ESP_LOGD(TAG, "EBOLA rise:%lld fall:%lld dTime:%lld", tickVals.tick_rise, tickVals.tick_fall, tickVals.dTime);
-		}else{
-			if(tickVals.dTime<c.MIN_VAL){
-				c.MIN_VAL = tickVals.dTime;
-			}
-			if(tickVals.dTime>c.MAX_VAL){
-				c.MAX_VAL = tickVals.dTime;
-			}
-
-			sprintf(str, "/calibration: pwmMinVal:%d pwmMaxVal:%d", c.MIN_VAL, c.MAX_VAL);
-			report(str, slot_num);
-			ESP_LOGD(TAG,"VAL:%lld MIN_VAL:%d MAX_VAL:%d",tickVals.dTime, c.MIN_VAL, c.MAX_VAL);
-		}
-		vTaskDelay(20 / portTICK_PERIOD_MS);
-	}
 
 	ESP_LOGD(TAG, "Lets wait first interrupt");
 	while (tickVals.flag != 1)
@@ -249,52 +261,61 @@ void encoderPPM_task(void *arg)
 		current_pos -= c.num_of_pos;
 	}
 
-	int offset = raw_val;
-	while(offset >= pos_length){
-		offset -= pos_length;
-	}
-	offset = -(offset); //
-	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, offset, pos_length);
+	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, c.offset, pos_length);
 
 	#define ANTI_DEBOUNCE_INERATIONS 1
 	int anti_deb_mass_index = 0;
 	int val_mass[ANTI_DEBOUNCE_INERATIONS];
-
+	
+	float filtredVal = 0;
+	float prew_filtredVal=-1;
+	TickType_t lastWakeTime = xTaskGetTickCount(); 
 	waitForWorkPermit(slot_num);
 
 	while (1){
 		vTaskDelay(pdMS_TO_TICKS(10));
 		if (tickVals.flag){
-			raw_val = tickVals.dTime + offset + pos_length/2;
+			raw_val = tickVals.dTime + c.offset;
 			//raw_val = tickVals.dTime + offset;
 		}else if((esp_timer_get_time()-tickVals.tick_rise)>1000){
 			raw_val = 0;
 		}
 
-		//raw_val = raw_val + offset;
-		//ESP_LOGD(TAG, "raw_val:%d", raw_val);
 		while(raw_val > c.pole){
 			raw_val = c.pole;
 		}
+		if(raw_val > c.pole){
+			raw_val -= c.pole;
+		}else if(raw_val < 0){
+			raw_val += c.pole;
+		}
 
-		val_mass[anti_deb_mass_index] = raw_val;
-		anti_deb_mass_index++;
-		if (anti_deb_mass_index == ANTI_DEBOUNCE_INERATIONS){
-			anti_deb_mass_index = 0;
+		if(raw_val<c.MIN_VAL){
+			c.MIN_VAL = raw_val;
+			c.pole = c.MAX_VAL - c.MIN_VAL;
+			pos_length = (float)c.pole / c.num_of_pos;
+		}else if(raw_val>c.MAX_VAL){
+			c.MAX_VAL = raw_val;
+			c.pole = c.MAX_VAL - c.MIN_VAL;
+			pos_length = (float)c.pole / c.num_of_pos;
 		}
-		int sum = 0;
-		for (int i = 1; i < ANTI_DEBOUNCE_INERATIONS; i++){
-			if (abs(val_mass[i] - val_mass[i - 1]) < 3)	{
-				sum++;
-			}
+
+		if((c.filterK<1)&&(abs(raw_val-prew_filtredVal)<c.pole/2)){
+			filtredVal = filtredVal*(1-c.filterK) + raw_val*(c.filterK);
+			//ESP_LOGD(TAG, "filtredVal:%f raw_val:%d", filtredVal, raw_val);
+		}else{
+			filtredVal = raw_val;
 		}
-		if (sum >= (ANTI_DEBOUNCE_INERATIONS - 1)){
+
+		if(abs(filtredVal-prew_filtredVal)>c.deadZone){
+			prew_filtredVal = filtredVal;
 			current_pos = 0;
-			float tmpVal = raw_val;
+			float tmpVal = filtredVal;
 			while(tmpVal > pos_length){
 				current_pos++;
 				tmpVal -= pos_length;
 			}
+			//ESP_LOGD(TAG, "obrezok: %f", tmpVal);
 			//current_pos = ((raw_val- pos_length/2)/ pos_length)+zero_shift;
 			while(current_pos>=c.num_of_pos){
 				current_pos -= c.num_of_pos;
@@ -336,7 +357,19 @@ void encoderPPM_task(void *arg)
 			report(str, slot_num);
 			prev_pos = current_pos;
 		}
+
+		if(c.calibrationFlag){
+			sprintf(str, "/calibration: dTime:%lld pos:%d delta:%d", tickVals.dTime, current_pos, abs(raw_val-(current_pos*pos_length+pos_length/2)));
+			ESP_LOGD(TAG,"%s", str);
+			report(str, slot_num);
+		}
+
 		tickVals.flag = 0;
+
+		if (xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(c.refreshPeriod)) == pdFALSE) {
+            ESP_LOGE(TAG, "Delay missed! Adjusting wake time.");
+            lastWakeTime = xTaskGetTickCount(); // Сброс времени пробуждения
+        }
 		
 	}
 }
