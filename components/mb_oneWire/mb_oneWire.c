@@ -61,7 +61,7 @@ void ds18b20_task(void* arg) {
         char tmpString[strlen("DS18B20 not found, slot[0]") + 3];
         sprintf(tmpString, "DS18B20 not found, slot[%d]", slot_num);
         ESP_LOGE(TAG, "%s", tmpString);
-        writeErrorTxt(tmpString);
+        mblog(0, tmpString);
         vTaskDelete(NULL);
     }
 

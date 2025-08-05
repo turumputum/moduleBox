@@ -94,7 +94,7 @@ void buttonMatrix_task(void* arg) {
                 char errorString[50];
                 sprintf(errorString,  "buttonMatrix_%d wrong slots config", slot_num);
                 ESP_LOGE(TAG, "%s", errorString);
-                writeErrorTxt(errorString);
+                mblog(0, errorString);
                 vTaskDelete(NULL);
             }
         }

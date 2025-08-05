@@ -39,7 +39,7 @@
 
 typedef struct
 {
-  #if CFG_TUSB_DEBUG >= 2
+  #if CFG_TUSB_DEBUG >= 1
   char const* name;
   #endif
 

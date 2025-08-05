@@ -36,6 +36,8 @@ extern "C" {
 BOOL                strz_is_ip                  (PCSTR              psz_str,
                                                  INT                octets);
 
+long                strz_to_bytes               (PCSTR              psz_string);
+
 #ifdef __cplusplus
 }
 #endif                                      //  #ifdef __cplusplus

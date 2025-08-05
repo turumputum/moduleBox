@@ -85,6 +85,9 @@ bool tud_ready(void)
   return tud_mounted() && !tud_suspended();
 }
 
+bool tud_is_plugged(void);
+void tud_enum_configs(char * buff);
+
 // Remote wake up host, only if suspended and enabled by host
 bool tud_remote_wakeup(void);
 

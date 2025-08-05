@@ -101,7 +101,7 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
         char errorString[50];
         sprintf(errorString,  "slot num:%d ___ LEDC channels has ended", slot_num);
         ESP_LOGE(TAG, "%s", errorString);
-        writeErrorTxt(errorString);
+        mblog(0, errorString);
         vTaskDelay(20);
         vTaskDelete(NULL);
 	}
@@ -191,7 +191,7 @@ void VL53TOF_task(void* arg) {
             char errorString[50];
             sprintf(errorString,  "slot num:%d ___ No free UART driver", slot_num);
             ESP_LOGE(TAG, "%s", errorString);
-            writeErrorTxt(errorString);
+            mblog(0, errorString);
             vTaskDelay(200);
             vTaskDelete(NULL);
         }
@@ -301,7 +301,7 @@ void benewakeTOF_task(void* arg) {
             char errorString[50];
             sprintf(errorString,  "slot num:%d ___ No free UART driver", slot_num);
             ESP_LOGE(TAG, "%s", errorString);
-            writeErrorTxt(errorString);
+            mblog(0, errorString);
             vTaskDelay(200);
             vTaskDelete(NULL);
         }
@@ -412,7 +412,7 @@ void hlk2410_task(void* arg) {
             char errorString[50];
             sprintf(errorString,  "slot num:%d ___ No free UART driver", slot_num);
             ESP_LOGE(TAG, "%s", errorString);
-            writeErrorTxt(errorString);
+            mblog(0, errorString);
             vTaskDelay(200);
             vTaskDelete(NULL);
         }

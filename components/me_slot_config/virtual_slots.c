@@ -508,7 +508,7 @@ void whitelist_task(void *arg) {
         char errorString[300];
         sprintf(errorString, "whitelist file: %s, does not exist", filename);
         ESP_LOGE(TAG, "%s", errorString);
-        writeErrorTxt(errorString);
+        mblog(0, errorString);
         vTaskDelay(200);
         vTaskDelete(NULL);
     }

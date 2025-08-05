@@ -34,7 +34,7 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "LAN";
-
+static esp_netif_t *eth_netif;
 
 void ftp_task(void *pvParameters);
 
@@ -58,11 +58,13 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t ev
 
 	switch (event_id) {
 	case ETHERNET_EVENT_CONNECTED:
+		me_state.eth_connected = 1;
 		esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
 		ESP_LOGI(TAG, "Ethernet Link Up");
 		ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
 		break;
 	case ETHERNET_EVENT_DISCONNECTED:
+		me_state.eth_connected = 0;
 		ESP_LOGI(TAG, "Ethernet Link Down");
 		break;
 	case ETHERNET_EVENT_START:
@@ -101,7 +103,7 @@ void osc_recive_task(){
 	me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (me_state.osc_socket < 0) {
 		printf("Failed to create socket for OSC: %d\n", errno);
-		writeErrorTxt("Failed to create socket for OSC");
+		mblog(0, "Failed to create socket for OSC");
 		vTaskDelete(NULL);
 	}else{
 		ESP_LOGD(TAG,"OSC socket OK num:%d", me_state.osc_socket);
@@ -332,7 +334,7 @@ int LAN_init(void) {
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
 	esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
-    esp_netif_t *eth_netif = esp_netif_new(&cfg);
+    eth_netif = esp_netif_new(&cfg);
     // Attach Ethernet driver to TCP/IP stack
     ESP_ERROR_CHECK(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle)));
 
@@ -358,9 +360,42 @@ int LAN_init(void) {
 
 
 
-	//xTaskCreatePinnedToCore(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL, 0);
+	//xTaskCreatePinnedToCore(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL, 0);w
 	//xTaskCreate(wait_lan, "wait_lan", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 	vTaskDelay(pdMS_TO_TICKS(1000));
 
 	return 0;
+}
+static char statusString [ 128 ];
+const char * networkGetStatusString()
+{
+	if (me_config.LAN_enable || me_config.WIFI_enable)
+	{
+		esp_netif_ip_info_t info_t;
+		char * addr = "no ip";
+
+		if (esp_netif_get_ip_info(eth_netif, &info_t) == ESP_OK)
+		{
+			if (info_t.ip.addr != 0)
+			{
+				addr = ip4addr_ntoa(&info_t.ip);
+			}
+		}
+
+
+		sprintf(statusString, "EHT %s, WIFI %s, %s, MQTT %s, UDP %s", 
+								me_state.eth_connected == -1 ? "?" : (me_state.eth_connected ? "on" : "off"),
+								me_state.WIFI_init_res == ESP_OK ? "on" : "off",
+								addr, 
+								me_state.MQTT_init_res == ESP_OK ? "on" : "off",
+								me_state.UDP_init_res  == ESP_OK ? "on" : "off"
+		);
+	}
+	else
+	{
+		sprintf(statusString, "%s", "net is disabled");
+
+	}
+
+	return statusString;
 }

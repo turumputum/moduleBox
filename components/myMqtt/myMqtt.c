@@ -52,6 +52,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	
 
 	switch ((esp_mqtt_event_id_t) event_id) {
+
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_CONNECTED");
 		me_state.MQTT_init_res = ESP_OK;
@@ -115,6 +116,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		break;
 	case MQTT_EVENT_DISCONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_DISCONNECTED");
+		me_state.MQTT_init_res = ESP_FAIL;
 		//esp_restart();
 		break;
 

@@ -69,6 +69,8 @@ typedef struct
   volatile uint8_t cfg_num; // current active configuration (0x00 is not configured)
   uint8_t speed;
 
+  volatile uint8_t plugState;
+
   uint8_t itf2drv[CFG_TUD_INTERFACE_MAX];   // map interface number to driver (0xff is invalid)
   uint8_t ep2drv[CFG_TUD_ENDPPOINT_MAX][2]; // map endpoint to driver ( 0xff is invalid ), can use only 4-bit each
 
@@ -81,7 +83,7 @@ static usbd_device_t _usbd_dev;
 //--------------------------------------------------------------------+
 // Class Driver
 //--------------------------------------------------------------------+
-#if CFG_TUSB_DEBUG >= 2
+#if CFG_TUSB_DEBUG >= 1
   #define DRIVER_NAME(_name)    .name = _name,
 #else
   #define DRIVER_NAME(_name)
@@ -359,6 +361,21 @@ bool tud_remote_wakeup(void)
   return true;
 }
 
+bool tud_is_plugged(void)
+{
+  return tud_inited() && (_usbd_dev.plugState == 1);
+}
+
+void tud_enum_configs(char * buff)
+{
+  for (int i = 0; i < BUILTIN_DRIVER_COUNT; i++)
+  {
+    strcat(buff, _usbd_driver[i].name);
+    strcat(buff, ", ");
+  }
+}
+
+
 bool tud_disconnect(void)
 {
   TU_VERIFY(dcd_disconnect);
@@ -495,11 +512,15 @@ void tud_task_ext(uint32_t timeout_ms, bool in_isr)
         TU_LOG(USBD_DBG, ": %s Speed\r\n", tu_str_speed[event.bus_reset.speed]);
         usbd_reset(event.rhport);
         _usbd_dev.speed = event.bus_reset.speed;
+
+        _usbd_dev.plugState = 1;
       break;
 
       case DCD_EVENT_UNPLUGGED:
         TU_LOG(USBD_DBG, "\r\n");
         usbd_reset(event.rhport);
+
+        _usbd_dev.plugState = 0;
 
         // invoke callback
         if (tud_umount_cb) tud_umount_cb();
@@ -512,6 +533,8 @@ void tud_task_ext(uint32_t timeout_ms, bool in_isr)
         // Mark as connected after receiving 1st setup packet.
         // But it is easier to set it every time instead of wasting time to check then set
         _usbd_dev.connected = 1;
+
+        _usbd_dev.plugState = 1;
 
         // mark both in & out control as free
         _usbd_dev.ep_status[0][TUSB_DIR_OUT].busy = false;
@@ -564,6 +587,8 @@ void tud_task_ext(uint32_t timeout_ms, bool in_isr)
         {
           TU_LOG(USBD_DBG, ": Remote Wakeup = %u\r\n", _usbd_dev.remote_wakeup_en);
           if (tud_suspend_cb) tud_suspend_cb(_usbd_dev.remote_wakeup_en);
+
+          _usbd_dev.plugState = 0;
         }else
         {
           TU_LOG(USBD_DBG, " Skipped\r\n");

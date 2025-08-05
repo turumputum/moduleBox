@@ -125,7 +125,7 @@ extern uint8_t FLAG_PC_EJECT;
 extern void usb_device_task(void *param);
 extern void set_usb_debug(void);
 
-RTC_NOINIT_ATTR int RTC_flagMscEnabled;
+//RTC_NOINIT_ATTR int RTC_flagMscEnabled;
 
 extern exec_message_t exec_message;
 extern QueueHandle_t exec_mailbox;
@@ -436,12 +436,40 @@ extern int network_get_active_interfaces();
 	if (errorString[0])
 	{
 		ESP_LOGE(TAG, "%s", errorString);
-		writeErrorTxt(errorString);
+		mblog(0, errorString);
 	}
 
 	return result;
 }
+void makeStatusReport(bool spread)
+{
+	char topic [ 64 ];
+	char str [ 256 ];
 
+	snprintf(str, sizeof(str) - 1, "Heap %d, %s, %s\n", 
+			xPortGetFreeHeapSize(),
+			networkGetStatusString(),
+			usbGetStatusString()
+			);
+
+	if (spread)
+	{
+		usbprint(str);
+
+		if (me_state.UDP_init_res == ESP_OK)
+		{
+			udplink_send(0, str);
+		}
+
+		if (me_state.MQTT_init_res == ESP_OK)
+		{
+			snprintf(topic, sizeof(topic) - 1, "%s/status", me_config.deviceName);
+			mqtt_pub(topic, str);
+		}
+	}
+	
+	mblog(0, str);
+}
 void app_main(void)	
 {
 
@@ -488,9 +516,7 @@ void app_main(void)
 			return;
 		}
 	}
-	if (remove("/sdcard/error.txt")){
-		ESP_LOGD(TAG, "/sdcard/error.txt delete failed");
-	}
+
 	load_Default_Config();
 	scanFileSystem();
 
@@ -502,7 +528,7 @@ void app_main(void)
 	if (me_state.config_init_res != ESP_OK)	{
 		char tmpString[40];
 		sprintf(tmpString, "Load config FAIL in line: %d", me_state.config_init_res);
-		writeErrorTxt(tmpString);
+		mblog(0, tmpString);
 	}
 	
 	set_usb_debug();
@@ -518,7 +544,7 @@ void app_main(void)
 		me_state.content_search_res = loadContent();
 		if (me_state.content_search_res != ESP_OK)	{
 			ESP_LOGD(TAG, "Load Content FAIL");
-			writeErrorTxt("Load content FAIL");
+			mblog(0, "Load content FAIL");
 		}
 	}else{
 		me_state.content_search_res = ESP_FAIL;
@@ -529,9 +555,12 @@ void app_main(void)
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
 
-
 	setWorkPermission(EVERY_SLOT);
 
+	int freeHeapSize;
+	int freeHeapSizeFLAG = 0;
+
+	uint32_t periodicTicks = xTaskGetTickCount();
 
 	while (1)
 	{
@@ -559,6 +588,31 @@ void app_main(void)
 		// UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGI(TAG, "Stack remaining: %u", stack_remaining);
 
+		freeHeapSize = xPortGetFreeHeapSize();
+		if (freeHeapSize < 4096)
+		{
+			if (!freeHeapSizeFLAG)
+			{
+				mblog(0, "Free heap size is LOW - %d bytes", freeHeapSize);
+				freeHeapSizeFLAG = 1;
+			}
+		}
+		else
+			freeHeapSizeFLAG = 0;
+
+		uint32_t now = xTaskGetTickCount();
+
+		// ever 15 minutes
+		if (me_config.statusPeriod)
+		{
+			if ((now - periodicTicks) >= pdMS_TO_TICKS(me_config.statusPeriod * 1000)) 
+			{
+				makeStatusReport(me_config.statusAllChannels);
+
+				periodicTicks = now;
+			}
+		}
+		
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }

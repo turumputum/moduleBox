@@ -62,6 +62,8 @@ typedef struct {
 	int8_t OSC_init_res;
 	int8_t FTP_init_res;
 
+	int8_t eth_connected;
+
 
 	int8_t udp_socket;
 	int8_t osc_socket;
@@ -112,6 +114,10 @@ typedef struct {
 	char *LAN_gateWay;
 
 	char *deviceName;
+	long logMaxSize;
+	int  logChapters;
+	int  statusAllChannels;
+	int  statusPeriod;
 	uint8_t USB_debug;
 
 	uint8_t FTP_enable;
@@ -163,7 +169,7 @@ typedef struct {
 uint8_t loadConfig(void);
 FRESULT scan_in_dir(const char *file_extension, FF_DIR *dp, FILINFO *fno);
 void load_Default_Config(void);
-void writeErrorTxt(const char *buff);
+void mblog(int priority, const char *msg,...);
 uint8_t loadContent(void);
 int saveConfig(void);
 
@@ -181,4 +187,5 @@ void waitForWorkPermit_(int slot_num, const char * moduleName);
 void setWorkPermission(int slot_num);
 uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTicksToWait);
 
+void makeStatusReport(bool spread);
 
