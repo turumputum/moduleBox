@@ -156,86 +156,85 @@ void udplink_task()
 {
 	int len;
 
-	// Trying to extract port number from the server definition
-	if (*me_config.udpServerAdress)
+	if (me_config.udpMyPort)
 	{
-		char * delim = strchr(me_config.udpServerAdress, ':');
-
-		if (delim)
+		// Trying to extract port number from the server definition
+		if (*me_config.udpServerAdress)
 		{
-			*(delim++) = 0;
-			me_config.udpServerPort = atoi(delim);
-		}
-	}
+			char * delim = strchr(me_config.udpServerAdress, ':');
 
-	// Check if the string looks like an ip address
-	if (!(*me_config.udpServerAdress && strz_is_ip(me_config.udpServerAdress, 4)))
-	{
- 		ESP_LOGW(TAG, "UDP server IP address is not specified, working without outgoing messages");
-
-		*me_config.udpServerAdress = 0;
-	}
-	else if (!me_config.udpServerPort)
-	{
-		ESP_LOGW(TAG, "Server UDP port not specified, using default %d", DEFAULT_UDP_PORT);
-		me_config.udpServerPort = DEFAULT_UDP_PORT;
-	}
-
-	if (!me_config.udpMyPort)
-	{
-		ESP_LOGW(TAG, "Self UDP port not specified, using default %d", me_config.udpServerPort);
-		me_config.udpMyPort = DEFAULT_UDP_PORT;
-	}
-
-	if (*me_config.udp_cross_link)
-	{
-		parseUdpCrossLinks();
-	}
-
-	if ((me_state.udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) >= 0)
-	{
-		ESP_LOGD(TAG,"UDP socket OK num:%d", me_state.udp_socket);
-
-		int buff_size=250;
-		char buff[buff_size];
-
-		struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
-		socklen_t socklen = sizeof(source_addr);
-
-		struct sockaddr_in dest_addr;
-		dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-		dest_addr.sin_family = AF_INET;
-		dest_addr.sin_port = htons(me_config.udpMyPort);
-
-		int err = bind(me_state.udp_socket, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-		if (err < 0) {
-			ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
-		}
-
-		ESP_LOGD(TAG, "UDP revive task STARTED, on port:%d",me_config.udpMyPort);
-		
-		me_state.UDP_init_res = ESP_OK;
-		
-		while(1)
-		{
-			if (linksCount)
+			if (delim)
 			{
-				if ((len = recvfrom(me_state.udp_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
-				{
-					*(buff + len) = 0;
-					//printf("got: '%s'\n", buff);
-					udpcrosslinker(buff);
-				}
+				*(delim++) = 0;
+				me_config.udpServerPort = atoi(delim);
 			}
-			else
-				vTaskDelay(pdMS_TO_TICKS(20));
+		}
+
+		// Check if the string looks like an ip address
+		if (!(*me_config.udpServerAdress && strz_is_ip(me_config.udpServerAdress, 4)))
+		{
+			ESP_LOGW(TAG, "UDP server IP address is not specified, working without outgoing messages");
+
+			*me_config.udpServerAdress = 0;
+		}
+		else if (!me_config.udpServerPort)
+		{
+			ESP_LOGW(TAG, "Server UDP port not specified, using default %d", DEFAULT_UDP_PORT);
+			me_config.udpServerPort = DEFAULT_UDP_PORT;
+		}
+
+		if (*me_config.udp_cross_link)
+		{
+			parseUdpCrossLinks();
+		}
+
+		if ((me_state.udplink_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) >= 0)
+		{
+			ESP_LOGD(TAG,"UDP socket number: %d", me_state.udplink_socket);
+
+			int buff_size=250;
+			char buff[buff_size];
+
+			struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
+			socklen_t socklen = sizeof(source_addr);
+
+			struct sockaddr_in dest_addr;
+			dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			dest_addr.sin_family = AF_INET;
+			dest_addr.sin_port = htons(me_config.udpMyPort);
+
+			int err = bind(me_state.udplink_socket, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+			if (err < 0) {
+				ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+			}
+
+			ESP_LOGD(TAG, "UDP listening on port:%d", me_config.udpMyPort);
+			
+			me_state.UDP_init_res = ESP_OK;
+			
+			while(1)
+			{
+				if (linksCount)
+				{
+					if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
+					{
+						*(buff + len) = 0;
+						//printf("got: '%s'\n", buff);
+						udpcrosslinker(buff);
+					}
+				}
+				else
+					vTaskDelay(pdMS_TO_TICKS(20));
+			}
+		}
+		else
+		{
+			mblog(0, "Failed to create socket for UDP: %d", errno);
 		}
 	}
 	else
 	{
-		ESP_LOGE(TAG, "Failed to create socket for UDP: %d\n", errno);
-		printf("Failed to create socket for UDP: %d\n", errno);
-		mblog(0, "Failed to create socket for UDP");
+		ESP_LOGW(TAG, "Local UDP port is not specified, so UDP is not enabled");
 	}
 
 	vTaskDelay(pdMS_TO_TICKS(200));
@@ -247,7 +246,7 @@ int udplink_send(int slot_num, const char * message)
 
 	//printf("udplink_send: stage 1\n");
 
-	if (*me_config.udpServerAdress)
+	if ((me_state.udplink_socket) != -1 && *me_config.udpServerAdress)
 	{
 		//printf("udplink_send: stage 1\n");
 
@@ -255,7 +254,7 @@ int udplink_send(int slot_num, const char * message)
 		destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
 		destAddr.sin_family = 2;
 		destAddr.sin_port = htons(me_config.udpServerPort);
-		result = sendto(me_state.udp_socket, message, strlen(message), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
+		result = sendto(me_state.udplink_socket, message, strlen(message), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
 	}
 
     return result;

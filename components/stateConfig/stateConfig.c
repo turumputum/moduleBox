@@ -192,7 +192,7 @@ void load_Default_Config(void) {
 	
 	me_state.MQTT_init_res = ESP_FAIL;
 
-	me_state.udp_socket = -1;
+	me_state.udplink_socket = -1;
 	me_state.osc_socket = -1;
 
 	me_state.eth_connected = -1;

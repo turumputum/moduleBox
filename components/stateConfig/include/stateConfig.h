@@ -65,7 +65,7 @@ typedef struct {
 	int8_t eth_connected;
 
 
-	int8_t udp_socket;
+	int8_t udplink_socket;
 	int8_t osc_socket;
 
 	int8_t free_i2c_num;
