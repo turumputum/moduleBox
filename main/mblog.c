@@ -71,7 +71,7 @@ void mblog(int priority, const char *msg, ...)
 
     if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
     {
-        sz = snprintf(buffOut, sizeof(buffOut), "%.8d ", (int)xTaskGetTickCount());
+        sz = snprintf(buffOut, sizeof(buffOut), "%.8d ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
 
         va_start(st_va_list, msg);
         sz = vsnprintf(buffOut + sz, sizeof(buffOut) - sz - 1, msg, st_va_list);

@@ -78,17 +78,38 @@ enum animation{
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-static void IRAM_ATTR timer_isr_handler(void* arg){
+static void IRAM_ATTR timer_isr_handler(void* arg)
+{
     int slot_num = (int) arg;
-	uint8_t tmp=1;
-	me_state.counters[slot_num].flag = 1;
-    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+	uint8_t msg=1;  // timer event
+
+  	// Переменные для переключения контекста
+  	BaseType_t xHigherPriorityTaskWoken, xResult;
+  	xHigherPriorityTaskWoken = pdFALSE;
+
+  	// Отправляем в очередь задачи событие 
+  	xResult = xQueueSendFromISR(me_state.interrupt_queue[slot_num], &msg, &xHigherPriorityTaskWoken);
+  	// Если высокоприоритетная задача ждет этого события, переключаем управление
+  	if (xResult == pdPASS) {
+    	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  	};	
 }
 
-static void IRAM_ATTR gpio_isr_handler(void* arg){
+static void IRAM_ATTR gpio_isr_handler(void* arg)
+{
     int slot_num = (int) arg;
-	uint8_t tmp=1;
-	xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+	uint8_t msg=0; // GPIO event
+
+  	// Переменные для переключения контекста
+  	BaseType_t xHigherPriorityTaskWoken, xResult;
+  	xHigherPriorityTaskWoken = pdFALSE;
+
+  	// Отправляем в очередь задачи событие 
+  	xResult = xQueueSendFromISR(me_state.interrupt_queue[slot_num], &msg, &xHigherPriorityTaskWoken);
+  	// Если высокоприоритетная задача ждет этого события, переключаем управление
+  	if (xResult == pdPASS) {
+    	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  	};	
 }
 
 /* 
@@ -256,8 +277,8 @@ void button_task(void *arg)
 		}
 
 		// Получаем сигнал от GPIO или таймера
-		uint8_t tmp;
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, portMAX_DELAY) == pdPASS)
+		uint8_t msg;
+		if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, portMAX_DELAY) == pdPASS)
 		{
 			debounceStat_t * st = &me_state.counters[slot_num];
 
@@ -272,7 +293,7 @@ void button_task(void *arg)
 
 			if (c.debounce_gap)	// Если таймер активен
 			{
-				if (st->flag) 	// Если сигнал был от таймера
+				if (msg) 	// Если сигнал был от таймера
 				{
 					//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
 
@@ -293,8 +314,6 @@ void button_task(void *arg)
 						else	
 							newState = 0;
 					}
-
-					st->flag = 0;
 				}
 			}
 			else	// Таймер не активен

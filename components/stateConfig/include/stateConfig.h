@@ -36,7 +36,6 @@ typedef enum {
 
 typedef struct {
 	uint8_t 	pin_num;
-	uint8_t 	flag;
 	uint32_t 	total;
 	uint32_t	ones;
 } debounceStat_t;
