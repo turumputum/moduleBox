@@ -56,6 +56,9 @@ typedef struct __tag_BUTTONLEDCONFIG
 	TickType_t 				pressTimeBegin;
 	bool 					longPressSignaled;
 
+	TickType_t 				unpressTimeBegin;
+	bool 					dobleClickSignaled;
+
 	STDCOMMANDS             cmds;
 } BUTTONLEDCONFIG, * PBUTTONLEDCONFIG; 
 
@@ -245,6 +248,7 @@ static void _report_state(const char * 		prefix,
 void button_task(void *arg)
 {
 	BUTTONLEDCONFIG		c = {0};
+	TickType_t 			now;
 
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
@@ -300,11 +304,11 @@ void button_task(void *arg)
 	{
 		if (c.longPressTime) // Если активен режим длинного нажатия
 		{
-			if (button_state != prev_state)
+			if (button_state != prev_state) // Если было изменение кнопки
 			{
 				if (button_state)
 				{
-					c.pressTimeBegin 	= xTaskGetTickCount();
+					c.pressTimeBegin = xTaskGetTickCount();
 				}
 				else
 				{
@@ -320,16 +324,17 @@ void button_task(void *arg)
 						_report_state("", 0, slot_num);
 					}
 
-					c.pressTimeBegin = 0;
+					c.pressTimeBegin 	= 0;
+					c.unpressTimeBegin 	= xTaskGetTickCount();
 				}
 
 				prev_state = button_state;
 			}
-			else if (c.pressTimeBegin && !c.longPressSignaled)
+			else if (c.pressTimeBegin && !c.longPressSignaled) // Если состояние не изменилось и активно нажатие
 			{
-				TickType_t now = xTaskGetTickCount();
+				now = xTaskGetTickCount();
 
-				if (pdTICKS_TO_MS(now - c.pressTimeBegin) >= c.longPressTime)
+				if (pdTICKS_TO_MS(now - c.pressTimeBegin) >= c.longPressTime) // если длительность достигнута
 				{
 					_report_state("/longPress:", 1, slot_num);
 
@@ -337,10 +342,47 @@ void button_task(void *arg)
 				}
 			}
 		}
-		else if (button_state != prev_state) // Если состояние кнопки таки изменилось
+		else if (button_state != prev_state) // Если состояние кнопки изменилось
 		{
 			prev_state = button_state;
-			_report_state("", button_state, slot_num);
+
+			if (c.doubleClickTime) // Если дабл клик активен
+			{
+				if (button_state) // если было нажатие
+				{
+					// если отжатие зафиксировано и длительность достигнута 
+					if (  c.unpressTimeBegin 																&& 
+					      (pdTICKS_TO_MS(xTaskGetTickCount() - c.unpressTimeBegin) <= c.doubleClickTime)	) 
+					{
+						c.dobleClickSignaled = true;
+
+						_report_state("/doubleClick:", 1, slot_num);
+					}
+					else
+					{
+						c.unpressTimeBegin = 0; 
+						_report_state("", 1, slot_num);
+					}						
+				}
+				else
+				{
+					if (c.dobleClickSignaled)
+					{
+						c.unpressTimeBegin 		= 0;
+						c.dobleClickSignaled 	= false;
+
+						_report_state("/doubleClick:", 0, slot_num);
+					}
+					else
+					{
+						c.unpressTimeBegin = xTaskGetTickCount();
+
+						_report_state("", 0, slot_num);
+					}
+				}
+			}
+			else
+				_report_state("", button_state, slot_num);
 		}
 
 		// Получаем сигнал от GPIO или таймера
