@@ -50,6 +50,12 @@ typedef struct __tag_BUTTONLEDCONFIG
 	uint16_t 				refreshPeriod;
 	int 					animate;
 
+	uint16_t 				longPressTime;
+	uint16_t 				doubleClickTime;
+
+	TickType_t 				pressTimeBegin;
+	bool 					longPressSignaled;
+
 	STDCOMMANDS             cmds;
 } BUTTONLEDCONFIG, * PBUTTONLEDCONFIG; 
 
@@ -130,6 +136,25 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 		ch->debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounce_gap:%d for slot:%d",ch->debounce_gap, slot_num);
 
+		/* Продолжительность длинного нажатия
+		   Ненулевое значение этого параметра меняет логику обработки кнопки: ввиду того, что для определения 
+		   времени нажатия необходимо ожидать отпускание кнопки, информаци о её нажатии будет оправлена 
+		   только в момент её отпускания. Если не будет достигнута продолжительность длинного нажатия.
+		*/
+		ch->longPressTime 	= get_option_int_val(slot_num, "longPressTime", "ms", 0, 0, 65535);
+		if (ch->longPressTime)
+			ESP_LOGD(TAG, "Set longPressTime:%d ms for slot:%d", ch->longPressTime, slot_num);
+		else
+			ESP_LOGD(TAG, "No long press active for slot:%d", slot_num);
+
+		/* Длительность промежутка между нажатиями для регистрации двойного нажатия
+		*/
+		ch->doubleClickTime = get_option_int_val(slot_num, "doubleClickTime", "ms", 0, 0, 65535);
+		if (ch->doubleClickTime)
+			ESP_LOGD(TAG, "Set doubleClickTime:%d ms for slot:%d", ch->doubleClickTime, slot_num);
+		else
+			ESP_LOGD(TAG, "No double click active for slot:%d", slot_num);
+
 		if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) 
 		{
 			/* Топик для событий кнопки
@@ -204,6 +229,19 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
     stdcommand_register(&ch->cmds, MYCMD_default, NULL, PARAMT_int);
 }
 
+static void _report_state(const char * 		prefix, 
+						  int 				button_state, 
+						  int 				slot_num)
+{
+	char tmp[255];
+
+	// отчёт
+	sprintf(tmp, "%s%d", prefix, button_state);
+	report(tmp, slot_num);
+	
+	//vTaskDelay(pdMS_TO_TICKS(5));
+	ESP_LOGD(TAG,"BUTTON report String:%s", tmp);
+}
 void button_task(void *arg)
 {
 	BUTTONLEDCONFIG		c = {0};
@@ -227,8 +265,6 @@ void button_task(void *arg)
 	
 	ESP_LOGD(TAG,"SETUP BUTTON_pin_%d Slot:%d", pin_num, slot_num );
 	
-	char str[255];
-
 	configure_button_led(&c, slot_num, 0);
 
 	int8_t button_state=0;
@@ -262,18 +298,49 @@ void button_task(void *arg)
     //while (workIsPermitted(slot_num))
 	while (true)
 	{
-		if (button_state != prev_state) // Если состояние кнопки таки изменилось
+		if (c.longPressTime) // Если активен режим длинного нажатия
 		{
-			// фиксируем состояние
-			prev_state = button_state;
+			if (button_state != prev_state)
+			{
+				if (button_state)
+				{
+					c.pressTimeBegin 	= xTaskGetTickCount();
+				}
+				else
+				{
+					if (c.longPressSignaled)
+					{
+						_report_state("/longPress:", 0, slot_num);
 
-			// отчёт
-			memset(str, 0, strlen(str));
-			sprintf(str, "%d", button_state);
-			report(str, slot_num);
-			
-			//vTaskDelay(pdMS_TO_TICKS(5));
-			ESP_LOGD(TAG,"BUTTON report String:%s", str);
+						c.longPressSignaled = false;
+					}
+					else
+					{
+						_report_state("", 1, slot_num);
+						_report_state("", 0, slot_num);
+					}
+
+					c.pressTimeBegin = 0;
+				}
+
+				prev_state = button_state;
+			}
+			else if (c.pressTimeBegin && !c.longPressSignaled)
+			{
+				TickType_t now = xTaskGetTickCount();
+
+				if (pdTICKS_TO_MS(now - c.pressTimeBegin) >= c.longPressTime)
+				{
+					_report_state("/longPress:", 1, slot_num);
+
+					c.longPressSignaled = true;
+				}
+			}
+		}
+		else if (button_state != prev_state) // Если состояние кнопки таки изменилось
+		{
+			prev_state = button_state;
+			_report_state("", button_state, slot_num);
 		}
 
 		// Получаем сигнал от GPIO или таймера
@@ -318,8 +385,6 @@ void button_task(void *arg)
 			}
 			else	// Таймер не активен
 			{
-				
-
 				newState = st->ones;
 			}
 
