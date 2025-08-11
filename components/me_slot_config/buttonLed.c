@@ -38,6 +38,13 @@ typedef enum
     MYCMD_default = 0,
 } MYCMD;
 
+typedef enum
+{
+	BSTYPE_none		= 0,
+	BSTYPE_short,
+	BSTYPE_long,
+	BSTYPE_double,
+} BSTYPE;
 
 typedef struct __tag_BUTTONLEDCONFIG
 {
@@ -55,6 +62,8 @@ typedef struct __tag_BUTTONLEDCONFIG
 
 	TickType_t 				pressTimeBegin;
 	bool 					longPressSignaled;
+
+	BSTYPE					delayedPress;
 
 	TickType_t 				unpressTimeBegin;
 	bool 					dobleClickSignaled;
@@ -231,10 +240,9 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
     */
     stdcommand_register(&ch->cmds, MYCMD_default, NULL, PARAMT_int);
 }
-
-static void _report_state(const char * 		prefix, 
-						  int 				button_state, 
-						  int 				slot_num)
+static void _button_report(const char * 		prefix, 
+						   int 					button_state, 
+						   int 					slot_num)
 {
 	char tmp[255];
 
@@ -242,8 +250,67 @@ static void _report_state(const char * 		prefix,
 	sprintf(tmp, "%s%d", prefix, button_state);
 	report(tmp, slot_num);
 	
-	//vTaskDelay(pdMS_TO_TICKS(5));
 	ESP_LOGD(TAG,"BUTTON report String:%s", tmp);
+}
+
+static void _buttonStateChanged(BUTTONLEDCONFIG *	c, 
+								BSTYPE				type, 
+						        int 				button_state, 
+						        int 				slot_num)
+{
+	char tmp[255];
+
+	if (c->doubleClickTime) // Если дабл клик активен и текущее не лонг
+	{
+		if (button_state) // если было нажатие
+		{
+			// если отжатие зафиксировано и длительность достигнута 
+			if (  c->unpressTimeBegin 																&& 
+					(pdTICKS_TO_MS(xTaskGetTickCount() - c->unpressTimeBegin) <= c->doubleClickTime)	)
+			{
+				c->longPressSignaled	 = false;
+				c->dobleClickSignaled = true;
+
+				type = BSTYPE_double;
+			}
+			else
+			{
+				c->unpressTimeBegin = 0; 
+			}
+		}
+		else
+		{
+			if (c->dobleClickSignaled)
+			{
+				c->unpressTimeBegin 	= 0;
+				c->dobleClickSignaled 	= false;
+
+				type = BSTYPE_double;
+			}
+			else
+			{
+				c->unpressTimeBegin = xTaskGetTickCount();
+			}
+		}
+	}
+
+	switch (type)
+	{
+		case BSTYPE_short:
+			_button_report("", button_state, slot_num);
+			break;
+			
+		case BSTYPE_long:
+			_button_report("/longpress:", button_state, slot_num);
+			break;
+	
+		case BSTYPE_double:
+			_button_report("/doubleClick:", button_state, slot_num);
+			break;
+
+		default:
+			break;
+	}
 }
 void button_task(void *arg)
 {
@@ -314,14 +381,14 @@ void button_task(void *arg)
 				{
 					if (c.longPressSignaled)
 					{
-						_report_state("/longPress:", 0, slot_num);
+						_buttonStateChanged(&c, BSTYPE_long, 0, slot_num);
 
 						c.longPressSignaled = false;
 					}
 					else
 					{
-						_report_state("", 1, slot_num);
-						_report_state("", 0, slot_num);
+						_buttonStateChanged(&c, BSTYPE_short, 1, slot_num);
+						_buttonStateChanged(&c, BSTYPE_short, 0, slot_num);
 					}
 
 					c.pressTimeBegin 	= 0;
@@ -336,7 +403,7 @@ void button_task(void *arg)
 
 				if (pdTICKS_TO_MS(now - c.pressTimeBegin) >= c.longPressTime) // если длительность достигнута
 				{
-					_report_state("/longPress:", 1, slot_num);
+					_buttonStateChanged(&c, BSTYPE_long, 1, slot_num);
 
 					c.longPressSignaled = true;
 				}
@@ -346,43 +413,7 @@ void button_task(void *arg)
 		{
 			prev_state = button_state;
 
-			if (c.doubleClickTime) // Если дабл клик активен
-			{
-				if (button_state) // если было нажатие
-				{
-					// если отжатие зафиксировано и длительность достигнута 
-					if (  c.unpressTimeBegin 																&& 
-					      (pdTICKS_TO_MS(xTaskGetTickCount() - c.unpressTimeBegin) <= c.doubleClickTime)	) 
-					{
-						c.dobleClickSignaled = true;
-
-						_report_state("/doubleClick:", 1, slot_num);
-					}
-					else
-					{
-						c.unpressTimeBegin = 0; 
-						_report_state("", 1, slot_num);
-					}						
-				}
-				else
-				{
-					if (c.dobleClickSignaled)
-					{
-						c.unpressTimeBegin 		= 0;
-						c.dobleClickSignaled 	= false;
-
-						_report_state("/doubleClick:", 0, slot_num);
-					}
-					else
-					{
-						c.unpressTimeBegin = xTaskGetTickCount();
-
-						_report_state("", 0, slot_num);
-					}
-				}
-			}
-			else
-				_report_state("", button_state, slot_num);
+			_buttonStateChanged(&c, BSTYPE_short, button_state, slot_num);
 		}
 
 		// Получаем сигнал от GPIO или таймера
