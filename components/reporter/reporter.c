@@ -364,12 +364,12 @@ void reporter_task(void){
 	reporter_message_t received_message;
 	for(;;){
 		if (xQueueReceive(me_state.reporter_queue, &received_message, portMAX_DELAY) == pdPASS){
-			ESP_LOGD(TAG, "REPORT QueueReceive: %s len:%d from slot:%d", received_message.str, strlen(received_message.str), received_message.slot_num);
+			//ESP_LOGD(TAG, "REPORT QueueReceive: %s len:%d from slot:%d", received_message.str, strlen(received_message.str), received_message.slot_num);
 			int len = strlen(received_message.str)+strlen(me_state.trigger_topic_list[received_message.slot_num])+6;
 			char tmpStr[len];
 			memset(tmpStr, 0, strlen(tmpStr));
 
-			ESP_LOGD(TAG, "test tmpLen:%d topicLen:%d msgLen:%d",len,strlen(me_state.trigger_topic_list[received_message.slot_num]), strlen(received_message.str));
+			//ESP_LOGD(TAG, "test tmpLen:%d topicLen:%d msgLen:%d",len,strlen(me_state.trigger_topic_list[received_message.slot_num]), strlen(received_message.str));
 			if(received_message.str[0]=='/'){
 				sprintf(tmpStr,"%s%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}else{

@@ -46,10 +46,17 @@ typedef enum
 	BSTYPE_double,
 } BSTYPE;
 
+typedef struct __tag_ISRCFG
+{
+	int 			slot_num;
+	uint8_t			msg;
+} ISRCFG;
+
 typedef struct __tag_BUTTONLEDCONFIG
 {
 	int 					button_inverse;
 	int 					debounce_gap;
+	int 					event_filter;
 	uint8_t 				led_inverse;
 	int16_t 				fade_increment;
 	int16_t 				maxBright;
@@ -69,6 +76,8 @@ typedef struct __tag_BUTTONLEDCONFIG
 	bool 					dobleClickSignaled;
 
 	STDCOMMANDS             cmds;
+
+	ISRCFG					isrCfgs [ 2 ];
 } BUTTONLEDCONFIG, * PBUTTONLEDCONFIG; 
 
 
@@ -96,34 +105,14 @@ enum animation{
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-static void IRAM_ATTR timer_isr_handler(void* arg)
+static void IRAM_ATTR button_isr_handler(ISRCFG * cfg)
 {
-    int slot_num = (int) arg;
-	uint8_t msg=1;  // timer event
-
   	// Переменные для переключения контекста
   	BaseType_t xHigherPriorityTaskWoken, xResult;
   	xHigherPriorityTaskWoken = pdFALSE;
 
   	// Отправляем в очередь задачи событие 
-  	xResult = xQueueSendFromISR(me_state.interrupt_queue[slot_num], &msg, &xHigherPriorityTaskWoken);
-  	// Если высокоприоритетная задача ждет этого события, переключаем управление
-  	if (xResult == pdPASS) {
-    	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  	};	
-}
-
-static void IRAM_ATTR gpio_isr_handler(void* arg)
-{
-    int slot_num = (int) arg;
-	uint8_t msg=0; // GPIO event
-
-  	// Переменные для переключения контекста
-  	BaseType_t xHigherPriorityTaskWoken, xResult;
-  	xHigherPriorityTaskWoken = pdFALSE;
-
-  	// Отправляем в очередь задачи событие 
-  	xResult = xQueueSendFromISR(me_state.interrupt_queue[slot_num], &msg, &xHigherPriorityTaskWoken);
+  	xResult = xQueueSendFromISR(me_state.interrupt_queue[cfg->slot_num], &cfg->msg, &xHigherPriorityTaskWoken);
   	// Если высокоприоритетная задача ждет этого события, переключаем управление
   	if (xResult == pdPASS) {
     	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
@@ -167,6 +156,10 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 		else
 			ESP_LOGD(TAG, "No double click active for slot:%d", slot_num);
 
+		/* Флаг задаёт фильтрацию совытий при активных
+		*/
+		ch->event_filter = get_option_flag_val(slot_num, "eventfilter");
+
 		if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) 
 		{
 			/* Топик для событий кнопки
@@ -183,7 +176,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 	}
 	else
 	{
-		/* Флаг определяет инверсию кнопки
+		/* Флаг определяет инверсию светодиода
 		*/
 		ch->led_inverse = get_option_flag_val(slot_num, "ledInverse");
 
@@ -239,6 +232,9 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
        задаёт текущее состояние светодиода (вкл/выкл)
     */
     stdcommand_register(&ch->cmds, MYCMD_default, NULL, PARAMT_int);
+
+
+	ch->event_filter = 0;
 }
 static void _button_report(const char * 		prefix, 
 						   int 					button_state, 
@@ -305,6 +301,10 @@ static void _buttonStateChanged(BUTTONLEDCONFIG *	c,
 			break;
 	
 		case BSTYPE_double:
+			// Посылаем лишний короткий без фильтра
+			if (!c->event_filter)
+				_button_report("", button_state, slot_num);
+
 			_button_report("/doubleClick:", button_state, slot_num);
 			break;
 
@@ -320,6 +320,11 @@ void button_task(void *arg)
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
 
+	c.isrCfgs[0].slot_num 	= slot_num;
+	c.isrCfgs[0].msg		= 0;
+	c.isrCfgs[1].slot_num 	= slot_num;
+	c.isrCfgs[1].msg		= 1;
+
 	me_state.interrupt_queue[slot_num] = xQueueCreate(10, sizeof(uint8_t));
 
 	gpio_reset_pin(pin_num);
@@ -332,7 +337,7 @@ void button_task(void *arg)
     gpio_config(&in_conf);
 	gpio_set_intr_type(pin_num, GPIO_INTR_ANYEDGE);
     gpio_install_isr_service(0);
-	gpio_isr_handler_add(pin_num, gpio_isr_handler, (void*)slot_num);
+	gpio_isr_handler_add(pin_num, button_isr_handler, (void*)&c.isrCfgs[0]);
 	
 	ESP_LOGD(TAG,"SETUP BUTTON_pin_%d Slot:%d", pin_num, slot_num );
 	
@@ -354,8 +359,8 @@ void button_task(void *arg)
 
 	esp_timer_handle_t debounce_gap_timer;
 	const esp_timer_create_args_t delay_timer_args = {
-		.callback = &timer_isr_handler,
-		.arg = (void*)slot_num,
+		.callback = &button_isr_handler,
+		.arg = (void*)&c.isrCfgs[1],
 		.name = "debounce_gap_timer"
 	};
 
@@ -376,18 +381,28 @@ void button_task(void *arg)
 				if (button_state)
 				{
 					c.pressTimeBegin = xTaskGetTickCount();
+
+					// Посылаем лишний короткий при нажатии без фильтра
+					if (!c.event_filter) 
+						_buttonStateChanged(&c, BSTYPE_short, 1, slot_num);
 				}
 				else
 				{
 					if (c.longPressSignaled)
 					{
+						// Посылаем лишний короткий при отпускании без фильтра
+						if (!c.event_filter)
+							_buttonStateChanged(&c, BSTYPE_short, 0, slot_num);
+
 						_buttonStateChanged(&c, BSTYPE_long, 0, slot_num);
 
 						c.longPressSignaled = false;
 					}
 					else
 					{
-						_buttonStateChanged(&c, BSTYPE_short, 1, slot_num);
+						// Посылаем задержанный короткий при отпускании если был фильтрован
+						if (c.event_filter)
+							_buttonStateChanged(&c, BSTYPE_short, 1, slot_num);
 						_buttonStateChanged(&c, BSTYPE_short, 0, slot_num);
 					}
 

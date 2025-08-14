@@ -407,7 +407,6 @@ void smartLed_task(void *arg){
     waitForWorkPermit(slot_num);
 
     while (1) {
-//<<<<<<< HEAD
         switch (stdcommand_receive(&c->cmds, &params, 0))
         {
             case -1: // none
@@ -417,18 +416,6 @@ void smartLed_task(void *arg){
                 c->state = params.p[0].i;
                 if(c->ledMode==MODE_RUN){
                     init_runEffect(&led_strip_pixels[0], c->num_of_led, c->minBright, c->maxBright, &c->targetRGB);
-//=======
-//        command_message_t msg;
-//        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-//            //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
-//            char* payload;
-//            char* cmd = strtok_r(msg.str, ":", &payload);
-//            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-//            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
-//                state = atoi(payload);
-//                if(ledMode==RUN){
-//                    init_runEffect(&led_strip_pixels, num_of_led, minBright, maxBright, &targetRGB);
-//>>>>>>> main
                 }
                 if(c->state==0){
                     currentBright = targetBright-1;

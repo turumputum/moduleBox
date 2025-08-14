@@ -401,6 +401,7 @@ void audio_task(void *arg) {
 
 	waitForWorkPermit(slot_num);
 
+
 	while(1)
 	{
 		// if (xQueueReceiveLast(me_state.command_queue[slot_num], &cmd, 5) == pdPASS)
