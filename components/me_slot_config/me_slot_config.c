@@ -409,6 +409,7 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 
 	if (result != ESP_OK)
 	{
+		ESP_LOGW(TAG, "Color options not found, lets parse default:%s", default_value);
 		parseRGB(output, default_value);
 	}
 	

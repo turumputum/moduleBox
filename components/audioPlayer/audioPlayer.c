@@ -194,7 +194,7 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 
 	/* Нижняя граница эквалайзера
 	*/
-	if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", 0, 0, 4096)) != 0)
+	if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", -13, -20, 0)) != 0)
 	{
 		c->eqFlag = 1;
 		ESP_LOGD(TAG, "Set eqLow:%d", c->eqLow);
@@ -202,7 +202,7 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 
 	/* Средняя граница эквалайзера
 	*/
-	if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", 0, 0, 4096)) != 0)
+	if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", -13, -20, 0)) != 0)
 	{
 		c->eqFlag = 1;
 		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
@@ -210,7 +210,7 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 
 	/* Верхняя граница эквалайзера
 	*/
-	if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", 0, 0, 4096)) != 0)
+	if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", -13, -20, 0)) != 0)
 	{
 		c->eqFlag = 1;
 		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
@@ -357,7 +357,7 @@ void audio_task(void *arg) {
 	//ESP_LOGD(TAG, "Register all elements to audio pipeline");
 	audio_pipeline_register(pipeline, fatfs_stream_reader, "file");
 	audio_pipeline_register(pipeline, mp3_decoder, "mp3");
-	audio_pipeline_register(pipeline, rsp_handle, "filter");
+	//audio_pipeline_register(pipeline, rsp_handle, "filter");
 	audio_pipeline_register(pipeline, sonic_el, "sonic");//-----
 	audio_pipeline_register(pipeline, equalizer, "equalizer");//-----
 	audio_pipeline_register(pipeline, i2s_stream_writer, "i2s");
@@ -365,10 +365,11 @@ void audio_task(void *arg) {
 	//ESP_LOGD(TAG, "Link it together [sdcard]-->fatfs_stream-->mp3_decoder-->resample-->i2s_stream-->[codec_chip]");
 	//const char *link_tag[4] = { "file", "mp3", "filter", "i2s" };
 	//const char *link_tag[5] = { "file", "mp3", "filter", "sonic", "i2s" };
-	const char *link_tag[6] = { "file", "mp3", "filter", "sonic", "equalizer", "i2s"};
-	// audio_pipeline_link(pipeline, &link_tag[0], 4);
-	//audio_pipeline_link(pipeline, &link_tag[0], 5);
-	audio_pipeline_link(pipeline, &link_tag[0], 6);
+	const char *link_tag[6] = { "file", "mp3", "sonic", "equalizer", "i2s"};
+	//const char *link_tag[6] = { "file", "mp3", "filter", "sonic", "equalizer", "i2s"};
+	//audio_pipeline_link(pipeline, &link_tag[0], 4);
+	audio_pipeline_link(pipeline, &link_tag[0], 5);
+	//audio_pipeline_link(pipeline, &link_tag[0], 6);
 
 	
 

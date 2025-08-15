@@ -363,7 +363,9 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     
 }
 void smartLed_task(void *arg){
-    PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    //PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    SMARTLEDCONFIG c_struct = {0};
+    PSMARTLEDCONFIG c = &c_struct;
     uint32_t startTick = xTaskGetTickCount();
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
