@@ -15,6 +15,7 @@
 //#include <netinet/in.h>
 #include "esp_timer.h"
 #include "myMqtt.h"
+#include "LAN.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "REPORTER";
@@ -237,16 +238,26 @@ void crosslinker(char* str){
 	}
 	//ESP_LOGD(TAG, "Crosslink calc time:%lld", esp_timer_get_time() - startTick);
 }
-void send_report(char *tmpStr){
+void send_report(reporter_message_t * msg)
+{
+	char * tmpStr = msg->str;
 	usbprint(tmpStr);
 
+	//ESP_LOGE(TAG,"send_report stage 1\n");
+
 	if(me_state.MQTT_init_res==ESP_OK){
+
 		char tmpString[strlen(tmpStr)];
 		strcpy(tmpString, tmpStr);
 		char *payload;
 		char *topic = strtok_r(tmpString, ":", &payload);
+
+		//ESP_LOGE(TAG,"send_report stage 2: %s %s\n", topic, payload);
+
 		mqtt_pub(topic, payload);
 	}
+	// else
+	// 	ESP_LOGE(TAG,"send_report stage 3\n");
 
 	if(me_state.OSC_init_res==ESP_OK){
 		char msg_copy[strlen(tmpStr)+1];
@@ -293,14 +304,12 @@ void send_report(char *tmpStr){
 			//ESP_LOGD(TAG,"send osc OK: \n");
 		}
 	}
-	if(me_state.UDP_init_res==ESP_OK){
-		struct sockaddr_in destAddr = {0};
-		destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
-		destAddr.sin_family = 2;
-		destAddr.sin_port = htons(me_config.udpServerPort);
-		int res = sendto(me_state.udp_socket, tmpStr, strlen(tmpStr), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
+	if(me_state.UDP_init_res==ESP_OK)
+	{
+		int res = udplink_send(msg->slot_num, tmpStr);
+
 		if (res < 0){
-			ESP_LOGE(TAG,"Failed to send osc errno: %d string:%s\n", errno, tmpStr);
+			ESP_LOGE(TAG,"Failed to send UDP errno: %d string:%s\n", errno, tmpStr);
 			err++;
 			if(err>10){
 				esp_restart();
@@ -309,7 +318,7 @@ void send_report(char *tmpStr){
 		}else{
 			err--;
 			if(err<0)err=0;
-			//ESP_LOGD(TAG,"send osc OK: \n");
+			//ESP_LOGD(TAG,"send UDP OK: \n");
 		}
 	}
 }
@@ -320,7 +329,7 @@ void spread_the_word_task(void)
 	for(;;){
 		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, portMAX_DELAY) == pdPASS)
 		{
-			send_report(received_message.str);
+			send_report(&received_message);
 
 			heap_caps_free(received_message.str);
 		}	
@@ -360,7 +369,7 @@ void reporter_task(void){
 			char tmpStr[len];
 			memset(tmpStr, 0, strlen(tmpStr));
 
-			//ESP_LOGD(TAG, "hueta tmpLen:%d topicLen:%d msgLen:%d",len,strlen(me_state.trigger_topic_list[received_message.slot_num]), strlen(received_message.str));
+			//ESP_LOGD(TAG, "test tmpLen:%d topicLen:%d msgLen:%d",len,strlen(me_state.trigger_topic_list[received_message.slot_num]), strlen(received_message.str));
 			if(received_message.str[0]=='/'){
 				sprintf(tmpStr,"%s%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}else{
@@ -411,7 +420,6 @@ void report(char *msg, int slot_num){
 	//free(send_message.str);
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 }
-
 void reportState(){
 	char tmpStr[512];  // Increased buffer size for JSON
     

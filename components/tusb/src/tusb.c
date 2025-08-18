@@ -66,6 +66,34 @@ bool tusb_inited(void)
   return ret;
 }
 
+static const char * usbdevs_str = "USBD: ";
+static char statusString [ 128 ];
+
+const char * usbGetStatusString()
+{
+#if CFG_TUD_ENABLED  
+    if (tud_is_plugged())
+    {
+        sprintf(statusString, "%s", usbdevs_str);
+        tud_enum_configs(statusString + strlen(usbdevs_str));
+    }
+    else
+#endif    
+#if CFG_TUH_ENABLED
+    if (tuh_inited())
+    {
+      sprintf(statusString, "%s", "USB host");
+    }
+    else
+#endif
+    {
+        sprintf(statusString, "%s", "USB unplugged");
+    }
+
+    return statusString;
+}
+
+
 //--------------------------------------------------------------------+
 // Internal Helper for both Host and Device stack
 //--------------------------------------------------------------------+

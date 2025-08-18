@@ -61,7 +61,7 @@ void ds18b20_task(void* arg) {
         char tmpString[strlen("DS18B20 not found, slot[0]") + 3];
         sprintf(tmpString, "DS18B20 not found, slot[%d]", slot_num);
         ESP_LOGE(TAG, "%s", tmpString);
-        writeErrorTxt(tmpString);
+        mblog(0, tmpString);
         vTaskDelete(NULL);
     }
 
@@ -73,13 +73,13 @@ void ds18b20_task(void* arg) {
 
     float deadBand = 0.01;
     if(strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
-        deadBand = abs(get_option_float_val(slot_num, "deadBand"));
+        deadBand = abs(get_option_float_val(slot_num, "deadBand", 0.01));
         ESP_LOGD(TAG, "Sensor set dead_band:%f for slot:%d", deadBand, slot_num);
     }
 
     float threshold = 0.0;
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-        threshold = get_option_int_val(slot_num, "threshold");
+        threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
         ESP_LOGD(TAG, "threshold:%f. Slot:%d", threshold, slot_num);
     }
 
@@ -96,7 +96,7 @@ void ds18b20_task(void* arg) {
 
     uint32_t periodic=0;
     if (strstr(me_config.slot_options[slot_num], "periodic")!=NULL){
-        periodic = abs(get_option_int_val(slot_num, "periodic"))*1000;
+        periodic = abs(get_option_int_val(slot_num, "periodic", "", 10, 1, 4096))*1000;
 		ESP_LOGD(TAG, "Set periodic:%ld. Slot:%d",periodic, slot_num);
 	}
 

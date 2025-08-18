@@ -100,13 +100,24 @@ HsvColor RgbToHsv(RgbColor rgb) {
 	return hsv;
 }
 
-void parseRGB(RgbColor *color, char* payload){
+int parseRGB(RgbColor *color, char* payload)
+{
+	int 		result = -1;
+
 	//ESP_LOGD(TAG, "Set RGB for slot:%d val:%s",slot_num, payload);
+	
+	size_t payload_len = strlen(payload);
+	char *payload_copy = malloc(payload_len + 1);
+	if(payload_copy == NULL) {
+		return -1;
+	}
+	strcpy(payload_copy, payload);
+	
 	char *rest;
 	char *tok;
     int R,G,B;
-	if(strstr(payload, " ")!=NULL){
-		tok = strtok_r(payload, " ", &rest);
+	if(strstr(payload_copy, " ")!=NULL){
+		tok = strtok_r(payload_copy, " ", &rest);
 		R = atoi(tok);
         if(strstr(rest, " ")!=NULL){
 		    tok = strtok_r(NULL, " ", &rest);
@@ -125,22 +136,27 @@ void parseRGB(RgbColor *color, char* payload){
         color->r=R;
         color->g=G;
         color->b=B;
+
+		result = 0;
         //ESP_LOGD(TAG, "Set RGB:%d %d %d", color->r, color->g, color->b);
 	}
+
+	free(payload_copy);
+	return result;
 }
 
 uint8_t modeToEnum(char* str){
-    if(strlen(str)<3)return DEFAULT;
+    if(strlen(str)<3)return MODE_DEFAULT;
 	if(strstr(str, "flash")!=NULL){
-        return FLASH; 
+        return MODE_FLASH; 
     }else if(strstr(str, "glitch")!=NULL){
-        return GLITCH;
+        return MODE_GLITCH;
     }else if(strstr(str, "rainbow")!=NULL){
-        return RAINBOW;
+        return MODE_RAINBOW;
     }else if(strstr(str, "run")!=NULL){
-        return RUN;
+        return MODE_RUN;
     }else{
-        return DEFAULT;
+        return MODE_DEFAULT;
     }
 }
 

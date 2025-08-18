@@ -129,6 +129,9 @@ bool tusb_init(void);
 // Check if stack is initialized
 bool tusb_inited(void);
 
+
+const char * usbGetStatusString();
+
 // TODO
 // bool tusb_teardown(void);
 

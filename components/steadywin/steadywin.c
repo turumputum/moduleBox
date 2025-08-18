@@ -515,13 +515,13 @@ void GIM_motor_task(void *arg) {
 
     int16_t maxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-		maxVal = get_option_int_val(slot_num, "maxVal");
+		maxVal = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set maxVal:%d for slot:%d",maxVal, slot_num);
 	}
 
     int16_t minVal = 0;
 	if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-		minVal = get_option_int_val(slot_num, "minVal");
+		minVal = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set minVal:%d for slot:%d",minVal, slot_num);
 	}
 
@@ -532,7 +532,7 @@ void GIM_motor_task(void *arg) {
 
     int8_t state=0;
     if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
-		state = get_option_int_val(slot_num, "defaultState");
+		state = get_option_int_val(slot_num, "defaultState", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
 	}
 

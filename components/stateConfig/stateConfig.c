@@ -10,13 +10,14 @@
 #include "diskio.h"
 #include "sdcard_scan.h"
 #include <errno.h>
-
+#include "LAN.h"
 #include "audio_error.h"
 #include "audio_mem.h"
 #include "me_slot_config.h"
 #include <dirent.h>
 //#include "buttonLed.h"
 #include "help.h"
+#include <axstring.h>
 
 #define TAG "stateConfig"
 
@@ -26,6 +27,23 @@
 
 extern configuration me_config;
 extern stateStruct me_state;
+
+static int _yesno(const char * value)
+{
+	int result = 0;
+
+	if ((*value >= '0') && (*value <= '9'))
+	{
+		// if just a fist char is digit
+		result = atoi(value);
+	}
+	else if (!strcasecmp(value, "true") || !strcasecmp(value, "yes"))
+	{
+		result = 1;
+	}
+
+	return result;
+}
 
 static int handler(void *user, const char *section, const char *name, const char *value) {
 	configuration *pconfig = (configuration*) user;
@@ -50,10 +68,18 @@ static int handler(void *user, const char *section, const char *name, const char
 
 	if (MATCH("SYSTEM", "deviceName")) {//-----------------------------------------------
 		pconfig->deviceName = strdup(value);
+	} else if (MATCH("SYSTEM", "logMaxSize")) {//-----------------------------------------------
+		pconfig->logMaxSize = strz_to_bytes(value);
+	} else if (MATCH("SYSTEM", "logChapters")) {//-----------------------------------------------
+		pconfig->logChapters = atoi(value);
+	} else if (MATCH("SYSTEM", "statusPeriod")) {//-----------------------------------------------
+		pconfig->statusPeriod = atoi(value);
+	} else if (MATCH("SYSTEM", "statusAllChannels")) {//-----------------------------------------------
+		pconfig->statusAllChannels = _yesno(value);
 	} else if (MATCH("SYSTEM", "USB_debug")) {
-		pconfig->USB_debug = atoi(value);
+		pconfig->USB_debug = _yesno(value);
 	}  else if (MATCH("LAN", "LAN_enable")) {//-----------------------------------------------
-		pconfig->LAN_enable = atoi(value);
+		pconfig->LAN_enable = _yesno(value);
 	} else if (MATCH("LAN", "ipAdress")) {
 		pconfig->LAN_ipAdress = strdup(value);
 	} else if (MATCH("LAN", "netMask")) {
@@ -61,15 +87,15 @@ static int handler(void *user, const char *section, const char *name, const char
 	} else if (MATCH("LAN", "gateWay")) {
 		pconfig->LAN_gateWay = strdup(value);
 	} else if (MATCH("LAN", "DHCP")) {
-		pconfig->LAN_DHCP = atoi(value);
+		pconfig->LAN_DHCP = _yesno(value);
 	} else if (MATCH("WIFI", "WIFI_enable")) {//-----------------------------------------------
-		pconfig->WIFI_enable = atoi(value);
+		pconfig->WIFI_enable = _yesno(value);
 	} else if (MATCH("WIFI", "SSID")) {
 		pconfig->WIFI_ssid = strdup(value);
 	} else if (MATCH("WIFI", "pass")) {
 		pconfig->WIFI_pass = strdup(value);
 	} else if (MATCH("WIFI", "DHCP")) {
-		pconfig->WIFI_DHCP = atoi(value);
+		pconfig->WIFI_DHCP = _yesno(value);
 	} else if (MATCH("WIFI", "ipAdress")) {
 		pconfig->WIFI_ipAdress = strdup(value);
 	} else if (MATCH("WIFI", "netMask")) {
@@ -79,22 +105,22 @@ static int handler(void *user, const char *section, const char *name, const char
 	} else if (MATCH("WIFI", "channel")) {
 		pconfig->WIFI_channel = atoi(value);
 	} else if (MATCH("MDNS", "MDNS_enable")) {//-----------------------------------------------
-		pconfig->MDNS_enable = atoi(value);
+		pconfig->MDNS_enable = _yesno(value);
 	} else if (MATCH("FTP", "FTP_enable")) {//-----------------------------------------------
 		pconfig->FTP_enable = atoi(value);
 	} else if (MATCH("FTP", "FTP_anon")) {
-		pconfig->FTP_anon = atoi(value);
+		pconfig->FTP_anon = _yesno(value);
 	} else if (MATCH("FTP", "FTP_login")) {
 		pconfig->FTP_login = strdup(value);
 	} else if (MATCH("FTP", "FTP_pass")) {
 		pconfig->FTP_pass = strdup(value);
-	} else if (MATCH("UDP", "udpServerAdress")){//-----------------------------------------------
-		pconfig->udpServerAdress = strdup(value);
-	} else if (MATCH("UDP", "udpServerPort")) {
-		pconfig->udpServerPort = atoi(value);
-	} else if (MATCH("UDP", "udpMyPort")) {
-		pconfig->udpMyPort = atoi(value);
-	} else if (MATCH("UDP", "udp_cross_link")) {
+    } else if (MATCH("UDP", "udpServerAdress")){//-----------------------------------------------
+        pconfig->udpServerAdress = strdup(value);
+    } else if (MATCH("UDP", "udpServerPort")) {
+        pconfig->udpServerPort = atoi(value);
+    } else if (MATCH("UDP", "udpMyPort")) {
+        pconfig->udpMyPort = atoi(value);
+	} else if (MATCH("UDP", "cross_link")) {
 		pconfig->udp_cross_link = strdup(value);
 	} else if (MATCH("OSC", "oscServerAdress")) {//-----------------------------------------------
 		pconfig->oscServerAdress = strdup(value);
@@ -110,31 +136,15 @@ static int handler(void *user, const char *section, const char *name, const char
 	return 1;
 }
 
-void writeErrorTxt(const char *buff) {
-
-	FILE *errFile;
-
-	errFile = fopen("/sdcard/error.txt", "a");
-	if (!errFile) {
-		ESP_LOGE(TAG, "fopen() failed");
-		return;
-	}
-	unsigned int bytesWritten;
-	bytesWritten = fprintf(errFile, buff);
-	if (bytesWritten == 0) {
-		ESP_LOGE(TAG, "fwrite() failed");
-		return;
-	}
-
-	fclose(errFile);
-
-}
-
 void load_Default_Config(void) {
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	me_config.deviceName = strdup("moduleBox");
+	me_config.logMaxSize = 50 * 1024;
+	me_config.logChapters = 10;
+	me_config.statusPeriod = 900;
+	me_config.statusAllChannels = false;
 	me_config.USB_debug = 0;
 
 	
@@ -166,11 +176,12 @@ void load_Default_Config(void) {
 
 	me_config.mqttBrokerAdress = strdup("");
 	
-	me_config.udpServerAdress = strdup("");
-	me_config.udpServerPort = 0;
-	me_config.udpMyPort = 0;
-	me_config.udp_cross_link = strdup("");
-	me_state.UDP_init_res = ESP_FAIL;
+    me_config.udpServerAdress = strdup("");
+    me_config.udpServerPort = 0;
+    me_config.udpMyPort = 0;
+    me_config.udp_cross_link = strdup("");
+    me_state.UDP_init_res = ESP_FAIL;
+
 	
 	me_config.oscServerAdress = strdup("");
 	me_config.oscServerPort = 0;
@@ -181,9 +192,10 @@ void load_Default_Config(void) {
 	
 	me_state.MQTT_init_res = ESP_FAIL;
 
-	me_state.udp_socket = -1;
+	me_state.udplink_socket = -1;
 	me_state.osc_socket = -1;
 
+	me_state.eth_connected = -1;
 
 	me_state.slot_init_res = ESP_FAIL;
 	
@@ -280,23 +292,21 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
-	sprintf(tmp, "\r\n[UDP] \r\n");
+    sprintf(tmp, "\r\n[UDP] \r\n");
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+    sprintf(tmp, "udpServerAdress = %s \r\n", me_config.udpServerAdress);
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+    sprintf(tmp, "udpServerPort = %d \r\n", me_config.udpServerPort);
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+    sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
+    fprintf(configFile, tmp);
+    memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "cross_link = %s \r\n", me_config.udp_cross_link);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udpServerAdress = %s \r\n", me_config.udpServerAdress);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udpServerPort = %d \r\n", me_config.udpServerPort);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-
-	
-	// sprintf(tmp, "udp_cross_link = %s \r\n", me_config.udp_cross_link);
-	// fprintf(configFile, tmp);
-	// memset(tmp, 0, strlen(tmp));
 
 
 	sprintf(tmp, "\r\n[OSC] \r\n");

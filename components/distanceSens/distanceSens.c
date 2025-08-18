@@ -45,7 +45,7 @@ uint16_t crc16_modbus(uint8_t *data, uint8_t length) {
 
 void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
     if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
-        distanceSens->deadBand = get_option_int_val(slot_num, "deadBand");
+        distanceSens->deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
         if (distanceSens->deadBand <= 0) {
             ESP_LOGD(TAG, "TOF dead_band wrong format, set default slot:%d", distanceSens->deadBand);
             distanceSens->deadBand = 1; //default val
@@ -61,21 +61,21 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
     }
 
     if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-        distanceSens->maxVal = get_option_int_val(slot_num, "maxVal");
+        distanceSens->maxVal = get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", distanceSens->maxVal, slot_num);
     }
     if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-        distanceSens->minVal = get_option_int_val(slot_num, "minVal");
+        distanceSens->minVal = get_option_int_val(slot_num, "minVal", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);//
     }
 
     if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
-        distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap");
+        distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);//
     }
 
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-        distanceSens->threshold = get_option_int_val(slot_num, "threshold");
+        distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
         if (distanceSens->threshold <= 0){
             ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
             distanceSens->threshold = 0; // default val
@@ -85,7 +85,7 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
     }
 
     if (strstr(me_config.slot_options[slot_num], "filterK") != NULL) {
-        distanceSens->k = get_option_float_val(slot_num, "filterK");
+        distanceSens->k = get_option_float_val(slot_num, "filterK", 1);
         ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", distanceSens->k, slot_num);
     }
 
@@ -101,7 +101,7 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
         char errorString[50];
         sprintf(errorString,  "slot num:%d ___ LEDC channels has ended", slot_num);
         ESP_LOGE(TAG, "%s", errorString);
-        writeErrorTxt(errorString);
+        mblog(0, errorString);
         vTaskDelay(20);
         vTaskDelete(NULL);
 	}
@@ -191,7 +191,7 @@ void VL53TOF_task(void* arg) {
             char errorString[50];
             sprintf(errorString,  "slot num:%d ___ No free UART driver", slot_num);
             ESP_LOGE(TAG, "%s", errorString);
-            writeErrorTxt(errorString);
+            mblog(0, errorString);
             vTaskDelay(200);
             vTaskDelete(NULL);
         }
@@ -301,7 +301,7 @@ void benewakeTOF_task(void* arg) {
             char errorString[50];
             sprintf(errorString,  "slot num:%d ___ No free UART driver", slot_num);
             ESP_LOGE(TAG, "%s", errorString);
-            writeErrorTxt(errorString);
+            mblog(0, errorString);
             vTaskDelay(200);
             vTaskDelete(NULL);
         }
@@ -412,7 +412,7 @@ void hlk2410_task(void* arg) {
             char errorString[50];
             sprintf(errorString,  "slot num:%d ___ No free UART driver", slot_num);
             ESP_LOGE(TAG, "%s", errorString);
-            writeErrorTxt(errorString);
+            mblog(0, errorString);
             vTaskDelay(200);
             vTaskDelete(NULL);
         }

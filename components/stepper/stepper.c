@@ -60,13 +60,13 @@ void stepperSpeed_task(void *arg){
     //---
     int acceleration=100;
 	if (strstr(me_config.slot_options[slot_num], "acceleration")!=NULL){
-		acceleration = get_option_int_val(slot_num, "acceleration");
+		acceleration = get_option_int_val(slot_num, "acceleration", "", 10, 1, 4096);
 	}
     ESP_LOGD(TAG, "Set acceleration:%d Slot:%d", acceleration, slot_num);
     //---
     uint8_t pulseWidth=10;
 	if (strstr(me_config.slot_options[slot_num], "pulseWidth")!=NULL){
-		pulseWidth = get_option_int_val(slot_num, "pulseWidth");
+		pulseWidth = get_option_int_val(slot_num, "pulseWidth", "", 10, 1, 4096);
 	}
     ESP_LOGD(TAG, "Set pulseWidth:%d Slot:%d", pulseWidth, slot_num);
     
@@ -228,7 +228,7 @@ void stepper_task(void *arg){
 
     //---
 	if (strstr(me_config.slot_options[slot_num], "accel")!=NULL){
-		stepper.accel = get_option_int_val(slot_num, "accel");
+		stepper.accel = get_option_int_val(slot_num, "accel", "", 10, 1, 4096);
 	}
     ESP_LOGD(TAG, "Set acceleration:%ld Slot:%d", stepper.accel, slot_num);
 
@@ -247,14 +247,14 @@ void stepper_task(void *arg){
     //---
     int32_t maxSpeed = 100;
 	if (strstr(me_config.slot_options[slot_num], "maxSpeed")!=NULL){
-		maxSpeed = get_option_int_val(slot_num, "maxSpeed");
+		maxSpeed = get_option_int_val(slot_num, "maxSpeed", "", 10, 1, 4096);
         stepper.maxSpeed = maxSpeed;
 	}
     ESP_LOGD(TAG, "Set maxSpeed:%ld Slot:%d", stepper.maxSpeed, slot_num);
 
     uint16_t refreshPeriod = 15;
     if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
-		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod"));
+		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod", "", 10, 1, 4096));
 		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
 	}
 
@@ -273,7 +273,7 @@ void stepper_task(void *arg){
     //---
     uint32_t homingSpeed = stepper.maxSpeed/5;
     if (strstr(me_config.slot_options[slot_num], "homingSpeed")!=NULL){
-		homingSpeed = abs(get_option_int_val(slot_num, "homingSpeed"));
+		homingSpeed = abs(get_option_int_val(slot_num, "homingSpeed", "", 10, 1, 4096));
 	}
     ESP_LOGD(TAG, "Set homingSpeed:%ld Slot:%d", homingSpeed, slot_num);
     

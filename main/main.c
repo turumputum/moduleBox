@@ -19,7 +19,6 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
-
 #include "esp_peripherals.h"
 #include "periph_sdcard.h"
 #include "periph_touch.h"
@@ -82,6 +81,7 @@
 #include "smartLed.h"
 #include "someUnique.h"
 
+#include <manifest.h>
 
 
 
@@ -125,7 +125,7 @@ extern uint8_t FLAG_PC_EJECT;
 extern void usb_device_task(void *param);
 extern void set_usb_debug(void);
 
-RTC_NOINIT_ATTR int RTC_flagMscEnabled;
+//RTC_NOINIT_ATTR int RTC_flagMscEnabled;
 
 extern exec_message_t exec_message;
 extern QueueHandle_t exec_mailbox;
@@ -229,6 +229,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("EXECUTOR", level);
 	esp_log_level_set("REPORTER", level);
 	esp_log_level_set("LAN", level);
+	esp_log_level_set("[UDP]", level);
 	esp_log_level_set("3n_MOSFET", level);
 	esp_log_level_set("RFID", level);
 	esp_log_level_set("ENCODERS", level);
@@ -237,6 +238,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("P9813", level);
 	esp_log_level_set("TACHOMETER", level);
 	esp_log_level_set("ANALOG", level);
+	esp_log_level_set("ADC1", level);
 	esp_log_level_set("PN532", level);
 	esp_log_level_set("STEPPER", level);
 	esp_log_level_set("IN_OUT", level);
@@ -364,7 +366,7 @@ exit:    //Common return path
 bool startNetworkServices()
 {
 	bool result 			= false;
-	char errorString		[40];
+	char errorString		[40] = "";
 
 	if (me_config.LAN_enable || me_config.WIFI_enable)
 	{
@@ -389,54 +391,98 @@ bool startNetworkServices()
 
 		if (result)
 		{
-#define NETWORK_INIT_TIMEOUT		20
+#define NETWORK_INIT_TIMEOUT		100
 
 			int timeout		= NETWORK_INIT_TIMEOUT;
 			bool ready 		= false;
 
+			ESP_LOGD(TAG, "waiting for active interfaces...");
+
 			do 
 			{
-				if ((ESP_OK != me_state.WIFI_init_res) && (ESP_OK != me_state.LAN_init_res))
+extern int network_get_active_interfaces();				
+				if ((ESP_OK == me_state.WIFI_init_res) || (ESP_OK == me_state.LAN_init_res))
+				{
+					int net_if_num = network_get_active_interfaces();
+
+					if (net_if_num > 0)
+					{
+						ready = true;
+					}
+				}
+				else
 				{
 					vTaskDelay(pdMS_TO_TICKS(200));
 					timeout--;
 				}
-				else
-					ready = true;
 				
 			} while (!ready && timeout);
 
 			if (ready)
 			{
-				start_udp_recive_task(); 	// OK
+				start_udp_receive_task(); 	// OK
 				start_osc_recive_task(); 	// OK
 				start_ftp_task(); 			// OK
 				start_mdns_task();			// OK
 				start_mqtt_task();			// OK
 			}
 			else
-			{
 				sprintf(errorString, "Network initialization timeout (%d)", NETWORK_INIT_TIMEOUT);
-				writeErrorTxt(errorString);
-			}
 		}
-		else
-			writeErrorTxt(errorString);
 	}
 	else
-		ESP_LOGI(TAG, "Network disabled, start skipped");
+		ESP_LOGI(TAG, "Network disabled.");
+
+	if (errorString[0])
+	{
+		ESP_LOGE(TAG, "%s", errorString);
+		mblog(0, errorString);
+	}
 
 	return result;
 }
+void makeStatusReport(bool spread)
+{
+	char topic [ 64 ];
+	char str [ 256 ];
 
+	snprintf(str, sizeof(str) - 1, "Heap %d, %s, %s\n", 
+			xPortGetFreeHeapSize(),
+			networkGetStatusString(),
+			usbGetStatusString()
+			);
 
-void app_main(void)
+	if (spread)
+	{
+		usbprint(str);
+
+		if (me_state.UDP_init_res == ESP_OK)
+		{
+			udplink_send(0, str);
+		}
+
+		if (me_state.MQTT_init_res == ESP_OK)
+		{
+			snprintf(topic, sizeof(topic) - 1, "%s/status", me_config.deviceName);
+			mqtt_pub(topic, str);
+		}
+	}
+	
+	mblog(0, str);
+}
+void app_main(void)	
 {
 
 	setLogLevel(4);
 	me_state.free_i2c_num=0;
 	ESP_LOGD(TAG, "Start up");
 	ESP_LOGD(TAG, "free Heap size %d", xPortGetFreeHeapSize());
+
+	// for (int i = 0; i < 10; i++)
+	// {
+	// 	ESP_LOGD(TAG, "Wait a little...");
+	// 	vTaskDelay(pdMS_TO_TICKS(1000));
+	// }
 
 	// initLeds();
 	board_init(); // USB hardware
@@ -470,11 +516,11 @@ void app_main(void)
 			return;
 		}
 	}
-	if (remove("/sdcard/error.txt")){
-		ESP_LOGD(TAG, "/sdcard/error.txt delete failed");
-	}
+
 	load_Default_Config();
 	scanFileSystem();
+
+	saveManifesto();
 
 	initWorkPermissions();
 
@@ -482,7 +528,7 @@ void app_main(void)
 	if (me_state.config_init_res != ESP_OK)	{
 		char tmpString[40];
 		sprintf(tmpString, "Load config FAIL in line: %d", me_state.config_init_res);
-		writeErrorTxt(tmpString);
+		mblog(0, tmpString);
 	}
 	
 	set_usb_debug();
@@ -498,7 +544,7 @@ void app_main(void)
 		me_state.content_search_res = loadContent();
 		if (me_state.content_search_res != ESP_OK)	{
 			ESP_LOGD(TAG, "Load Content FAIL");
-			writeErrorTxt("Load content FAIL");
+			mblog(0, "Load content FAIL");
 		}
 	}else{
 		me_state.content_search_res = ESP_FAIL;
@@ -509,9 +555,12 @@ void app_main(void)
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
 
-
 	setWorkPermission(EVERY_SLOT);
 
+	int freeHeapSize;
+	int freeHeapSizeFLAG = 0;
+
+	uint32_t periodicTicks = xTaskGetTickCount();
 
 	while (1)
 	{
@@ -539,6 +588,31 @@ void app_main(void)
 		// UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGI(TAG, "Stack remaining: %u", stack_remaining);
 
+		freeHeapSize = xPortGetFreeHeapSize();
+		if (freeHeapSize < 4096)
+		{
+			if (!freeHeapSizeFLAG)
+			{
+				mblog(0, "Free heap size is LOW - %d bytes", freeHeapSize);
+				freeHeapSizeFLAG = 1;
+			}
+		}
+		else
+			freeHeapSizeFLAG = 0;
+
+		uint32_t now = xTaskGetTickCount();
+
+		// ever 15 minutes
+		if (me_config.statusPeriod)
+		{
+			if ((now - periodicTicks) >= pdMS_TO_TICKS(me_config.statusPeriod * 1000)) 
+			{
+				makeStatusReport(me_config.statusAllChannels);
+
+				periodicTicks = now;
+			}
+		}
+		
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }

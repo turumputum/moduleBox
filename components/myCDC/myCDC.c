@@ -32,31 +32,34 @@ extern QueueHandle_t exec_mailbox;
 static const char *TAG = "myCDC";
 
 void usbprint(char *msg) {
-	//printf("%s --- \r\n", msg);
-	int cutLength = 63;
-	char partBuff[cutLength + 1];
-	int endPartLength = strlen(msg);
-	char *endPart = msg;
 
-	while (endPartLength > cutLength) {
-		sprintf(partBuff, "%.*s", cutLength, endPart);
-		//printf("%s --- \r\n", partBuff);
-		endPart = endPart + cutLength;
-		//printf("%s  \r\n", endPart);
-		tud_cdc_write(partBuff, strlen(partBuff));
+	if (tud_is_plugged())
+	{
+		//printf("%s --- \r\n", msg);
+		int cutLength = 63;
+		char partBuff[cutLength + 1];
+		int endPartLength = strlen(msg);
+		char *endPart = msg;
+
+		while (endPartLength > cutLength) {
+			sprintf(partBuff, "%.*s", cutLength, endPart);
+			//printf("%s --- \r\n", partBuff);
+			endPart = endPart + cutLength;
+			//printf("%s  \r\n", endPart);
+			tud_cdc_write(partBuff, strlen(partBuff));
+			tud_cdc_write_flush();
+			vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
+			endPartLength = strlen(endPart);
+		}
+
+		//printf("%d+++%s  \r\n",strlen(endPart), endPart);
+		tud_cdc_write(endPart, strlen(endPart));
 		tud_cdc_write_flush();
 		vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
-		endPartLength = strlen(endPart);
+		tud_cdc_write("\n", 1);
+		tud_cdc_write_flush();
+		//printf("%s  \r\n", endPart);
 	}
-
-	//printf("%d+++%s  \r\n",strlen(endPart), endPart);
-	tud_cdc_write(endPart, strlen(endPart));
-	tud_cdc_write_flush();
-	vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
-	tud_cdc_write("\n", 1);
-	tud_cdc_write_flush();
-	//printf("%s  \r\n", endPart);
-
 }
 
 void usbprintf(char *msg, ...) {

@@ -116,7 +116,7 @@ void tachometer_task(void *arg)
 	
 	// Check for refreshRate option (legacy compatibility)
 	if (strstr(me_config.slot_options[slot_num], "refreshRate") != NULL) {
-		uint16_t refreshRate = get_option_int_val(slot_num, "refreshRate");
+		uint16_t refreshRate = get_option_int_val(slot_num, "refreshRate", "", 0, 0, 4096);
 		refresh_period_ms = 1000 / refreshRate; // Convert Hz to ms
 		var.refresh_period = refresh_period_ms * 1000; // Update refresh_period in microseconds
 		ESP_LOGD(TAG, "Set refreshRate:%d Hz, refreshPeriod:%lu ms for slot:%d", refreshRate, refresh_period_ms, slot_num);
@@ -135,7 +135,7 @@ void tachometer_task(void *arg)
 	
 	// Check for pulse divider
 	if (strstr(me_config.slot_options[slot_num], "divider")!=NULL){
-		uint16_t divider = get_option_int_val(slot_num, "divider");
+		uint16_t divider = get_option_int_val(slot_num, "divider", "", 0, 0, 4096);
 		if (divider > 0 && divider <= 1000) { // Max 1000 pulses per revolution
 			var.divider = divider;
 		}
@@ -143,7 +143,7 @@ void tachometer_task(void *arg)
 	
 	// Check for glitch filter
 	if (strstr(me_config.slot_options[slot_num], "glitchFilter")!=NULL){
-		uint32_t glitch_ns = get_option_int_val(slot_num, "glitchFilter");
+		uint32_t glitch_ns = get_option_int_val(slot_num, "glitchFilter", "", 0, 0, 4096);
 		if (glitch_ns <= 100000) { // Max 100us filter
 			var.glitch_filter_ns = glitch_ns;
 			ESP_LOGD(TAG, "Set glitch filter to %lu ns", var.glitch_filter_ns);
@@ -152,7 +152,7 @@ void tachometer_task(void *arg)
 	
 	// Check for accumulation time
 	if (strstr(me_config.slot_options[slot_num], "accumulationTime")!=NULL){
-		uint32_t accum_time = get_option_int_val(slot_num, "accumulationTime");
+		uint32_t accum_time = get_option_int_val(slot_num, "accumulationTime", "", 0, 0, 4096);
 		if (accum_time >= 100 && accum_time <= 10000) { // 100ms to 10s
 			var.accumulation_time_ms = accum_time;
 			// Recalculate buffer size: accumulation_time / refresh_period
@@ -197,7 +197,7 @@ void tachometer_task(void *arg)
 
     uint16_t threshold  = 0;
 	if (strstr(me_config.slot_options[slot_num], "threshold")!=NULL){
-		threshold = get_option_int_val(slot_num, "threshold");
+		threshold = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096);
 		if (threshold <= 0)
 		{
 			ESP_LOGD(TAG, "threshold wrong format, set default. Slot:%d", slot_num);

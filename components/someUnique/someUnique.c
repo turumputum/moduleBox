@@ -94,7 +94,7 @@ void buttonMatrix_task(void* arg) {
                 char errorString[50];
                 sprintf(errorString,  "buttonMatrix_%d wrong slots config", slot_num);
                 ESP_LOGE(TAG, "%s", errorString);
-                writeErrorTxt(errorString);
+                mblog(0, errorString);
                 vTaskDelete(NULL);
             }
         }
@@ -354,7 +354,7 @@ void dialer_task(void* arg) {
 
     uint16_t waitingTime = 3000;//ms
     if (strstr(me_config.slot_options[slot_num], "waitingTime") != NULL) {
-		waitingTime = get_option_int_val(slot_num, "waitingTime");
+		waitingTime = get_option_int_val(slot_num, "waitingTime", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", waitingTime, slot_num);
 	}
 
@@ -372,12 +372,12 @@ void dialer_task(void* arg) {
 
     uint8_t numberMaxLenght = 7;
     if (strstr(me_config.slot_options[slot_num], "numberMaxLenght") != NULL) {
-		numberMaxLenght = get_option_int_val(slot_num, "numberMaxLenght");
+		numberMaxLenght = get_option_int_val(slot_num, "numberMaxLenght", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set numberMaxLenght:%d for slot:%d", numberMaxLenght, slot_num);
 	}
     int debounceGap = 20;
 	if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
-		debounceGap = get_option_int_val(slot_num, "debounceGap");
+		debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set debounceGap:%d for slot:%d",debounceGap, slot_num);
 	}
 
@@ -585,31 +585,31 @@ void volnaKolya_task(void* arg) {
 
     uint16_t period = 2000;//ms
     if (strstr(me_config.slot_options[slot_num], "period") != NULL) {
-		period = get_option_int_val(slot_num, "period");
+		period = get_option_int_val(slot_num, "period", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set period:%d for slot:%d", period, slot_num);
 	}
 
     uint32_t m1Dist = 10000;//ms
     if (strstr(me_config.slot_options[slot_num], "m1Dist") != NULL) {
-		m1Dist = get_option_int_val(slot_num, "m1Dist");
+		m1Dist = get_option_int_val(slot_num, "m1Dist", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set m1Dist:%ld for slot:%d", m1Dist, slot_num);
 	}
 
     uint32_t m2Dist = 10000;//ms
     if (strstr(me_config.slot_options[slot_num], "m2Dist") != NULL) {
-		m2Dist = get_option_int_val(slot_num, "m2Dist");
+		m2Dist = get_option_int_val(slot_num, "m2Dist", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set m2Dist:%ld for slot:%d", m2Dist, slot_num);
 	}
     
     uint32_t m3Dist = 10000;//ms
     if (strstr(me_config.slot_options[slot_num], "m3Dist") != NULL) {
-		m3Dist = get_option_int_val(slot_num, "m3Dist");
+		m3Dist = get_option_int_val(slot_num, "m3Dist", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set m3Dist:%ld for slot:%d", m3Dist, slot_num);
 	}
 
     uint32_t startDelay = 10000;//ms
     if (strstr(me_config.slot_options[slot_num], "startDelay") != NULL) {
-		startDelay = get_option_int_val(slot_num, "startDelay");
+		startDelay = get_option_int_val(slot_num, "startDelay", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set startDelay:%ld for slot:%d", startDelay, slot_num);
 	}
 
