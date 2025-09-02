@@ -68,6 +68,8 @@ static int handler(void *user, const char *section, const char *name, const char
 
 	if (MATCH("SYSTEM", "deviceName")) {//-----------------------------------------------
 		pconfig->deviceName = strdup(value);
+	} else if (MATCH("SYSTEM", "logEnabled")) {//-----------------------------------------------
+		pconfig->logEnabled	 = _yesno(value);
 	} else if (MATCH("SYSTEM", "logMaxSize")) {//-----------------------------------------------
 		pconfig->logMaxSize = strz_to_bytes(value);
 	} else if (MATCH("SYSTEM", "logChapters")) {//-----------------------------------------------
@@ -141,6 +143,7 @@ void load_Default_Config(void) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	me_config.deviceName = strdup("moduleBox");
+	me_config.logEnabled = false;
 	me_config.logMaxSize = 50 * 1024;
 	me_config.logChapters = 10;
 	me_config.statusPeriod = 900;

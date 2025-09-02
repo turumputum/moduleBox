@@ -113,6 +113,7 @@ typedef struct {
 	char *LAN_gateWay;
 
 	char *deviceName;
+	char logEnabled;
 	long logMaxSize;
 	int  logChapters;
 	int  statusAllChannels;
