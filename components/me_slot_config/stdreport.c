@@ -162,3 +162,25 @@ void stdreport_f(int                reportRegId,
         report(tmpString, p->slot_num);
     }
 }
+void stdreport_s(int                reportRegId,
+                 char *             value)
+{
+    PSTDREPORT      p           = reports[reportRegId];
+	char            tmpString   [255];
+
+    if ((reportRegId < MAX_NUM_OF_STDREPORTS) && p)
+    {
+        switch (p->outType)
+        {
+            case RPTT_ratio:
+                _render_ratio((PSTDREPORTRATIO)p, tmpString, atof(value));
+                break;
+
+            default:
+                sprintf(tmpString, "%s", value);
+                break;
+        }
+
+        report(tmpString, p->slot_num);
+    }
+}
