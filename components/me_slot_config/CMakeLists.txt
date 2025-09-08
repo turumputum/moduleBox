@@ -1,6 +1,6 @@
 
 
-file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c" "smartLed.c"  )
+file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c" "smartLed.c" "virtual_slots.c"  )
 
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)

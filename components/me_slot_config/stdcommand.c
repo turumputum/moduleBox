@@ -18,7 +18,8 @@
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
 // -----|-------------------|-------------------------------------------------
-
+#undef  LOG_LOCAL_LEVEL
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "MAIN";
 
 extern stateStruct me_state;
@@ -61,7 +62,7 @@ int _stdcommand_register(PSTDCOMMANDS       cmd,
 
         if (cmd->keywords[i].p[j] == (char*)PARAMT_enum)
         {
-            ESP_LOGD(TAG, "stdcommand: %s parameter unacceptable\n", paramt[(int)cmd->keywords[i].p[j]]);
+            ESP_LOGE(TAG, "stdcommand: %s parameter unacceptable\n", paramt[(int)cmd->keywords[i].p[j]]);
             result = -1;
         }
     }
@@ -229,10 +230,12 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
     int                 len;
     char                tmp             [ 128 ];
 
+
     if (xQueueReceive(me_state.command_queue[cmd->slot_num], &cmd->msg, TO) == pdPASS)
     {
         len = strlen(me_state.action_topic_list[cmd->slot_num]);
 
+        //ESP_LOGD(TAG, "Input cmd:%s", cmd->msg.str);
 
         if (strlen(cmd->msg.str) > len)
         {

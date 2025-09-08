@@ -142,9 +142,9 @@ void load_Default_Config(void) {
 
 	me_config.deviceName = strdup("moduleBox");
 	me_config.logMaxSize = 50 * 1024;
-	me_config.logChapters = 10;
-	me_config.statusPeriod = 900;
-	me_config.statusAllChannels = false;
+	me_config.logChapters = 1;
+	me_config.statusPeriod = 0;
+	me_config.statusAllChannels = true;
 	me_config.USB_debug = 0;
 
 	

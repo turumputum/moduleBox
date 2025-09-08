@@ -166,6 +166,8 @@ int init_slots(void){
 			start_whitelist_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "collector", 9)){
 			start_collector_task(i);	// OK
+		}else if(!memcmp(me_config.slot_mode[i], "random", 6)){
+			start_random_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
 			start_ds18b20_task(i);		// OK
 		}else if(!memcmp(me_config.slot_mode[i], "servoRod", 9)){

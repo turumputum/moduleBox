@@ -45,6 +45,7 @@ static GET_MANIFEST_FUNC    funcs   [] =
     get_manifest_3n_mosfet,
     get_manifest_encoders,
     get_manifest_smartLed,
+    get_manifest_virtual_slot,
     NULL
 }; 
 
