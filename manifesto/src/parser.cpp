@@ -250,7 +250,7 @@ bool Parser::generateManifestoForModule()
     bool            result      = true;
     char            tmp     [ 1024 ];
 
-    snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\"\n\t\t\"description\": \"%s\"\n", mod.name, mod.descRaw);
+    snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\",\n\t\t\"description\": \"%s\",\n", mod.name, mod.descRaw);
     manifesto.append(tmp);
 
     if (  generateManifestoOfOptions()  && 
