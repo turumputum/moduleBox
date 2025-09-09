@@ -20,6 +20,7 @@
 #include "me_slot_config.h"
 #include "executor.h"
 #include "esp_rom_sys.h"
+#include "driver/i2c.h"
 
 #include <generated_files/gen_encoders.h>
 
@@ -48,7 +49,7 @@ typedef struct __tag_ENCODERCONFIG
 	uint16_t                refreshPeriod;
 	float 					filterK;
 	int 					pole;
-	int 					num_of_pos;
+	int 					numOfPos;
 } ENCODERCONFIG, * PENCODERCONFIG; 
 
 
@@ -187,18 +188,18 @@ void configure_encoderInc(PENCODERCONFIG c, int slot_num)
 	}
 
 	c->pole = c->MAX_VAL - c->MIN_VAL;
-	c->num_of_pos = 24;
+	c->numOfPos = 24;
 	if (strstr(me_config.slot_options[slot_num], "numOfPos") != NULL)	{
 		/* Количество положений
 		*/
-		c->num_of_pos = get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096);
-		if (c->num_of_pos <= 0){
-			ESP_LOGD(TAG, "pwmEncoder num_of_pos wrong format, set default slot:%d", slot_num);
-			c->num_of_pos = 24; // default val
+		c->numOfPos = get_option_int_val(slot_num, "numOfPos", "", 10, 1, 4096);
+		if (c->numOfPos <= 0){
+			ESP_LOGD(TAG, "pwmEncoder numOfPos wrong format, set default slot:%d", slot_num);
+			c->numOfPos = 24; // default val
 		}
 	}
 
-	ESP_LOGD(TAG, "pwmEncoder num_of_pos:%d slot:%d", c->num_of_pos, slot_num);
+	ESP_LOGD(TAG, "pwmEncoder numOfPos:%d slot:%d", c->numOfPos, slot_num);
 	
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -213,11 +214,9 @@ void configure_encoderInc(PENCODERCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 }
-void encoderPPM_task(void *arg)
-{
+
+void encoderPPM_task(void *arg){
 	ENCODERCONFIG		c 	= {0};
-	
-	
 	int slot_num = *(int *)arg;
 
 	char str[255];
@@ -244,7 +243,7 @@ void encoderPPM_task(void *arg)
 
 	configure_encoderInc(&c, slot_num);
 
-	float pos_length = (float)c.pole / c.num_of_pos;
+	float pos_length = (float)c.pole / c.numOfPos;
 	int16_t raw_val;
 	int current_pos, prev_pos = -1;
 
@@ -257,8 +256,8 @@ void encoderPPM_task(void *arg)
 	
 	raw_val = tickVals.dTime;
 	current_pos = (raw_val / pos_length)+c.zero_shift;
-	while(current_pos>=c.num_of_pos){
-		current_pos -= c.num_of_pos;
+	while(current_pos>=c.numOfPos){
+		current_pos -= c.numOfPos;
 	}
 
 	ESP_LOGD(TAG, "pwmEncoder first_val:%d offset:%d pos_legth:%f", raw_val, c.offset, pos_length);
@@ -293,11 +292,11 @@ void encoderPPM_task(void *arg)
 		if(raw_val<c.MIN_VAL){
 			c.MIN_VAL = raw_val;
 			c.pole = c.MAX_VAL - c.MIN_VAL;
-			pos_length = (float)c.pole / c.num_of_pos;
+			pos_length = (float)c.pole / c.numOfPos;
 		}else if(raw_val>c.MAX_VAL){
 			c.MAX_VAL = raw_val;
 			c.pole = c.MAX_VAL - c.MIN_VAL;
-			pos_length = (float)c.pole / c.num_of_pos;
+			pos_length = (float)c.pole / c.numOfPos;
 		}
 
 		if((c.filterK<1)&&(abs(raw_val-prew_filtredVal)<c.pole/2)){
@@ -317,12 +316,12 @@ void encoderPPM_task(void *arg)
 			}
 			//ESP_LOGD(TAG, "obrezok: %f", tmpVal);
 			//current_pos = ((raw_val- pos_length/2)/ pos_length)+zero_shift;
-			while(current_pos>=c.num_of_pos){
-				current_pos -= c.num_of_pos;
+			while(current_pos>=c.numOfPos){
+				current_pos -= c.numOfPos;
 			}
 
 			if(c.dirInverse){
-				current_pos = c.num_of_pos-current_pos;
+				current_pos = c.numOfPos-current_pos;
 			}
 		}
 
@@ -332,20 +331,20 @@ void encoderPPM_task(void *arg)
 			//ESP_LOGD(TAG, "raw_val:%d current_pos:%d", raw_val, current_pos);
 			if (c.encoderMode == ABSOLUTE){
 				if(c.float_output){
-					sprintf(str, "%f", (float)current_pos/(c.num_of_pos-1));
+					sprintf(str, "%f", (float)current_pos/(c.numOfPos-1));
 				}else{
 					sprintf(str, "%d", current_pos);
 				}
 			}else if (c.encoderMode == INCREMENTAL){
 				int delta = abs(current_pos - prev_pos);
-				if (delta < (c.num_of_pos / 2)){
+				if (delta < (c.numOfPos / 2)){
 					if (current_pos < prev_pos)	{
 						sprintf(str, "-%d", delta);
 					}else{
 						sprintf(str, "+%d", delta);
 					}
 				}else{
-					delta = c.num_of_pos - delta;
+					delta = c.numOfPos - delta;
 					if (current_pos < prev_pos)	{
 						sprintf(str, "+%d", delta);
 					}else{
@@ -641,14 +640,191 @@ void start_encoder_inc_task(int slot_num)
 
 	ESP_LOGD(TAG, "encoder_inc_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
-const char * get_manifest_encoders()
-{
+const char * get_manifest_encoders(){
 	return manifesto;
 }
 
-// FIXME
+// AS5600 I2C registers
+#define AS5600_I2C_ADDRESS 0x36
+#define AS5600_RAW_ANGLE_REG 0x0C
+#define AS5600_ANGLE_REG 0x0E
+#define AS5600_STATUS_REG 0x0B
+#define AS5600_AGC_REG 0x1A
+#define AS5600_MAGNITUDE_REG 0x1B
+
+#define I2C_MASTER_TIMEOUT_MS 100
+
+void encoderAS5600_task(void *arg)
+{
+	ENCODERCONFIG c = {0};
+	int slot_num = *(int *)arg;
+	
+	char str[255];
+	
+	// I2C initialization
+	uint8_t sda_pin = SLOTS_PIN_MAP[slot_num][0];
+	uint8_t scl_pin = SLOTS_PIN_MAP[slot_num][1];
+	
+	i2c_config_t conf = {
+		.mode = I2C_MODE_MASTER,
+		.sda_io_num = sda_pin,
+		.scl_io_num = scl_pin,
+		.sda_pullup_en = GPIO_PULLUP_ENABLE,
+		.scl_pullup_en = GPIO_PULLUP_ENABLE,
+		.master.clk_speed = 100000,
+	};
+	
+	int i2c_num = me_state.free_i2c_num;
+	me_state.free_i2c_num++;
+	if(i2c_num == I2C_NUM_MAX) {
+		ESP_LOGE(TAG, "No free I2C driver for slot:%d", slot_num);
+		vTaskDelete(NULL);
+	}
+	
+	i2c_param_config(i2c_num, &conf);
+	esp_err_t ret = i2c_driver_install(i2c_num, conf.mode, 0, 0, 0);
+	if (ret == ESP_OK) {
+		ESP_LOGI(TAG, "I2C_%d initialized for AS5600 slot:%d", i2c_num, slot_num);
+	} else {
+		ESP_LOGE(TAG, "Failed to initialize I2C_%d for slot:%d", i2c_num, slot_num);
+		vTaskDelete(NULL);
+	}
+	
+	configure_encoderInc(&c, slot_num);
+	
+	float pos_length = (float)c.pole / c.numOfPos;
+	uint16_t raw_angle;
+	int current_pos=0, prev_pos = -1;
+	
+	// Test AS5600 connection by reading status register
+	uint8_t status;
+	ret = i2c_master_write_read_device(i2c_num, AS5600_I2C_ADDRESS, 
+									   &(uint8_t){AS5600_STATUS_REG}, 1, 
+									   &status, 1, 
+									   I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+	if (ret != ESP_OK) {
+		ESP_LOGE(TAG, "AS5600 not found on slot:%d", slot_num);
+		vTaskDelete(NULL);
+	}
+	
+	ESP_LOGD(TAG, "AS5600 status: 0x%02X slot:%d", status, slot_num);
+	
+	float filtredVal = 0;
+	float prew_filtredVal = -1;
+	TickType_t lastWakeTime = xTaskGetTickCount();
+	
+	waitForWorkPermit(slot_num);
+	
+	while (1) {
+		// Read raw angle from AS5600
+		uint8_t angle_reg = AS5600_RAW_ANGLE_REG;
+		uint8_t angle_data[2];
+		
+		ret = i2c_master_write_read_device(i2c_num, AS5600_I2C_ADDRESS,
+										   &angle_reg, 1,
+										   angle_data, 2,
+										   I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+		
+		if (ret != ESP_OK) {
+			ESP_LOGW(TAG, "Failed to read AS5600 angle on slot:%d", slot_num);
+			vTaskDelay(pdMS_TO_TICKS(10));
+			continue;
+		}
+		
+		// Combine bytes and convert to 12-bit value (0-4095)
+		raw_angle = ((uint16_t)angle_data[0] << 8) | angle_data[1];
+		raw_angle &= 0x0FFF; // Mask to 12 bits
+		
+		// Apply offset
+		int16_t adjusted_angle = raw_angle + c.offset;
+		while (adjusted_angle < 0) {
+			adjusted_angle += 4096;
+		}
+		while (adjusted_angle >= 4096) {
+			adjusted_angle -= 4096;
+		}
+		
+		// Apply filtering
+		if ((c.filterK < 1) && (abs(adjusted_angle - prew_filtredVal) < 2048)) {
+			filtredVal = filtredVal * (1 - c.filterK) + adjusted_angle * c.filterK;
+		} else {
+			filtredVal = adjusted_angle;
+		}
+		
+		// Check dead zone
+		if (abs(filtredVal - prew_filtredVal) > c.deadZone) {
+			prew_filtredVal = filtredVal;
+			
+			// Calculate position based on filtered value
+			current_pos = 0;
+			float tmpVal = filtredVal * c.pole / 4096.0; // Scale to configured range
+			
+			while (tmpVal > pos_length) {
+				current_pos++;
+				tmpVal -= pos_length;
+			}
+			
+			while (current_pos >= c.numOfPos) {
+				current_pos -= c.numOfPos;
+			}
+			
+			if (c.dirInverse) {
+				current_pos = c.numOfPos - current_pos;
+			}
+		}
+		
+		// Report changes
+		if (current_pos != prev_pos) {
+			if (c.encoderMode == ABSOLUTE) {
+				if (c.float_output) {
+					sprintf(str, "%f", (float)current_pos / (c.numOfPos - 1));
+				} else {
+					sprintf(str, "%d", current_pos);
+				}
+			} else if (c.encoderMode == INCREMENTAL) {
+				int delta = abs(current_pos - prev_pos);
+				if (delta < (c.numOfPos / 2)) {
+					if (current_pos < prev_pos) {
+						sprintf(str, "-%d", delta);
+					} else {
+						sprintf(str, "+%d", delta);
+					}
+				} else {
+					delta = c.numOfPos - delta;
+					if (current_pos < prev_pos) {
+						sprintf(str, "+%d", delta);
+					} else {
+						sprintf(str, "-%d", delta);
+					}
+				}
+			}
+			report(str, slot_num);
+			prev_pos = current_pos;
+		}
+		
+		// Calibration info
+		if (c.calibrationFlag) {
+			sprintf(str, "/calibration: raw_angle:%d pos:%d", raw_angle, current_pos);
+			ESP_LOGD(TAG, "%s", str);
+			report(str, slot_num);
+		}
+		
+		if (xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(c.refreshPeriod)) == pdFALSE) {
+			ESP_LOGE(TAG, "AS5600 delay missed! Adjusting wake time slot:%d", slot_num);
+			lastWakeTime = xTaskGetTickCount();
+		}
+	}
+}
+
 void start_encoderAS5600_task(int slot_num)
 {
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	
+	xTaskCreate(encoderAS5600_task, "encoderAS5600", 1024 * 4, &t_slot_num, 1, NULL);
+	
+	ESP_LOGD(TAG, "AS5600 encoder init ok: %d Heap usage: %lu free heap:%u", 
+			 slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 

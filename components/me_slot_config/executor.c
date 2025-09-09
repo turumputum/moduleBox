@@ -231,7 +231,7 @@ void executer_task(void * param){
 				for(int i=0; i<NUM_OF_SLOTS; i++){
 					//ESP_LOGD(TAG, "command_queue[%d]:%d",i,me_state.command_queue[i]==NULL);
 					if(strstr(msg.str, me_state.action_topic_list[i])!=NULL){
-						//ESP_LOGD(TAG, "Forward cmd to slot:%d", i);
+						//ESP_LOGD(TAG, "Forward cmd:%s to slot:%d", msg.str, i);
 						if(me_state.command_queue[i]!=NULL){
 							xQueueSend(me_state.command_queue[i], &msg, portMAX_DELAY);
 							sum++;

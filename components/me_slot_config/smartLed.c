@@ -775,21 +775,21 @@ void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
 
     /* Максимальное значение яркости
     */
-    c->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
+    c->maxBright = (float)get_option_int_val(slot_num, "maxBright", "", 255, 0, 255)/255;
     if(c->maxBright>255)c->maxBright=255;
     if(c->maxBright<0)c->maxBright=0;
     ESP_LOGD(TAG, "Set maxBright:%d for slot:%d", c->maxBright, slot_num);
 
     /* Минимальное значение яркости
     */
-    c->minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 4095);
+    c->minBright = (float)get_option_int_val(slot_num, "minBright", "", 0, 0, 255)/255;
     if(c->minBright<0)c->minBright=0;
     if(c->minBright>255)c->minBright=255;
     ESP_LOGD(TAG, "Set minBright:%d for slot:%d", c->minBright, slot_num);
 
     /* Период обновления 
     */
-    c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 25, 1, 4096));
+    c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 25, 1, 1024));
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", c->refreshPeriod, slot_num);
 
     /* Начальный цвет
@@ -919,6 +919,13 @@ void start_swiperLed_task(int slot_num){
 }
 
 //---------------------LED RING-----------------------------
+typedef enum
+{
+    LEDRINGCMD_default = 0,
+    LEDRINGCMD_setRGB,
+    LEDRINGCMD_setPos
+} LEDRINGCMD;
+
 void ledUpdate(uint8_t *currentMass, uint8_t *targetMass, uint16_t size, uint8_t increment, rmt_led_heap_t *rmt_heap, uint8_t slot_num) {
     //ESP_LOGD(TAG, "ledUpdate: slot_num:%d", slot_num);
     uint16_t sum = 0;
@@ -1013,21 +1020,21 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
 
     /* Максимальное значение яркости
     */
-    c->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
+    c->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 255);
     if(c->maxBright>255)c->maxBright=255;
     if(c->maxBright<0)c->maxBright=0;
     ESP_LOGD(TAG, "Set maxBright:%d for slot:%d", c->maxBright, slot_num);
 
     /* Минимальное значение яркости
     */
-    c->minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 4095);
+    c->minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 255);
     if(c->minBright<0)c->minBright=0;
     if(c->minBright>255)c->minBright=255;
     ESP_LOGD(TAG, "Set minBright:%d for slot:%d", c->minBright, slot_num);
 
     /* Период обновления 
     */
-    c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 1000/30, 1, 4096));
+    c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 30, 1, 1024));
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", c->refreshPeriod, slot_num);
 
 #define NUMBER_OF_LEDS  (c->num_of_led)
@@ -1049,7 +1056,8 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
       
     /* Инверсия направления эффекта
     */
-    c->dir = c->inverse = get_option_flag_val(slot_num, "dirInverse") ? 1 : -1;
+    c->dir = get_option_flag_val(slot_num, "dirInverse") ? -1 : 1;
+    c->inverse = c->dir>0 ? 1 : 0;
     ESP_LOGD(TAG, "Set dir inverse %d for slot:%d", c->dir, slot_num);
 
     /* Смещение эффекта
@@ -1088,16 +1096,17 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&c->cmds, MYCMD_default, NULL, PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_default, NULL, PARAMT_int);
 
     /* Установить новый целевой цвет. 
        Цвет задаётся десятичными значениями R G B через пробел
     */
-    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новую текущую позичию
     */
-    stdcommand_register(&c->cmds, MYCMD_setPos, "setPos", PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_setPos, "setPos", PARAMT_int);
+    //stdcommand_register(&c->cmds, MYCMD_setPos, "setPos", PARAMT_string);
 
 }
 void ledRing_task(void *arg){
@@ -1145,18 +1154,18 @@ void ledRing_task(void *arg){
         // command_message_t temp_msg;
         // command_message_t msg;
         // uint8_t recv_state=0;
-
-        switch (stdcommand_receive(&c->cmds, &params, 0))
+        int cmd = stdcommand_receive(&c->cmds, &params, 0);
+        switch (cmd)
         {
             case -1: // none
                 break;
 
-            case MYCMD_default:
+            case LEDRINGCMD_default:
                 c->state = params.p[0].i;
                 ESP_LOGD(TAG, "Change state to:%d", c->state);
                 break;
 
-            case MYCMD_setRGB:
+            case LEDRINGCMD_setRGB:
                 c->targetRGB.r = params.p[0].i;
                 c->targetRGB.g = params.p[1].i;
                 c->targetRGB.b = params.p[2].i;
@@ -1164,7 +1173,8 @@ void ledRing_task(void *arg){
                 ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
                 break;
 
-            case MYCMD_setPos:
+            case LEDRINGCMD_setPos:
+                ESP_LOGD(TAG,"LedRing:%d Set new pos:%ld", slot_num, params.p[0].i);
                 if(c->dir==1){
                     targetPos = params.p[0].i+c->offset;
                 }else{
@@ -1179,7 +1189,7 @@ void ledRing_task(void *arg){
 
 
             default:
-                //ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: %s\n", );
+                ESP_LOGD(TAG, "@@@@@@@@@@@@@@@@@@ GOT: %d\n", cmd);
                 //printf("@@@@@@@@@@@@@@@@@@ GOT!!!!\n");
                 break;                
         }
@@ -1203,16 +1213,20 @@ void ledRing_task(void *arg){
             }
 
             if(c->ledMode==MODE_RUN){
+                //ESP_LOGD(TAG, "before targetPos:%f fInc:%f dir:%d", targetPos, fIncrement, c->dir);
                 targetPos += fIncrement*c->dir;
+                //ESP_LOGD(TAG, "after targetPos:%f vs:%f", targetPos, (float)(c->numOfPos-1));
                 if(targetPos<0){
                     targetPos=targetPos+(c->numOfPos);
-                }else if(targetPos>c->numOfPos-1){
-                    targetPos=targetPos-(c->numOfPos);
                 }
+                while(targetPos > (c->numOfPos-1)){
+                    targetPos=targetPos-(c->numOfPos);  
+                }
+                
             }
             
             if(currentPos!=targetPos){
-                //ESP_LOGD(TAG, "currentPos:%f targetPos:%f increment:%d fIn:%f", currentPos, targetPos, increment, fIncrement);
+                //ESP_LOGD(TAG, "currentPos:%f targetPos:%f fIn:%f numOfPos:%d mode:%d", currentPos, targetPos, fIncrement, c->numOfPos, c->ledMode);
                 if(fabs(currentPos-targetPos)<fIncrement){
                     currentPos = targetPos;
                 }else{

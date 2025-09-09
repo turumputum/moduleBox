@@ -10,7 +10,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION 	"3.30" BRANCH
+#define VERSION 	"3.31" BRANCH
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -33,12 +33,6 @@ typedef enum {
     LED_STATE_FTP_SESSION,
 	LED_STATE_MSD_WORK,
 } led_state_t;
-
-typedef struct {
-	uint8_t 	pin_num;
-	uint32_t 	total;
-	uint32_t	ones;
-} debounceStat_t;
 
 typedef struct {
 //	uint8_t changeTrack;
@@ -83,8 +77,6 @@ typedef struct {
 
 	char *trigger_topic_list[NUM_OF_SLOTS];
 	char *action_topic_list[NUM_OF_SLOTS];
-
-	debounceStat_t counters [NUM_OF_SLOTS];
 
 } stateStruct;
 
