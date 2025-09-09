@@ -707,7 +707,37 @@ void encoderAS5600_task(void *arg)
 		vTaskDelete(NULL);
 	}
 	
-	ESP_LOGD(TAG, "AS5600 status: 0x%02X slot:%d", status, slot_num);
+	// Check magnetic field status
+	bool magnet_detected = (status & 0x20) != 0;  // Bit 5: MD
+	bool magnet_too_low = (status & 0x10) != 0;   // Bit 4: ML
+	bool magnet_too_high = (status & 0x08) != 0;  // Bit 3: MH
+	
+
+	if (!magnet_detected) {
+		char tmpStr[100];
+		if (magnet_too_low) {
+			sprintf(tmpStr,"AS5600 slot:%d - магнитное поле слишком слабое!", slot_num);
+		} else if (magnet_too_high) {
+			printf(tmpStr, "AS5600 slot:%d - магнитное поле слишком сильное!", slot_num);
+		} else {
+			printf(tmpStr, "AS5600 slot:%d - магнит не обнаружен!", slot_num);
+		}
+		ESP_LOGE(TAG,"%s", tmpStr);
+		mblog(0, tmpStr);
+		vTaskDelete(NULL);
+	}
+	
+	// Read magnetic field magnitude
+	uint8_t magnitude_data[2];
+	ret = i2c_master_write_read_device(i2c_num, AS5600_I2C_ADDRESS,
+									   &(uint8_t){AS5600_MAGNITUDE_REG}, 1,
+									   magnitude_data, 2,
+									   I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+	if (ret == ESP_OK) {
+		uint16_t magnitude = ((uint16_t)magnitude_data[0] << 8) | magnitude_data[1];
+		magnitude &= 0x0FFF; // Mask to 12 bits
+		ESP_LOGI(TAG, "AS5600 slot:%d - сила магнитного поля: %d", slot_num, magnitude);
+	}
 	
 	float filtredVal = 0;
 	float prew_filtredVal = -1;
