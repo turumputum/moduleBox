@@ -16,6 +16,8 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 
+#include <mbdebug.h>
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
@@ -508,7 +510,7 @@ void whitelist_task(void *arg) {
         char errorString[300];
         sprintf(errorString, "whitelist file: %s, does not exist", filename);
         ESP_LOGE(TAG, "%s", errorString);
-        mblog(0, errorString);
+        mblog(E, errorString);
         vTaskDelay(200);
         vTaskDelete(NULL);
     }

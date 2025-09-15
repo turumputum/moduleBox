@@ -39,6 +39,7 @@
 #include "mdns.h"
 
 #include <axstring.h>
+#include <mbdebug.h>
 
 
 // ---------------------------------------------------------------------------
@@ -229,7 +230,7 @@ void udplink_task()
 		}
 		else
 		{
-			mblog(0, "Failed to create socket for UDP: %d", errno);
+			mblog(E, "Failed to create socket for UDP: %d", errno);
 		}
 	}
 	else

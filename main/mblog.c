@@ -9,7 +9,12 @@
 #include <stdarg.h>
 #include <sys/stat.h> 
 #include <stdbool.h>  
+#include <mbdebug.h>
 #include <stateConfig.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
@@ -17,15 +22,38 @@
 
 #define DEF_LOG_FILE_BASE_NAME  "/sdcard/log"
 
+#define LOG_BUFF_SIZE       2048
+
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
 // -----|-------------------|-------------------------------------------------
 
+static  SemaphoreHandle_t   logMutex    = NULL;
+static  char *              logBuff     = NULL;
+static  FILE *              logFile     = NULL;
+
 extern configuration        me_config;
+
+static const char * PRIONAMES_SHORT [] = 
+{
+    " ",        /*!< No log output */
+    "E",        /*!< Critical errors, software module can not recover on its own */
+    "W",        /*!< Error conditions from which recovery measures have been taken */
+    "I",        /*!< Information messages which describe normal flow of events */
+    "D",        /*!< Extra information which is not necessary for normal use (values, pointers, sizes, etc). */
+    "V"         /*!< Bigger */
+};
+
 
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
+
+void mblog_init()
+{
+    logMutex    = xSemaphoreCreateMutex();
+    logBuff     = malloc(LOG_BUFF_SIZE + 2);
+}
 
 bool file_exists (char *filename) 
 {
@@ -62,36 +90,39 @@ static void _shiftLogs()
         }
     }
 }
-void mblog(int priority, const char *msg, ...)
+void mblog(esp_log_level_t level, const char *msg, ...)
 {
-    FILE *              logFile;
     va_list             st_va_list;
     size_t              sz;
-    char                buffOut     [ 386 ];
 
-    if (me_config.logEnabled)
+    if (logMutex && me_config.logLevel && (level <= me_config.logLevel))
     {
-        if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
+        if (logFile || ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL))
         {
-            sz = snprintf(buffOut, sizeof(buffOut), "%.8d ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
-
-            va_start(st_va_list, msg);
-            sz = vsnprintf(buffOut + sz, sizeof(buffOut) - sz - 1, msg, st_va_list);
-            va_end(st_va_list);
-
-            *(buffOut + sz) = 0;
-
-            fprintf(logFile, "%s\n", buffOut);
-            
-            printf("\x1b[31mMBL%d %s\x1b[0m\n", priority, buffOut);
-
-            sz = ftell(logFile);
-
-            fclose(logFile);
-
-            if (sz > (me_config.logMaxSize / me_config.logChapters))
+            if (xSemaphoreTake(logMutex, portMAX_DELAY) == pdTRUE)
             {
-                _shiftLogs();
+                sz = snprintf(logBuff, LOG_BUFF_SIZE, "(%d) ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
+
+                va_start(st_va_list, msg);
+                sz += vsnprintf(logBuff + sz, LOG_BUFF_SIZE - sz - 1, msg, st_va_list);
+                va_end(st_va_list);
+
+                *(logBuff + sz) = 0;
+
+                fprintf(logFile, "%s\n", logBuff);
+                
+                printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
+
+                sz = ftell(logFile);
+
+                if (sz > (me_config.logMaxSize / me_config.logChapters))
+                {
+                    fclose(logFile);
+                    logFile = NULL;
+                    _shiftLogs();
+                }
+
+                xSemaphoreGive(logMutex);
             }
         }
     }

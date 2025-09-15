@@ -113,7 +113,7 @@ typedef struct {
 	char *LAN_gateWay;
 
 	char *deviceName;
-	char logEnabled;
+	int logLevel;
 	long logMaxSize;
 	int  logChapters;
 	int  statusAllChannels;
@@ -169,7 +169,6 @@ typedef struct {
 uint8_t loadConfig(void);
 FRESULT scan_in_dir(const char *file_extension, FF_DIR *dp, FILINFO *fno);
 void load_Default_Config(void);
-void mblog(int priority, const char *msg,...);
 uint8_t loadContent(void);
 int saveConfig(void);
 
