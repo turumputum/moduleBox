@@ -24,18 +24,44 @@
 
 #include <generated_files/gen_encoders.h>
 
-// ---------------------------------------------------------------------------
-// ------------------------------- DEFINITIONS -------------------------------
-// -----|-------------------|-------------------------------------------------
+extern uint8_t SLOTS_PIN_MAP[10][4];
+extern configuration me_config;
+extern stateStruct me_state;
+
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+static const char *TAG = "ENCODERS";
 
 #define INCREMENTAL 0
 #define ABSOLUTE 1
 
-// ---------------------------------------------------------------------------
-// ---------------------------------- TYPES ----------------------------------
-// -|-----------------------|-------------------------------------------------
 
-typedef struct __tag_ENCODERCONFIG
+
+
+typedef struct
+{
+	uint8_t flag;
+	int64_t tick_rise;
+	int64_t tick_fall;
+	int64_t dTime;
+} pwmEvent_t;
+
+
+
+static void IRAM_ATTR rise_handler(void *args){
+	pwmEvent_t *tickVals = (pwmEvent_t *)args;
+	tickVals->tick_rise = esp_timer_get_time();
+}
+
+static void IRAM_ATTR fall_handler(void *args){
+	pwmEvent_t *tickVals = (pwmEvent_t *)args;
+	tickVals->tick_fall = esp_timer_get_time();
+	if ((tickVals->tick_fall - tickVals->tick_rise) > 2){
+		tickVals->flag = 1;
+		tickVals->dTime = (tickVals->tick_fall - tickVals->tick_rise);
+	}
+}
+
+typedef struct __tag_PPMCONFIG
 {
 	uint8_t 				encoderMode;
 	uint8_t 				float_output;
@@ -50,64 +76,12 @@ typedef struct __tag_ENCODERCONFIG
 	float 					filterK;
 	int 					pole;
 	int 					numOfPos;
-} ENCODERCONFIG, * PENCODERCONFIG; 
+} PPMCONFIG, * PPPMCONFIG; 
 
-
-typedef struct
-{
-	uint8_t flag;
-	int64_t tick_rise;
-	int64_t tick_fall;
-	int64_t dTime;
-} pwmEvent_t;
-
-// ---------------------------------------------------------------------------
-// ---------------------------------- DATA -----------------------------------
-// -----|-------------------|-------------------------------------------------
-
-extern uint8_t SLOTS_PIN_MAP[10][4];
-extern configuration me_config;
-extern stateStruct me_state;
-extern uint8_t led_segment;
-
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-static const char *TAG = "ENCODERS";
-extern char debugString[200];
-// uint64_t rTime, fTime;
-// uint64_t dTime=0;
-// uint8_t flag_calc;
-
-// ---------------------------------------------------------------------------
-// -------------------------------- FUNCTIONS --------------------------------
-// -----------------|---------------------------(|------------------|---------
-
-static void IRAM_ATTR rise_handler(void *args){
-	pwmEvent_t *tickVals = (pwmEvent_t *)args;
-	tickVals->tick_rise = esp_timer_get_time();
-	//tickVals->tick_fall =-1;
-
-	//esp_rom_printf("rise_handler\n");
-}
-
-static void IRAM_ATTR fall_handler(void *args){
-	//esp_rom_printf("fall_handler\n");
-	pwmEvent_t *tickVals = (pwmEvent_t *)args;
-
-	//if(tickVals->tick_rise==-1){
-		
-		tickVals->tick_fall = esp_timer_get_time();
-
-		// if((abs((tickVals->tick_fall-tickVals->tick_rise)-tickVals->dTime)>15)&&((tickVals->tick_fall-tickVals->tick_rise)>2)){
-		if ((tickVals->tick_fall - tickVals->tick_rise) > 2){
-			tickVals->flag = 1;
-			tickVals->dTime = (tickVals->tick_fall - tickVals->tick_rise);
-		}
-	//}
-}
 /* 
-	Модуль поддержки энкодеров
+	Модуль энкодера с фазово импульсной модуляцией(PPM)
 */
-void configure_encoderInc(PENCODERCONFIG c, int slot_num)
+void configure_encoderPPM(PPPMCONFIG c, int slot_num)
 {
 
 	c->encoderMode = INCREMENTAL;
@@ -454,25 +428,115 @@ void start_encoderPPM_task(int slot_num)
 // 	}
 // }
 
+typedef struct __tag_INCCONFIG
+{
+	uint8_t 				encoderMode;
+	uint8_t 				floatOutput;
+	uint8_t 				dirInverse;
+	uint8_t 				zeroShift;
+	int32_t 				minVal;
+	int32_t 				maxVal;
+	uint16_t                refreshPeriod;
+	int 					pole;
+	uint16_t 				divider;
+	uint16_t				glitchFilter;
+} INCCONFIG, * PINCCONFIG; 
+
+/* 
+	Модуль для работы с инкрементальными энкодерами, обычно оптический.
+*/
+void configure_encoderInc(PINCCONFIG c, int slot_num)
+{
+
+	c->encoderMode = INCREMENTAL;
+	/* Флаг определяет абслютный режим работы энкодера, 
+		По умолчанию  - инкрементальный
+	*/
+	c->encoderMode = get_option_flag_val(slot_num, "absolute");
+	ESP_LOGD(TAG, "Encoder slotNum:%d mode:%s", slot_num, c->encoderMode? "incremental" : "absolute");
+
+	/* Флаг натраивает выходные значения в виде числа с плавающей точкой,
+		иначе - целочисленное
+	*/
+	c->floatOutput = get_option_flag_val(slot_num, "floatOutput");
+	ESP_LOGD(TAG, "Encoder slotNum:%d  float_output", slot_num);
+
+	/* Флаг задаёт инверсию направления */
+	c->dirInverse = get_option_flag_val(slot_num, "dirInverse");
+	ESP_LOGD(TAG, "Encoder slotNum:%d dirInverse", slot_num);
+
+	/* Значение аппаратного фильтра
+		- еденицы измерения наносекунды
+	*/
+	c->glitchFilter = get_option_int_val(slot_num, "glitchFilter", "ns", 800, 1, 4095);
+	ESP_LOGD(TAG, "Encoder slotNum:%d glitchFilter:%d", slot_num, c->glitchFilter);
+
+
+	/* Значение смещения нуля после делителя
+	*/
+	c->zero_shift = get_option_int_val(slot_num, "zeroShift", "", 0, INT16_MIN, INT16_MAX);
+	ESP_LOGD(TAG, "Encoder slotNum:%d zero_shift: %d", slot_num, c->zero_shift);
+
+	/* Сдвиг значений до делителя*/
+	c->offset = get_option_int_val(slot_num, "offset","", 0, INT16_MIN, INT16_MAX);
+	ESP_LOGD(TAG, "Encoder slotNum:%d offset: %d", slot_num, c->offset);
+
+
+	/* Минимальное значение */
+	c->minVal = get_option_int_val(slot_num, "minVal", "", 0, INT32_MIN, INT32_MAX);
+	ESP_LOGD(TAG, "MIN_VAL: %d", c->MIN_VAL);
+
+
+	/* Максимальное значение
+	*/
+	c->maxVal = get_option_int_val(slot_num, "maxVal", "", 4096, INT32_MIN, INT32_MAX);
+	ESP_LOGD(TAG, "maxVal: %d", c->MAX_VAL);
+
+	
+	/* Период проверки значений
+		- еденицы измерения раз в секунду
+	*/
+	c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate","fps", 20, 1, 100));
+	ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",c->refreshPeriod, slot_num);
+	
+	c->pole = c->maxVal - c->minVal;
+
+	/* Делитель*/
+	c->divider = get_option_int_val(slot_num, "divider", "", 4, 1, UINT16_MAX);
+	ESP_LOGD(TAG, "dirInverse slot: %d", slot_num);
+
+	
+	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+		/* Определяет топик для MQTT сообщений */
+    	custom_topic = get_option_string_val(slot_num, "topic");
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0")+3];
+		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
+}
+
 void encoder_inc_task(void *arg){
     int slot_num = *(int *)arg;
+
+	INCCONFIG		c = {0};
+	configure_encoderInc(&c, slot_num);
 
 	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
     uint8_t a_pin_num = SLOTS_PIN_MAP[slot_num][0];
     uint8_t b_pin_num = SLOTS_PIN_MAP[slot_num][1];
 
-	uint8_t inverse  = 0;
-    if (strstr(me_config.slot_options[slot_num], "inverse")!=NULL){
-        inverse=1;
-		ESP_LOGD(TAG, "Set inverse slot_num: %d",slot_num);
-    }
-
     //ESP_LOGD(TAG, "encoder_inc_task slot_num: %d, a_pin_num: %d, b_pin_num: %d", slot_num, a_pin_num, b_pin_num);
 
     pcnt_unit_config_t unit_config = {
         .high_limit = INT16_MAX,
         .low_limit = INT16_MIN,
+
     };
     pcnt_unit_handle_t pcnt_unit = NULL;
     esp_err_t err = pcnt_new_unit(&unit_config, &pcnt_unit);
@@ -483,7 +547,7 @@ void encoder_inc_task(void *arg){
 
 	//ESP_LOGI(TAG, "set glitch filter");
     pcnt_glitch_filter_config_t filter_config = {
-        .max_glitch_ns = 1000,
+        .max_glitch_ns = c.glitchFilter,
     };
     ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcnt_unit, &filter_config));
 
@@ -514,68 +578,68 @@ void encoder_inc_task(void *arg){
 		ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_a, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
     	ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_b, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
 	}
-	ESP_LOGI(TAG, "enable pcnt unit");
+	//ESP_LOGI(TAG, "enable pcnt unit");
     ESP_ERROR_CHECK(pcnt_unit_enable(pcnt_unit));
-    ESP_LOGI(TAG, "clear pcnt unit");
+    //ESP_LOGI(TAG, "clear pcnt unit");
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt_unit));
-    ESP_LOGI(TAG, "start pcnt unit");
+    //ESP_LOGI(TAG, "start pcnt unit");
     ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit));
 
 
-    uint8_t absolute  = 0;
-    if (strstr(me_config.slot_options[slot_num], "absolute")!=NULL){
-        absolute=1;
-		ESP_LOGD(TAG, "Set absolute for slot:%d", slot_num);
-    }
+    // uint8_t absolute  = 0;
+    // if (strstr(me_config.slot_options[slot_num], "absolute")!=NULL){
+    //     absolute=1;
+	// 	ESP_LOGD(TAG, "Set absolute for slot:%d", slot_num);
+    // }
 
-    uint16_t refreshPeriod = 10;
-    if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
-		refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod", "", 10, 1, 4096));
-		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
-	}
+    // uint16_t refreshPeriod = 10;
+    // if (strstr(me_config.slot_options[slot_num], "refreshPeriod") != NULL) {
+	// 	refreshPeriod = (get_option_int_val(slot_num, "refreshPeriod", "", 10, 1, 4096));
+	// 	ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
+	// }
 
-	int16_t divider = 1;
-    if (strstr(me_config.slot_options[slot_num], "divider") != NULL) {
-		divider = (get_option_int_val(slot_num, "divider", "", 10, 1, 4096));
-		if(divider<=0) divider=1;
-		ESP_LOGD(TAG, "Set divider:%d for slot:%d",divider, slot_num);
-	}
-	int16_t offset = 0;
-    if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
-		offset = (get_option_int_val(slot_num, "offset", "", 10, 1, 4096));
-		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
-	}
+	// int16_t divider = 1;
+    // if (strstr(me_config.slot_options[slot_num], "divider") != NULL) {
+	// 	divider = (get_option_int_val(slot_num, "divider", "", 10, 1, 4096));
+	// 	if(divider<=0) divider=1;
+	// 	ESP_LOGD(TAG, "Set divider:%d for slot:%d",divider, slot_num);
+	// }
+	// int16_t offset = 0;
+    // if (strstr(me_config.slot_options[slot_num], "offset") != NULL) {
+	// 	offset = (get_option_int_val(slot_num, "offset", "", 10, 1, 4096));
+	// 	ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",refreshPeriod, slot_num);
+	// }
 
-	int32_t minVal = INT32_MIN;
-    if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-		minVal = (get_option_int_val(slot_num, "minVal", "", 10, 1, 4096));
-		ESP_LOGD(TAG, "Set minVal:%ld for slot:%d",minVal, slot_num);
-	}
-	int32_t maxVal = INT32_MAX;
-    if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-		maxVal = (get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096));
-		ESP_LOGD(TAG, "Set maxVal:%ld for slot:%d",maxVal, slot_num);
-	}
+	// int32_t minVal = INT32_MIN;
+    // if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
+	// 	minVal = (get_option_int_val(slot_num, "minVal", "", 10, 1, 4096));
+	// 	ESP_LOGD(TAG, "Set minVal:%ld for slot:%d",minVal, slot_num);
+	// }
+	// int32_t maxVal = INT32_MAX;
+    // if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
+	// 	maxVal = (get_option_int_val(slot_num, "maxVal", "", 10, 1, 4096));
+	// 	ESP_LOGD(TAG, "Set maxVal:%ld for slot:%d",maxVal, slot_num);
+	// }
 
-	int32_t range = maxVal - minVal+1;
-	ESP_LOGD(TAG, "Set encoder range:%ld for slot:%d",range, slot_num);
+	// int32_t range = maxVal - minVal+1;
+	// ESP_LOGD(TAG, "Set encoder range:%ld for slot:%d",range, slot_num);
 
 	
 
-    //---
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/encoder_")+3];
-		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
-		me_state.action_topic_list[slot_num]=strdup(t_str);
-        me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart encoder_topic:%s", me_state.action_topic_list[slot_num]);
-	}
+    // //---
+    // if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+	// 	char* custom_topic=NULL;
+    // 	custom_topic = get_option_string_val(slot_num, "topic");
+	// 	me_state.action_topic_list[slot_num]=strdup(custom_topic);
+    //     me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+	// 	ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
+    // }else{
+	// 	char t_str[strlen(me_config.deviceName)+strlen("/encoder_")+3];
+	// 	sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
+	// 	me_state.action_topic_list[slot_num]=strdup(t_str);
+    //     me_state.trigger_topic_list[slot_num]=strdup(t_str);
+	// 	ESP_LOGD(TAG, "Standart encoder_topic:%s", me_state.action_topic_list[slot_num]);
+	// }
 
     int32_t rawCount = 0;
     int32_t count = 0;
@@ -602,18 +666,18 @@ void encoder_inc_task(void *arg){
             ESP_LOGE(TAG, "pcnt_get_counter_value failed: %d", err);
             return;
 		}
-		count = (rawCount+offset)/divider;
-		while(count<minVal){
-			count=count+range;
+		count = (rawCount+c.offset)/c.divider;
+		while(count<c.minVal){
+			count=count+c.pole;
 		}
-		while(count>maxVal){
-			count=count-range;
+		while(count>c.maxVal){
+			count=count-c.pole;
 		}
 
         if (count != prev_count) {
             char str[40];
 
-            if (absolute) {
+            if (c.mode == ABSOLUTE) {
 				
                 sprintf(str, "%ld", count);
             } else {
@@ -644,6 +708,8 @@ const char * get_manifest_encoders(){
 	return manifesto;
 }
 
+
+//--------------------------------------AS5600------------------------------------
 // AS5600 I2C registers
 #define AS5600_I2C_ADDRESS 0x36
 #define AS5600_RAW_ANGLE_REG 0x0C
@@ -703,7 +769,10 @@ void encoderAS5600_task(void *arg)
 									   &status, 1, 
 									   I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 	if (ret != ESP_OK) {
-		ESP_LOGE(TAG, "AS5600 not found on slot:%d", slot_num);
+		char tmpStr[100];
+		sprintf(tmpStr, "AS5600 not found on slot:%d", slot_num);
+		ESP_LOGE(TAG, "%s", tmpStr);
+		mblog(0, tmpStr);
 		vTaskDelete(NULL);
 	}
 	
