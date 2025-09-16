@@ -69,27 +69,30 @@ void mblog(int priority, const char *msg, ...)
     size_t              sz;
     char                buffOut     [ 386 ];
 
-    if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
+    if (me_config.logEnabled)
     {
-        sz = snprintf(buffOut, sizeof(buffOut), "%.8d ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
-
-        va_start(st_va_list, msg);
-        sz = vsnprintf(buffOut + sz, sizeof(buffOut) - sz - 1, msg, st_va_list);
-        va_end(st_va_list);
-
-        *(buffOut + sz) = 0;
-
-        fprintf(logFile, "%s\n", buffOut);
-        
-        printf("\x1b[31mMBL%d %s\x1b[0m\n", priority, buffOut);
-
-        sz = ftell(logFile);
-
-        fclose(logFile);
-
-        if (sz > (me_config.logMaxSize / me_config.logChapters))
+        if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
         {
-            _shiftLogs();
+            sz = snprintf(buffOut, sizeof(buffOut), "%.8d ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
+
+            va_start(st_va_list, msg);
+            sz = vsnprintf(buffOut + sz, sizeof(buffOut) - sz - 1, msg, st_va_list);
+            va_end(st_va_list);
+
+            *(buffOut + sz) = 0;
+
+            fprintf(logFile, "%s\n", buffOut);
+            
+            printf("\x1b[31mMBL%d %s\x1b[0m\n", priority, buffOut);
+
+            sz = ftell(logFile);
+
+            fclose(logFile);
+
+            if (sz > (me_config.logMaxSize / me_config.logChapters))
+            {
+                _shiftLogs();
+            }
         }
     }
 }
