@@ -207,5 +207,38 @@ long strz_to_bytes(PCSTR psz_string)
 
     RETURN(l_result * l_mp);
 }
+// ***************************************************************************
+// FUNCTION
+//      strz_cpy
+// PURPOSE
+//
+// PARAMETERS
+//      PSTR    psz_target --
+//      PCSTR   psz_source --
+//      UINT    u_size     --
+// RESULT
+//      PSTR  --
+// ***************************************************************************
+PSTR strz_cpy(PSTR      psz_target,
+              PCSTR     psz_source,
+              UINT      u_size)
+{
+    PSTR        psz_result      = nil;
+    PSTR        psz_on          = (PSTR)psz_source;
+    PSTR        psz_on_tgt      = psz_target;
+    UINT        u_left          = u_size;
+
+    ENTER(psz_on_tgt && psz_on && u_left);
+
+    while ((--u_left) && *psz_on)
+    {
+        *(psz_on_tgt++) = *(psz_on++);
+    }
+
+    *psz_on_tgt = 0;
+    psz_result  = psz_on_tgt;
+
+    RETURN(psz_result);
+}
 
 

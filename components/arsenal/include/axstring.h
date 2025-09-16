@@ -38,6 +38,11 @@ BOOL                strz_is_ip                  (PCSTR              psz_str,
 
 long                strz_to_bytes               (PCSTR              psz_string);
 
+PSTR                strz_cpy                    (PSTR               psz_target,
+                                                 PCSTR              psz_source,
+                                                 UINT               u_size);
+
+
 #ifdef __cplusplus
 }
 #endif                                      //  #ifdef __cplusplus
