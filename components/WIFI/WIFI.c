@@ -18,6 +18,7 @@
 #include "stateConfig.h"
 
 #include "myCDC.h"
+#include <mbdebug.h>
 
 #define EXAMPLE_ESP_MAXIMUM_RETRY 50
 
@@ -118,17 +119,17 @@ void wifi_scan(void) {
 	ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
 	ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
 	sprintf(apList,"Avalable networks = %u \r\n", ap_count);
-	mblog(0, apList);
+	mblog(I, apList);
 	printf(apList);
 	for (int i = 0; (i < number) && (i < ap_count); i++) {
 		sprintf(apList,"SSID \t%s", ap_info[i].ssid);
-		mblog(0, apList);
+		mblog(I, apList);
 			printf(apList);
 		sprintf(apList,"\tRSSI \t%d", ap_info[i].rssi);
-		mblog(0, apList);
+		mblog(I, apList);
 			printf(apList);
 		sprintf(apList,"\tChannel \t%d \n", ap_info[i].primary);
-		mblog(0, apList);
+		mblog(I, apList);
 			printf(apList);
 	}
 
@@ -144,13 +145,13 @@ uint8_t wifiInit() {
 
 		if (me_config.WIFI_ssid[0] == 0) {
 			ESP_LOGE(TAG, "WIFI ssid is empty");
-			mblog(0, "WIFI ssid is empty");
+			mblog(I, "WIFI ssid is empty");
 			return ESP_FAIL;
 		}
 
 		if (me_config.WIFI_pass[0] == 0) {
 			ESP_LOGE(TAG, "WIFI pass is empty");
-			mblog(0, "WIFI pass is empty");
+			mblog(I, "WIFI pass is empty");
 			return ESP_FAIL;
 		}
 
@@ -210,7 +211,7 @@ uint8_t wifiInit() {
 			ESP_LOGE(TAG, "Failed to connect to SSID:%s, password:%s", wifi_config.sta.ssid, wifi_config.sta.password);
 			char tmpString[200];
 			sprintf(tmpString, "Failed to connect to SSID:%s, password:%s", wifi_config.sta.ssid, wifi_config.sta.password);
-			mblog(0, tmpString);
+			mblog(E, tmpString);
 			esp_event_loop_delete_default();
 			esp_netif_destroy_default_wifi(wifiSta);
 			return ESP_FAIL;

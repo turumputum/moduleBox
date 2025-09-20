@@ -68,8 +68,41 @@ static int handler(void *user, const char *section, const char *name, const char
 
 	if (MATCH("SYSTEM", "deviceName")) {//-----------------------------------------------
 		pconfig->deviceName = strdup(value);
-	} else if (MATCH("SYSTEM", "logEnabled")) {//-----------------------------------------------
-		pconfig->logEnabled	 = _yesno(value);
+	} else if (MATCH("SYSTEM", "logLevel")) {//-----------------------------------------------
+
+		if (!strcasecmp(value, "none"))
+			pconfig->logLevel	 = ESP_LOG_NONE;
+		else if (!strcasecmp(value, "error"))
+			pconfig->logLevel	 = ESP_LOG_ERROR;
+		else if (!strcasecmp(value, "warn"))
+			pconfig->logLevel	 = ESP_LOG_WARN;
+		else if (!strcasecmp(value, "warning"))
+			pconfig->logLevel	 = ESP_LOG_WARN;
+		else if (!strcasecmp(value, "info"))
+			pconfig->logLevel	 = ESP_LOG_INFO;
+		else if (!strcasecmp(value, "debug"))
+			pconfig->logLevel	 = ESP_LOG_DEBUG;
+		else if (!strcasecmp(value, "verb"))
+			pconfig->logLevel	 = ESP_LOG_VERBOSE;
+		else if (!strcasecmp(value, "verbose"))
+			pconfig->logLevel	 = ESP_LOG_VERBOSE;
+		else
+		{
+			pconfig->logLevel = atoi(value);
+
+			if (!pconfig->logLevel)
+			{
+				ESP_LOGW(TAG, "Log level value '%s' not recugnized, use 'none' to disable log", value);
+
+				pconfig->logLevel = ESP_LOG_NONE;
+			}
+			else if (pconfig->logLevel > ESP_LOG_VERBOSE)
+			{
+				ESP_LOGE(TAG, "logLevel value '%s' is too high, %d is max", value, (int)ESP_LOG_VERBOSE);
+				pconfig->logLevel = ESP_LOG_VERBOSE;
+			}
+		}
+
 	} else if (MATCH("SYSTEM", "logMaxSize")) {//-----------------------------------------------
 		pconfig->logMaxSize = strz_to_bytes(value);
 	} else if (MATCH("SYSTEM", "logChapters")) {//-----------------------------------------------
@@ -143,7 +176,7 @@ void load_Default_Config(void) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	me_config.deviceName = strdup("moduleBox");
-	me_config.logEnabled = false;
+	me_config.logLevel = ESP_LOG_WARN;
 	me_config.logMaxSize = 50 * 1024;
 	me_config.logChapters = 1;
 	me_config.statusPeriod = 0;

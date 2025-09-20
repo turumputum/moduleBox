@@ -27,6 +27,7 @@
 #include "tinyosc.h"
 #include "reporter.h"
 #include "executor.h"
+#include <mbdebug.h>
 
 #include "mdns.h"
 
@@ -103,7 +104,7 @@ void osc_recive_task(){
 	me_state.osc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (me_state.osc_socket < 0) {
 		printf("Failed to create socket for OSC: %d\n", errno);
-		mblog(0, "Failed to create socket for OSC");
+		mblog(E, "Failed to create socket for OSC");
 		vTaskDelete(NULL);
 	}else{
 		ESP_LOGD(TAG,"OSC socket OK num:%d", me_state.osc_socket);

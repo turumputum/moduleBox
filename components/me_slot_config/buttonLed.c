@@ -21,10 +21,12 @@
 #include "reporter.h"
 #include "executor.h"
 #include "stateConfig.h"
+#include <arsenal.h>
 
 #include "esp_log.h"
 #include "me_slot_config.h"
 #include <stdcommand.h>
+#include <stdreport.h>
 
 #include <generated_files/gen_buttonLed.h>
 
@@ -57,6 +59,9 @@ typedef struct __tag_BUTTONLEDCONFIG
 	int 					button_inverse;
 	int 					debounce_gap;
 	int 					event_filter;
+	int 					stateReport;
+	int 					longReport;
+	int 					doubleReport;
 	uint8_t 				led_inverse;
 	int16_t 				fade_increment;
 	int16_t 				maxBright;
@@ -144,7 +149,16 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 		*/
 		ch->longPressTime 	= get_option_int_val(slot_num, "longPressTime", "ms", 0, 0, 65535);
 		if (ch->longPressTime)
-			ESP_LOGD(TAG, "Set longPressTime:%d ms for slot:%d", ch->longPressTime, slot_num);
+		{
+			if (ch->debounce_gap)
+			{
+				ESP_LOGD(TAG, "Set longPressTime:%d ms for slot:%d", ch->longPressTime, slot_num);
+			}
+			else
+			{
+				ESP_LOGW(TAG, "No long press possible for slot:%d because gap is set to zero", slot_num);
+			}
+		}
 		else
 			ESP_LOGD(TAG, "No long press active for slot:%d", slot_num);
 
@@ -233,27 +247,43 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
     */
     stdcommand_register(&ch->cmds, MYCMD_default, NULL, PARAMT_int);
 
+<<<<<<< HEAD
+=======
+	/* Возвращает состояние нажатия кнопки
+	*/
+	ch->stateReport = stdreport_register(RPTT_int, slot_num, "unit", nil, 0, 1);
+
+	/* Возвращает состояние длинного нажатия кнопки
+	*/
+	ch->longReport = stdreport_register(RPTT_int, slot_num, "unit", "longpress", 0, 1);
+
+	/* Возвращает состояние двойного нажатия кнопки
+	*/
+	ch->doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "doubleClick", 0, 1);
+
+
+>>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 	ch->event_filter = 0;
 }
-static void _button_report(const char * 		prefix, 
-						   int 					button_state, 
-						   int 					slot_num)
-{
-	char tmp[255];
+// static void _button_report(const char * 		prefix, 
+// 						   int 					button_state, 
+// 						   int 					slot_num)
+// {
+// 	char tmp[255];
 
-	// отчёт
-	sprintf(tmp, "%s%d", prefix, button_state);
-	report(tmp, slot_num);
+// 	// отчёт
+// 	sprintf(tmp, "%s%d", prefix, button_state);
+// 	stdreport(c->stateReport, tmp, slot_num);
 	
-	ESP_LOGD(TAG,"BUTTON report String:%s", tmp);
-}
+// 	ESP_LOGD(TAG,"BUTTON report String:%s", tmp);
+// }
 
 static void _buttonStateChanged(BUTTONLEDCONFIG *	c, 
 								BSTYPE				type, 
 						        int 				button_state, 
 						        int 				slot_num)
 {
-	char tmp[255];
+	//char tmp[255];
 
 	if (c->doubleClickTime) // Если дабл клик активен и текущее не лонг
 	{
@@ -292,19 +322,19 @@ static void _buttonStateChanged(BUTTONLEDCONFIG *	c,
 	switch (type)
 	{
 		case BSTYPE_short:
-			_button_report("", button_state, slot_num);
+			stdreport_i(c->stateReport, button_state);
 			break;
 			
 		case BSTYPE_long:
-			_button_report("/longpress:", button_state, slot_num);
+			stdreport_i(c->longReport, button_state);
 			break;
 	
 		case BSTYPE_double:
 			// Посылаем лишний короткий без фильтра
 			if (!c->event_filter)
-				_button_report("", button_state, slot_num);
+				stdreport_i(c->stateReport, button_state);
 
-			_button_report("/doubleClick:", button_state, slot_num);
+			stdreport_i(c->doubleReport, button_state);
 			break;
 
 		default:
@@ -314,16 +344,16 @@ static void _buttonStateChanged(BUTTONLEDCONFIG *	c,
 
 void button_task(void *arg)
 {
-	BUTTONLEDCONFIG		c = {0};
+	PBUTTONLEDCONFIG 		c 	= calloc(1, sizeof(BUTTONLEDCONFIG));
 	TickType_t 			now;
 
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
 
-	c.isrCfgs[0].slot_num 	= slot_num;
-	c.isrCfgs[0].msg		= 0;
-	c.isrCfgs[1].slot_num 	= slot_num;
-	c.isrCfgs[1].msg		= 1;
+	c->isrCfgs[0].slot_num 	= slot_num;
+	c->isrCfgs[0].msg		= 0;
+	c->isrCfgs[1].slot_num 	= slot_num;
+	c->isrCfgs[1].msg		= 1;
 
 	me_state.interrupt_queue[slot_num] = xQueueCreate(20, sizeof(uint8_t));
 
@@ -337,18 +367,18 @@ void button_task(void *arg)
     gpio_config(&in_conf);
 	gpio_set_intr_type(pin_num, GPIO_INTR_ANYEDGE);
     gpio_install_isr_service(0);
-	gpio_isr_handler_add(pin_num, button_isr_handler, (void*)&c.isrCfgs[0]);
+	gpio_isr_handler_add(pin_num, button_isr_handler, (void*)&c->isrCfgs[0]);
 	
 	ESP_LOGD(TAG,"SETUP BUTTON_pin_%d Slot:%d", pin_num, slot_num );
 	
-	configure_button_led(&c, slot_num, 0);
+	configure_button_led(c, slot_num, 0);
 
 	int8_t button_state=0;
 	int prev_state=-1;
 	if(gpio_get_level(pin_num)){
-		button_state=c.button_inverse ? 0 : 1;
+		button_state=c->button_inverse ? 0 : 1;
 	}else{
-		button_state=c.button_inverse ? 1 : 0;
+		button_state=c->button_inverse ? 1 : 0;
 	}
 
 	// me_state.counters[slot_num].pin_num = pin_num;
@@ -357,6 +387,7 @@ void button_task(void *arg)
 	// // sprintf(str, "%d", button_state);
 	// // report(str, slot_num);
 
+<<<<<<< HEAD
 	// esp_timer_handle_t debounce_gap_timer;
 	// const esp_timer_create_args_t delay_timer_args = {
 	// 	.callback = &button_isr_handler,
@@ -370,57 +401,72 @@ void button_task(void *arg)
 	// 	esp_timer_start_periodic(debounce_gap_timer, c.debounce_gap*1000);
 	// }
 	
+=======
+	esp_timer_handle_t debounce_gap_timer;
+	const esp_timer_create_args_t delay_timer_args = {
+		.callback = &button_isr_handler,
+		.arg = (void*)&c->isrCfgs[1],
+		.name = "debounce_gap_timer"
+	};
+
+	if (c->debounce_gap)
+	{
+		esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+		esp_timer_start_periodic(debounce_gap_timer, c->debounce_gap*1000);
+	}
+
+>>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 	waitForWorkPermit(slot_num);
     //while (workIsPermitted(slot_num))
 	while (true)
 	{
-		if (c.longPressTime) // Если активен режим длинного нажатия
+		if (c->longPressTime) // Если активен режим длинного нажатия
 		{
 			if (button_state != prev_state) // Если было изменение кнопки
 			{
 				if (button_state)
 				{
-					c.pressTimeBegin = xTaskGetTickCount();
+					c->pressTimeBegin = xTaskGetTickCount();
 
 					// Посылаем лишний короткий при нажатии без фильтра
-					if (!c.event_filter) 
-						_buttonStateChanged(&c, BSTYPE_short, 1, slot_num);
+					if (!c->event_filter) 
+						_buttonStateChanged(c, BSTYPE_short, 1, slot_num);
 				}
 				else
 				{
-					if (c.longPressSignaled)
+					if (c->longPressSignaled)
 					{
 						// Посылаем лишний короткий при отпускании без фильтра
-						if (!c.event_filter)
-							_buttonStateChanged(&c, BSTYPE_short, 0, slot_num);
+						if (!c->event_filter)
+							_buttonStateChanged(c, BSTYPE_short, 0, slot_num);
 
-						_buttonStateChanged(&c, BSTYPE_long, 0, slot_num);
+						_buttonStateChanged(c, BSTYPE_long, 0, slot_num);
 
-						c.longPressSignaled = false;
+						c->longPressSignaled = false;
 					}
 					else
 					{
 						// Посылаем задержанный короткий при отпускании если был фильтрован
-						if (c.event_filter)
-							_buttonStateChanged(&c, BSTYPE_short, 1, slot_num);
-						_buttonStateChanged(&c, BSTYPE_short, 0, slot_num);
+						if (c->event_filter)
+							_buttonStateChanged(c, BSTYPE_short, 1, slot_num);
+						_buttonStateChanged(c, BSTYPE_short, 0, slot_num);
 					}
 
-					c.pressTimeBegin 	= 0;
-					c.unpressTimeBegin 	= xTaskGetTickCount();
+					c->pressTimeBegin 	= 0;
+					c->unpressTimeBegin 	= xTaskGetTickCount();
 				}
 
 				prev_state = button_state;
 			}
-			else if (c.pressTimeBegin && !c.longPressSignaled) // Если состояние не изменилось и активно нажатие
+			else if (c->pressTimeBegin && !c->longPressSignaled) // Если состояние не изменилось и активно нажатие
 			{
 				now = xTaskGetTickCount();
 
-				if (pdTICKS_TO_MS(now - c.pressTimeBegin) >= c.longPressTime) // если длительность достигнута
+				if (pdTICKS_TO_MS(now - c->pressTimeBegin) >= c->longPressTime) // если длительность достигнута
 				{
-					_buttonStateChanged(&c, BSTYPE_long, 1, slot_num);
+					_buttonStateChanged(c, BSTYPE_long, 1, slot_num);
 
-					c.longPressSignaled = true;
+					c->longPressSignaled = true;
 				}
 			}
 		}
@@ -428,7 +474,7 @@ void button_task(void *arg)
 		{
 			prev_state = button_state;
 
-			_buttonStateChanged(&c, BSTYPE_short, button_state, slot_num);
+			_buttonStateChanged(c, BSTYPE_short, button_state, slot_num);
 		}
 
 		//if(!esp_timer_is_active(debounce_gap_timer)){
@@ -453,11 +499,19 @@ void button_task(void *arg)
 
 			// int newState = -1;
 
+<<<<<<< HEAD
 			// if (c.debounce_gap)	// Если таймер активен
 			// {
 			// 	if (msg) 	// Если сигнал был от таймера
 			// 	{
 			// 		//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+=======
+			if (c->debounce_gap)	// Если таймер активен
+			{
+				if (msg) 	// Если сигнал был от таймера
+				{
+					//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+>>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 
 			// 		// Фильтрация дребезга заключается в следующем: 
 			// 		// читаем состояния за фиксированный промежуток времени и если единиц было считаено >= 50%,
@@ -483,9 +537,15 @@ void button_task(void *arg)
 			// 	newState = st->ones;
 			// }
 
+<<<<<<< HEAD
 			// if (newState >= 0)	// Если было изменение состояния кнопки
 			// {
 			// 	button_state = (c.button_inverse ? ~newState : newState) & 1;
+=======
+			if (newState >= 0)	// Если было изменение состояния кнопки
+			{
+				button_state = (c->button_inverse ? ~newState : newState) & 1;
+>>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 
 			// 	st->ones 	= 0;
 			// 	st->total 	= 0;

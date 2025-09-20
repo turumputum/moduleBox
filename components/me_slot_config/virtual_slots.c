@@ -17,7 +17,11 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 
+<<<<<<< HEAD
 #include <generated_files/gen_virtual_slots.h>
+=======
+#include <mbdebug.h>
+>>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -729,7 +733,7 @@ void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
         char errorString[300];
         sprintf(errorString, "whitelist file: %s, does not exist", ch->filename);
         ESP_LOGE(TAG, "%s", errorString);
-        mblog(0, errorString);
+        mblog(E, errorString);
         vTaskDelay(200);
         vTaskDelete(NULL);
     }

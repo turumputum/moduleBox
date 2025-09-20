@@ -33,6 +33,8 @@ typedef struct __tag_STDREPORT
     uint32_t                slot_num    : 3;
     uint32_t                outType     : 3;
 
+    char                    topic       [ 65 ];
+
 } STDREPORT, * PSTDREPORT;
 
 typedef struct __tag_STDREPORTRATIO
