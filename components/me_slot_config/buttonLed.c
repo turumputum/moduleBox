@@ -156,7 +156,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 		else
 			ESP_LOGD(TAG, "No double click active for slot:%d", slot_num);
 
-		/* Флаг задаёт фильтрацию совытий при активных
+		/* Флаг задаёт фильтрацию событий при активных
 		*/
 		ch->event_filter = get_option_flag_val(slot_num, "eventfilter");
 

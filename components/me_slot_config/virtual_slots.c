@@ -759,7 +759,7 @@ void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
 
     /* Возвращает если совпадений не найдено
 	*/
-	ch->report = stdreport_register(RPTT_int, slot_num, "", "noMatches", 0, 1);
+	ch->report = stdreport_register(RPTT_string, slot_num, "", "noMatches", 0, 1);
 }
 
 void whitelist_task(void *arg) {
@@ -823,8 +823,8 @@ void whitelist_task(void *arg) {
                     //ESP_LOGD(TAG, "File closed");
                     if(count==0){
                         //char output_str = "/noMatches";
-                        report("/noMatches", slot_num);
-                        //stdreport_i(c.report, 0);
+                        //report("/noMatches", slot_num);
+                        stdreport_s(c.report, "");
                     }
 
                 }
