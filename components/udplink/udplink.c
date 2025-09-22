@@ -220,7 +220,7 @@ void udplink_task()
 					if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
 					{
 						*(buff + len) = 0;
-						printf("got: '%s'\n", buff);
+						//printf("got: '%s'\n", buff);
 						udpcrosslinker(buff);
 					}
 				}
