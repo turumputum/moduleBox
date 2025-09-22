@@ -383,7 +383,6 @@ void button_task(void *arg)
 	// // sprintf(str, "%d", button_state);
 	// // report(str, slot_num);
 
-<<<<<<< HEAD
 	// esp_timer_handle_t debounce_gap_timer;
 	// const esp_timer_create_args_t delay_timer_args = {
 	// 	.callback = &button_isr_handler,
@@ -397,21 +396,6 @@ void button_task(void *arg)
 	// 	esp_timer_start_periodic(debounce_gap_timer, c.debounce_gap*1000);
 	// }
 	
-=======
-	esp_timer_handle_t debounce_gap_timer;
-	const esp_timer_create_args_t delay_timer_args = {
-		.callback = &button_isr_handler,
-		.arg = (void*)&c->isrCfgs[1],
-		.name = "debounce_gap_timer"
-	};
-
-	if (c->debounce_gap)
-	{
-		esp_timer_create(&delay_timer_args, &debounce_gap_timer);
-		esp_timer_start_periodic(debounce_gap_timer, c->debounce_gap*1000);
-	}
-
->>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 	waitForWorkPermit(slot_num);
     //while (workIsPermitted(slot_num))
 	while (true)
@@ -484,11 +468,11 @@ void button_task(void *arg)
 			//debounceStat_t * st = &me_state.counters[slot_num];
 			//ESP_LOGD(TAG, "Button task is working! slotNum:%d", slot_num);
 			int _val = gpio_get_level(pin_num);
-			if(c.debounce_gap>0){
-				vTaskDelay(c.debounce_gap);
+			if(c->debounce_gap>0){
+				vTaskDelay(c->debounce_gap);
 			}
 			if (gpio_get_level(pin_num)==_val){
-				button_state = (c.button_inverse ? !_val : _val);
+				button_state = (c->button_inverse ? !_val : _val);
 			}
 
 			// st->total++;

@@ -17,11 +17,8 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 
-<<<<<<< HEAD
 #include <generated_files/gen_virtual_slots.h>
-=======
 #include <mbdebug.h>
->>>>>>> ce9520cf01c40ada461ff00a624a0c37a739b0f9
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;

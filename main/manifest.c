@@ -40,17 +40,7 @@ typedef const char *        (*GET_MANIFEST_FUNC)();
 
 static GET_MANIFEST_FUNC    funcs   [] = 
 {
-<<<<<<< HEAD
     MODULE_FUNCTIONS
-=======
-    get_manifest_adc1,
-    get_manifest_analog,
-    get_manifest_buttonLed,
-    get_manifest_3n_mosfet,
-    get_manifest_encoders,
-    get_manifest_smartLed,
-    get_manifest_virtual_slot,
->>>>>>> 372d18650b2c7013ead875baa6c72dca12d9ed8c
     NULL
 }; 
 
