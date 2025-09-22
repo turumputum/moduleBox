@@ -70,6 +70,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->deviceName = strdup(value);
 	} else if (MATCH("SYSTEM", "logLevel")) {//-----------------------------------------------
 
+		printf("@@@@@@@@@@@@ parsing loglevel stage 1\n");
+
 		if (!strcasecmp(value, "none"))
 			pconfig->logLevel	 = ESP_LOG_NONE;
 		else if (!strcasecmp(value, "error"))
@@ -88,6 +90,8 @@ static int handler(void *user, const char *section, const char *name, const char
 			pconfig->logLevel	 = ESP_LOG_VERBOSE;
 		else
 		{
+			printf("@@@@@@@@@@@@ parsing loglevel stage 2\n");
+
 			pconfig->logLevel = atoi(value);
 
 			if (!pconfig->logLevel)

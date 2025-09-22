@@ -27,7 +27,7 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char* TAG = "VIRTUAL_SLOTS";
 
-const char * get_manifest_virtual_slot()
+const char * get_manifest_virtual_slots()
 {
 	return manifesto;
 }

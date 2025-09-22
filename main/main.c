@@ -434,6 +434,7 @@ void app_main(void)
 	}
 
 	load_Default_Config();
+
 	scanFileSystem();
 
 	saveManifesto();
@@ -446,6 +447,8 @@ void app_main(void)
 		sprintf(tmpString, "Load config FAIL in line: %d", me_state.config_init_res);
 		mblog(E, tmpString);
 	}
+
+	mblog(I, "Log session begin");
 	
 	set_usb_debug();
 

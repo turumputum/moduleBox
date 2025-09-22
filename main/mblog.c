@@ -97,33 +97,33 @@ void mblog(esp_log_level_t level, const char *msg, ...)
 
     if (logMutex && me_config.logLevel && (level <= me_config.logLevel))
     {
-        if (logFile || ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL))
+        if (xSemaphoreTake(logMutex, portMAX_DELAY) == pdTRUE)
         {
-            if (xSemaphoreTake(logMutex, portMAX_DELAY) == pdTRUE)
+            sz = snprintf(logBuff, LOG_BUFF_SIZE, "(%d) ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
+
+            va_start(st_va_list, msg);
+            sz += vsnprintf(logBuff + sz, LOG_BUFF_SIZE - sz - 1, msg, st_va_list);
+            va_end(st_va_list);
+
+            *(logBuff + sz) = 0;
+
+            printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
+
+            if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
             {
-                sz = snprintf(logBuff, LOG_BUFF_SIZE, "(%d) ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
-
-                va_start(st_va_list, msg);
-                sz += vsnprintf(logBuff + sz, LOG_BUFF_SIZE - sz - 1, msg, st_va_list);
-                va_end(st_va_list);
-
-                *(logBuff + sz) = 0;
-
                 fprintf(logFile, "%s\n", logBuff);
-                
-                printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
 
                 sz = ftell(logFile);
 
+                fclose(logFile);
+
                 if (sz > (me_config.logMaxSize / me_config.logChapters))
                 {
-                    fclose(logFile);
-                    logFile = NULL;
                     _shiftLogs();
                 }
-
-                xSemaphoreGive(logMutex);
             }
+
+            xSemaphoreGive(logMutex);
         }
     }
 }
