@@ -18,6 +18,7 @@
 #include "me_slot_config.h"
 
 #include <generated_files/gen_virtual_slots.h>
+#include <mbdebug.h>
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -26,7 +27,7 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char* TAG = "VIRTUAL_SLOTS";
 
-const char * get_manifest_virtual_slot()
+const char * get_manifest_virtual_slots()
 {
 	return manifesto;
 }
@@ -729,7 +730,7 @@ void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
         char errorString[300];
         sprintf(errorString, "whitelist file: %s, does not exist", ch->filename);
         ESP_LOGE(TAG, "%s", errorString);
-        mblog(0, errorString);
+        mblog(E, errorString);
         vTaskDelay(200);
         vTaskDelete(NULL);
     }

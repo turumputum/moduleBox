@@ -1,4 +1,4 @@
-// ***************************************************************************
+w// ***************************************************************************
 // TITLE
 //
 // PROJECT
@@ -259,6 +259,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 	*/
 	ch->doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "doubleClick", 0, 1);
 
+
 	ch->event_filter = 0;
 }
 // static void _button_report(const char * 		prefix, 
@@ -337,7 +338,6 @@ static void _buttonStateChanged(BUTTONLEDCONFIG *	c,
 			break;
 	}
 }
-
 void button_task(void *arg)
 {
 	PBUTTONLEDCONFIG 		c 	= calloc(1, sizeof(BUTTONLEDCONFIG));
@@ -351,7 +351,7 @@ void button_task(void *arg)
 	c->isrCfgs[1].slot_num 	= slot_num;
 	c->isrCfgs[1].msg		= 1;
 
-	me_state.interrupt_queue[slot_num] = xQueueCreate(20, sizeof(uint8_t));
+	me_state.interrupt_queue[slot_num] = xQueueCreate(10, sizeof(uint8_t));
 
 	gpio_reset_pin(pin_num);
 	esp_rom_gpio_pad_select_gpio(pin_num);
@@ -377,25 +377,25 @@ void button_task(void *arg)
 		button_state=c->button_inverse ? 1 : 0;
 	}
 
-	// me_state.counters[slot_num].pin_num = pin_num;
+	me_state.counters[slot_num].pin_num = pin_num;
 
-	// // memset(str, 0, strlen(str));
-	// // sprintf(str, "%d", button_state);
-	// // report(str, slot_num);
+	// memset(str, 0, strlen(str));
+	// sprintf(str, "%d", button_state);
+	// report(str, slot_num);
 
-	// esp_timer_handle_t debounce_gap_timer;
-	// const esp_timer_create_args_t delay_timer_args = {
-	// 	.callback = &button_isr_handler,
-	// 	.arg = (void*)&c.isrCfgs[1],
-	// 	.name = "debounce_gap_timer"
-	// };
+	esp_timer_handle_t debounce_gap_timer;
+	const esp_timer_create_args_t delay_timer_args = {
+		.callback = &button_isr_handler,
+		.arg = (void*)&c->isrCfgs[1],
+		.name = "debounce_gap_timer"
+	};
 
-	// if (c.debounce_gap)
-	// {
-	// 	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
-	// 	esp_timer_start_periodic(debounce_gap_timer, c.debounce_gap*1000);
-	// }
-	
+	if (c->debounce_gap)
+	{
+		esp_timer_create(&delay_timer_args, &debounce_gap_timer);
+		esp_timer_start_periodic(debounce_gap_timer, c->debounce_gap*1000);
+	}
+
 	waitForWorkPermit(slot_num);
     //while (workIsPermitted(slot_num))
 	while (true)
@@ -457,65 +457,58 @@ void button_task(void *arg)
 			_buttonStateChanged(c, BSTYPE_short, button_state, slot_num);
 		}
 
-		//if(!esp_timer_is_active(debounce_gap_timer)){
-			
-		//}
-
 		// Получаем сигнал от GPIO или таймера
 		uint8_t msg;
 		if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, portMAX_DELAY) == pdPASS)
 		{
-			//debounceStat_t * st = &me_state.counters[slot_num];
-			//ESP_LOGD(TAG, "Button task is working! slotNum:%d", slot_num);
-			int _val = gpio_get_level(pin_num);
-			if(c->debounce_gap>0){
-				vTaskDelay(c->debounce_gap);
-			}
-			if (gpio_get_level(pin_num)==_val){
-				button_state = (c->button_inverse ? !_val : _val);
+			debounceStat_t * st = &me_state.counters[slot_num];
+
+			if (gpio_get_level(pin_num))
+			{
+				st->ones++;
 			}
 
-			// st->total++;
+			st->total++;
 
-			// int newState = -1;
+			int newState = -1;
 
-			// if (c.debounce_gap)	// Если таймер активен
-			// {
-			// 	if (msg) 	// Если сигнал был от таймера
-			// 	{
-			// 		//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
+			if (c->debounce_gap)	// Если таймер активен
+			{
+				if (msg) 	// Если сигнал был от таймера
+				{
+					//ESP_LOGD(TAG,"%ld :: Incoming int_msg:%d",xTaskGetTickCount(), tmp);
 
-			// 		// Фильтрация дребезга заключается в следующем: 
-			// 		// читаем состояния за фиксированный промежуток времени и если единиц было считаено >= 50%,
-			// 		// то состояние считается "1" (кнопку определённо давили), иначе "0" 
+					// Фильтрация дребезга заключается в следующем: 
+					// читаем состояния за фиксированный промежуток времени и если единиц было считаено >= 50%,
+					// то состояние считается "1" (кнопку определённо давили), иначе "0" 
 
-			// 		if (st->total > 0) // Если вообще есть отчёты
-			// 		{
-			// 			if (st->ones > 0) // Если вообще есть единицы
-			// 			{
-			// 				// Если единиц больше или равно половине
-			// 				if (st->ones >= (st->total >> 1))
-			// 				{
-			// 					newState = 1;
-			// 				}
-			// 			}
-			// 			else	
-			// 				newState = 0;
-			// 		}
-			// 	}
-			// }
-			// else	// Таймер не активен
-			// {
-			// 	newState = st->ones;
-			// }
+					if (st->total > 0) // Если вообще есть отчёты
+					{
+						if (st->ones > 0) // Если вообще есть единицы
+						{
+							// Если единиц больше или равно половине
+							if (st->ones >= (st->total >> 1))
+							{
+								newState = 1;
+							}
+						}
+						else	
+							newState = 0;
+					}
+				}
+			}
+			else	// Таймер не активен
+			{
+				newState = st->ones;
+			}
 
-			// if (newState >= 0)	// Если было изменение состояния кнопки
-			// {
-			// 	button_state = (c.button_inverse ? ~newState : newState) & 1;
+			if (newState >= 0)	// Если было изменение состояния кнопки
+			{
+				button_state = (c->button_inverse ? ~newState : newState) & 1;
 
-			// 	st->ones 	= 0;
-			// 	st->total 	= 0;
-			// }
+				st->ones 	= 0;
+				st->total 	= 0;
+			}
 		}
     }
 

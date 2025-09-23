@@ -14,6 +14,7 @@
 
 #include "onewire_bus.h"
 #include "ds18b20.h"
+#include <mbdebug.h>
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -61,7 +62,7 @@ void ds18b20_task(void* arg) {
         char tmpString[strlen("DS18B20 not found, slot[0]") + 3];
         sprintf(tmpString, "DS18B20 not found, slot[%d]", slot_num);
         ESP_LOGE(TAG, "%s", tmpString);
-        mblog(0, tmpString);
+        mblog(E, tmpString);
         vTaskDelete(NULL);
     }
 

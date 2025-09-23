@@ -1,5 +1,6 @@
 
 
+SET(LOCAL_MF "")
 
 foreach(SOURCE_FILE ${MODULE_FILES})
         get_filename_component(FILE_NAME "${SOURCE_FILE}" NAME_WE)
@@ -13,4 +14,9 @@ foreach(SOURCE_FILE ${MODULE_FILES})
         )
         # Add the generated file to a list for later use in target
         list(APPEND GENERATED_FILES "${GENERATED_OUTPUT_FILE}")
+        get_filename_component(FILE_BASENAME ${SOURCE_FILE} NAME_WE)
+        string(APPEND LOCAL_MF "MOD(${FILE_BASENAME}),")
 endforeach()
+
+
+SET(MODULE_FUNCTIONS  "${MODULE_FUNCTIONS} ${LOCAL_MF}" CACHE INTERNAL "MODULE_FUNCTIONS")

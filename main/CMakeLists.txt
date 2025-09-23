@@ -1,4 +1,4 @@
-set(COMPONENT_SRCS "usb_descriptors.c" "msc_disk.c"  "sd_card.c" "main.c" "freertos_hook.c" "manifest.c" "mblog.c")
+set(COMPONENT_SRCS "usb_descriptors.c" "msc_disk.c"  "sd_card.c" "main.c" "freertos_hook.c" "mblog.c")
 set(COMPONENT_ADD_INCLUDEDIRS .)
 
 
@@ -7,3 +7,6 @@ set(COMPONENT_ADD_INCLUDEDIRS .)
 INCLUDE(${CMAKE_CURRENT_LIST_DIR}/../components/tusb/CMakeLists_flags.txt)
 
 register_component()
+
+
+SET_SOURCE_FILES_PROPERTIES(manifest.c PROPERTIES COMPILE_FLAGS -DMODULE_FUNCTIONS="${MODULE_FUNCTIONS}" )

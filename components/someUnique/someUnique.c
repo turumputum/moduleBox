@@ -19,6 +19,7 @@
 #include "reporter.h"
 #include "stateConfig.h"
 #include "me_slot_config.h"
+#include <mbdebug.h>
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -94,7 +95,7 @@ void buttonMatrix_task(void* arg) {
                 char errorString[50];
                 sprintf(errorString,  "buttonMatrix_%d wrong slots config", slot_num);
                 ESP_LOGE(TAG, "%s", errorString);
-                mblog(0, errorString);
+                mblog(E, errorString);
                 vTaskDelete(NULL);
             }
         }

@@ -17,6 +17,7 @@
 #include "stateConfig.h"
 #include "me_slot_config.h"
 #include "reporter.h"
+#include <mbdebug.h>
 
 #include <generated_files/gen_analog.h>
 
@@ -140,7 +141,7 @@ void analog_task(void *arg)
         char errorString[300];
         sprintf(errorString, "no ADC on SLOT_1, use another slot");
         ESP_LOGE(TAG, "%s", errorString);
-        mblog(0, errorString);
+        mblog(E, errorString);
         vTaskDelay(200);
         vTaskDelete(NULL);
     }

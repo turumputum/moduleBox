@@ -13,6 +13,14 @@
 #include "freertos/portmacro.h"
 
 #include "reporter.h"
+#include <axstring.h>
+#include <string.h>
+
+// ---------------------------------------------------------------------------
+// ------------------------------- DEFINITIONS -------------------------------
+// -----|-------------------|-------------------------------------------------
+
+#define PREFIX              (*p->topic ? p->topic : "")
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
@@ -68,6 +76,10 @@ int stdreport_register(RPTT               output_type,
             {
                 p->slot_num     = slot_num;
                 p->outType      = output_type;
+                *p->topic       = 0;
+
+                if (defaultTopic && *defaultTopic)
+                    snprintf(p->topic, sizeof(p->topic) - 1, "/%s:", defaultTopic);
 
                 switch (p->outType)
                 {
@@ -105,11 +117,10 @@ static void _render_ratio(PSTDREPORTRATIO r, char * tmpString, float f_res)
     f_res                       -= r->min;
     f_res                        = (float)f_res / (r->max - r->min);
 
-    sprintf(tmpString,"%f", f_res);
+    sprintf(tmpString,"%s%f", *r->rpt.topic ? r->rpt.topic : "", f_res);
 }
-
 void stdreport_i(int                reportRegId,
-                   int                value)
+                 int                value)
 {
     PSTDREPORT      p           = reports[reportRegId];
 	char            tmpString   [255];
@@ -123,11 +134,11 @@ void stdreport_i(int                reportRegId,
                 break;
 
             case RPTT_float:
-                sprintf(tmpString, "%d.0", value);
+                sprintf(tmpString, "%s%d.0", PREFIX, value);
                 break;
 
             default:
-                sprintf(tmpString, "%d", value);
+                sprintf(tmpString, "%s%d", PREFIX, value);
                 break;
         }
 
@@ -151,11 +162,33 @@ void stdreport_f(int                reportRegId,
                 break;
 
             case RPTT_int:
-                sprintf(tmpString, "%d", (int)value);
+                sprintf(tmpString, "%s%d", PREFIX, (int)value);
                 break;
 
             default:
-                sprintf(tmpString, "%f", value);
+                sprintf(tmpString, "%s%f", PREFIX, value);
+                break;
+        }
+
+        report(tmpString, p->slot_num);
+    }
+}
+void stdreport_s(int                reportRegId,
+                 char *             value)
+{
+    PSTDREPORT      p           = reports[reportRegId];
+	char            tmpString   [255];
+
+    if ((reportRegId < MAX_NUM_OF_STDREPORTS) && p)
+    {
+        switch (p->outType)
+        {
+            case RPTT_ratio:
+                _render_ratio((PSTDREPORTRATIO)p, tmpString, atof(value));
+                break;
+
+            default:
+                sprintf(tmpString, "%s%s", PREFIX, value);
                 break;
         }
 

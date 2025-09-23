@@ -82,7 +82,7 @@
 #include "someUnique.h"
 
 #include <manifest.h>
-
+#include <mbdebug.h>
 
 
 
@@ -350,7 +350,7 @@ extern int network_get_active_interfaces();
 	if (errorString[0])
 	{
 		ESP_LOGE(TAG, "%s", errorString);
-		mblog(0, errorString);
+		mblog(E, errorString);
 	}
 
 	return result;
@@ -382,7 +382,7 @@ void makeStatusReport(bool spread)
 		}
 	}
 	
-	mblog(0, str);
+	mblog(I, str);
 }
 void app_main(void)	
 {
@@ -400,6 +400,8 @@ void app_main(void)
 
 	// initLeds();
 	board_init(); // USB hardware
+	
+	mblog_init();
 
 	nvs_init();
 
@@ -432,6 +434,7 @@ void app_main(void)
 	}
 
 	load_Default_Config();
+
 	scanFileSystem();
 
 	saveManifesto();
@@ -442,8 +445,10 @@ void app_main(void)
 	if (me_state.config_init_res != ESP_OK)	{
 		char tmpString[40];
 		sprintf(tmpString, "Load config FAIL in line: %d", me_state.config_init_res);
-		mblog(0, tmpString);
+		mblog(E, tmpString);
 	}
+
+	mblog(I, "Log session begin");
 	
 	set_usb_debug();
 
@@ -458,7 +463,7 @@ void app_main(void)
 		me_state.content_search_res = loadContent();
 		if (me_state.content_search_res != ESP_OK)	{
 			ESP_LOGD(TAG, "Load Content FAIL");
-			mblog(0, "Load content FAIL");
+			mblog(E, "Load content FAIL");
 		}
 	}else{
 		me_state.content_search_res = ESP_FAIL;
@@ -507,7 +512,7 @@ void app_main(void)
 		{
 			if (!freeHeapSizeFLAG)
 			{
-				mblog(0, "Free heap size is LOW - %d bytes", freeHeapSize);
+				mblog(I, "Free heap size is LOW - %d bytes", freeHeapSize);
 				freeHeapSizeFLAG = 1;
 			}
 		}
