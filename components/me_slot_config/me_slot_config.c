@@ -109,8 +109,8 @@ int init_slots(void){
 			start_in_3ch_task(i, 1);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);			// OK
-		}else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
-			start_encoderPPM_task(i);	// OK
+		// }else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
+		// 	start_encoderPPM_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "encoderInc", 10)){
 			start_encoder_inc_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "benewakeTOF", 12)){

@@ -70,6 +70,8 @@ typedef struct __tag_AUDIOCONFIG
 	uint8_t 				play_to_end;
 
     STDCOMMANDS             cmds;
+
+	int						ETreport;
 } AUDIOCONFIG, * PAUDIOCONFIG; 
 
 typedef enum
@@ -268,6 +270,10 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
        
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
+
+	/* Рапортует номер трека при завершении
+	*/
+	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
 
 }
 
@@ -498,8 +504,9 @@ void audio_task(void *arg) {
 					//ESP_LOGD(TAG, "endOfTrack EVENT !!!!!!!!!!!!!!!!!");
 					vTaskDelay(pdMS_TO_TICKS(10));
 					memset(reportStr, 0, strlen(reportStr));
-					sprintf(reportStr,"/endOfTrack:%d", me_state.currentTrack);
-					report(reportStr, slot_num);
+					sprintf(reportStr,"%d", me_state.currentTrack);
+					//report(reportStr, slot_num);
+					stdreport_s(c->ETreport, reportStr);
 				}
 			}
 			if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) 
