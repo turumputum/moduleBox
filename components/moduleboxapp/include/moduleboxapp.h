@@ -6,30 +6,23 @@
 // ***************************************************************************
 
 
-#ifndef __MBDEBUG_H__
-#define __MBDEBUG_H__
-
-#include <esp_log.h>
+#ifndef __MODULEBOXAPP_H__
+#define __MODULEBOXAPP_H__
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
-#define E           ESP_LOG_ERROR
-#define W           ESP_LOG_WARN
-#define I           ESP_LOG_INFO
-#define D           ESP_LOG_DEBUG
-#define V           ESP_LOG_VERBOSE
-
-// #define JTAG_USED
-
+#define MODULEBOXAPP_TOPIC      "moduleBoxApp:"
+#define MODULEBOXAPP_TOPIC_SZ   13
 
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-void mblog_init();
-void mblog(esp_log_level_t priority, const char *msg,...);
-char * _getAvailableBuff(int * avail);
+void                moduleboxapp_init           ();
 
-#endif // #define __MBDEBUG_H__
+char *              moduleboxapp_command        (char *             command, 
+                                                 int                count);
+
+#endif // #define __MODULEBOXAPP_H__

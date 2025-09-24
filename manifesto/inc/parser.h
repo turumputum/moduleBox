@@ -109,6 +109,7 @@ public:
         Common          c;
         RPTT            type;
         char            unit                    [ 32 ];
+        char            topic                   [ 64 ];
 
         char *          paramsRaw;
 

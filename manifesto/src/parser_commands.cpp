@@ -82,7 +82,7 @@ bool Parser::extractCmdParams(Command &     cmd)
 
         switch (idx)
         {
-            case 0: // pinter to COMMAND structure
+            case 0: // pointer to COMMAND structure
                 break;
 
             case 1: // local int ID of command
@@ -305,8 +305,8 @@ bool Parser::generateManifestoOfCommands()
                 "\t\t\t{\n"
                 "\t\t\t\t\"command\": \"%s\",\n"
                 "\t\t\t\t\"description\": \"%s\",\n"
-                "\t\t\t\t\"parametersType: \"%s\",\n"
-                "\t\t\t\t\"parameters: [ ",
+                "\t\t\t\t\"parametersType\": \"%s\",\n"
+                "\t\t\t\t\"parameters\": [ ",
                 f->c.name,
                 f->c.descRaw,
                 (f->type == PARAMT_enum) ? "enum" : "types");

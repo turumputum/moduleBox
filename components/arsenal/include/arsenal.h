@@ -26,6 +26,8 @@
 
 #define AXPACKED(a) a __attribute__((aligned(1),packed))
 
+#define SAFE_FREE(a)            if ((a) != nil) { free(a); (a) = nil; }
+
 typedef char                    I8;
 typedef unsigned short          U16;
 typedef long long               I64;
@@ -43,8 +45,10 @@ typedef long long *             PI64;
 typedef char *                  PSTR;
 typedef const char *            PCSTR;
 
+typedef char                    CHAR;
 typedef unsigned long           ULONG;
 typedef long                    LONG;
+typedef unsigned int *          PUINT;
 
 typedef void *                  PVOID;
 
@@ -58,6 +62,7 @@ typedef int                     BOOL;
 #define ENTER(a)                
 #define QUIT                                
 #define RETURN(a)               return (a)
+
 
 
 #endif // #ifndef __LITE_ARSENAL_H__
