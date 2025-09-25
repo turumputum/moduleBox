@@ -16,6 +16,8 @@
 
 void Parser::resetOptions(bool first)
 {
+    resetCommon(first);
+
     for (int i = 0; i < int(sizeof(opts) / sizeof(Option)); i++)
     {
         *opts[i].c.funcName = 0;

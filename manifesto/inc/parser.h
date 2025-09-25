@@ -225,6 +225,8 @@ private:
 
         void            cleanValue              (char *         value);
 
+        void            resetCommon             (bool           first);
+
         void            resetOptions            (bool           first);
 
         void            resetReports            (bool           first);

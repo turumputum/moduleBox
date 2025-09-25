@@ -16,6 +16,8 @@
 
 void Parser::resetCommands(bool first)
 {
+    resetCommon(first);
+
     for (int i = 0; i < int(sizeof(cmds) / sizeof(Command)); i++)
     {
         *cmds[i].c.funcName = 0;

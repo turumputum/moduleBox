@@ -22,6 +22,14 @@ const char * CONFIGURE_BEGIN = "void configure_";
 // -------------------------------- OptionS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
+void Parser::resetCommon(bool           first)
+{
+    if (!first)
+    {
+        funcSearchEnd   = mod.begin;
+    }
+}
+
 char * Parser::findNextFunction(Common &        c,
                                 const char *    part1,
                                 const char *    part2)

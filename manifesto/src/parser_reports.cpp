@@ -16,6 +16,8 @@
 
 void Parser::resetReports(bool first)
 {
+    resetCommon(first);
+    
     for (int i = 0; i < int(sizeof(reps) / sizeof(Report)); i++)
     {
         *reps[i].c.funcName = 0;
