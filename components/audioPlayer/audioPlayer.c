@@ -255,6 +255,7 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 	*/
 	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
 
+
     /* Проиграть трек
        Опционально - номер трека
     */
@@ -275,7 +276,6 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
 
-	
 
 }
 
