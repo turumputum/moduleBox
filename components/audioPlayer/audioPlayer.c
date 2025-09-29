@@ -172,11 +172,6 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
-    /* Количенство светодиодов
-    */
-    // c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
-    // ESP_LOGD(TAG, "Set num_of_led:%d for slot:%d",c->num_of_led, slot_num);
-
     /* Уровень громкости
     */
 	c->volume = get_option_int_val(slot_num, "volume", "", 70, 1, 4096);

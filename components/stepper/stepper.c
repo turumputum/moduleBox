@@ -21,6 +21,12 @@
 
 #include "asyncStepper.h"
 
+#include <stdcommand.h>
+#include <stdreport.h>
+
+#include <manifest.h>
+#include <mbdebug.h>
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
@@ -187,6 +193,94 @@ void start_stepperSpeed_task(int slot_num){
 
 
 //---------------------------stepper------------------------------
+#define NOT_HOMED 0
+#define IDLE 1
+#define RUN 2
+
+#define CW 1
+#define CCW -1
+
+
+typedef struct __tag_STEPPERCONFIG{
+	uint8_t 				state;
+	int 				    dir;
+	uint32_t 				accel;
+	uint32_t 				maxSpeed;
+	uint16_t                refreshPeriod;
+	int					    homingDir;
+    int                     homingSensorState;
+    int32_t                 currentPos;
+    int32_t                 targetPos;
+	uint32_t				homingSpeed;
+	int32_t				    maxVal;
+    int32_t                 minVal;
+	int 					speedReportFlag;
+	int 					posReportFlag;
+    int 					circularCounterFlag;
+    int                     goHomeOnStart;
+
+    STDCOMMANDS             cmds;
+
+	int 					posReport;
+	int						speedReport;
+	int 					homeReport;
+} STEPPERCONFIG, * PSTEPPERCONFIG; 
+
+typedef enum
+{
+	stepCMD_goHome = 0,
+	stepCMD_moveTo,
+	stepCMD_runSpeed,
+    stepCMD_setMaxSpeed,
+    stepCMD_setAccel,
+    stepCMD_stop,
+	stepCMD_break,
+    stepCMD_homingSensor
+
+} MYCMD;
+
+/*
+    Модуль управления шаговым двигателем сигналами step/dir
+*/
+void configure_stepper(PSTEPPERCONFIG c, int slot_num){
+    stdcommand_init(&c->cmds, slot_num);
+
+    c->dir = CW;
+    /* Флаг инвертирует направление работы двигателя
+	*/
+	c->dir = get_option_flag_val(slot_num, "dirInverse") ? CCW : CW;
+	ESP_LOGD(TAG, "[stepper_%d] dir:%s", slot_num, (c->dir == CW)? "CW" : "CCW");
+
+    /* Флаг включает рапорты по положению
+	*/
+	c->posReportFlag = get_option_flag_val(slot_num, "posReportFlag");
+	if(c->posReportFlag){
+        ESP_LOGD(TAG, "[stepper_%d] posReport enable", slot_num);
+    }
+
+    /* Флаг включает рапорты по скорости
+	*/
+	c->speedReportFlag = get_option_flag_val(slot_num, "speedReportFlag");
+	if(c->speedReportFlag){
+        ESP_LOGD(TAG, "[stepper_%d] speedReport enable", slot_num);
+    }
+
+    /* задает направление поска домашней позиции
+        - по умочанию равен 0, поиск домашне позиции отключен
+    */
+    if ((c->homingDir = get_option_enum_val(slot_num, "CW", "CCW", NULL)) < 0){
+        ESP_LOGD(TAG, "[stepper_%d] homing procedure disabled", slot_num);
+        c->homingDir = 0;
+    }else{
+        if(c->homingDir==0){
+            c->homingDir = CW;
+        }else{
+            c->homingDir = CCW;
+        }
+        ESP_LOGD(TAG, "[stepper_%d] homing dir:%s", slot_num, (c->homingDir==CW) ? "CW" : "CCW");
+    }
+
+}
 
 
 void getHomingSenesorState(int slot_num, int* state){
