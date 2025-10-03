@@ -116,11 +116,11 @@ int saveManifesto()
             {
                 if ((tmp = (*f)()) != NULL)
                 {
-                    fprintf(manFile, "%s", tmp);
+                    fprintf(manFile, "%s%s", 0 == i ? "\n" : ",\n", tmp);
                 }
             }
 
-            fprintf(manFile, "%s", "]\n");
+            fprintf(manFile, "%s", "\n]\n");
 
             ESP_LOGI(TAG, "manifest saved");
 

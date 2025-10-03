@@ -98,7 +98,7 @@ void configure_analog(PANALOG_CONFIG	ch, int slot_num)
 	}
     
     if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-		/* Фильтрация "дребезга" - определяет порог срабатывания */
+		/* Фильтрация дребезга - определяет порог срабатывания */
         ch->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d", ch->dead_band, slot_num);
 	}

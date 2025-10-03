@@ -367,10 +367,13 @@ bool Parser::generateManifestoOfCommands()
             }
         }
 
-        manifesto.append("]\n\t\t\t},\n");
+        if (i < (numOfCmds - 1))
+            manifesto.append("]\n\t\t\t},\n");
+        else
+            manifesto.append("]\n\t\t\t}\n");
     }
 
-    snprintf(tmp, sizeof(tmp), "\t\t],\n");
+    snprintf(tmp, sizeof(tmp), "\t\t]\n");
 
     manifesto.append(tmp);
 

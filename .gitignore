@@ -15,3 +15,4 @@ build
 Makefile.env
 script.env
 managed_components/
+Manifest.json

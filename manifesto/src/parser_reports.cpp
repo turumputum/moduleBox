@@ -260,8 +260,8 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"int\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-			"\t\t\t\t\"topic\": \"%s\",\n"
-                        "\t\t\t},\n",
+			"\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
                         f->unit,
                         f->topic);
@@ -273,8 +273,8 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"float\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t\t\"topic\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
                         f->unit,
                         f->topic);
@@ -286,8 +286,8 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"string\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t\t\"topic\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
                         f->unit,
                         f->topic);
@@ -299,8 +299,8 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"ratio\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t\t\"topic\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
                         f->unit,
                         f->topic);
@@ -311,6 +311,12 @@ bool Parser::generateManifestoOfReports()
         }
 
         manifesto.append(tmp);
+
+        if (i < (numOfReps - 1))
+            manifesto.append(",\n");
+        else
+            manifesto.append("\n");
+
     }
 
     snprintf(tmp, sizeof(tmp), "\t\t],\n");

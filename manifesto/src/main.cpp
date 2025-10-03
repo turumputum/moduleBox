@@ -215,11 +215,15 @@ int main(int argc, char * argv[])
                         
                         if ((manifesto = parser.parse(script)) != NULL)
                         {
-                            //fprintf(fout, "%s", manifesto);
-                            //printf("%s", manifesto);
-                            //result = RESULT_OK;
+                            if (argc > 3)
+                            {
+                               fprintf(fout, "[\n%s\n]\n", manifesto);
+                               //printf("%s", manifesto);
 
-                            result = string_to_header(fout, manifesto);
+                               result = RESULT_OK;
+                            }
+                            else
+                                result = string_to_header(fout, manifesto);
                         }
                     }
                     else

@@ -216,7 +216,7 @@ private:
         bool            parseOptiosParams       (Option &       opt,
                                                  char *         on);
 
-        bool            generateManifestoForModule();
+        bool            generateManifestoForModule(bool first);
 
         bool            generateManifestoOfOptions();
 
