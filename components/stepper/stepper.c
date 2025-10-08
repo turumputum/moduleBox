@@ -75,7 +75,8 @@ typedef struct __tag_STEPPERCONFIG{
 typedef enum
 {
 	stepCMD_goHome = 0,
-	stepCMD_moveTo,
+	stepCMD_moveToAbs,
+    stepCMD_moveToInc,
 	stepCMD_runSpeed,
     stepCMD_setMaxSpeed,
     stepCMD_setAccel,
@@ -125,11 +126,12 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
         ESP_LOGD(TAG, "[stepper_%d] speedReport enable", slot_num);
     }
 
+
+    c->state=NOT_HOMED;
+    c->homingDir = 0;
     /* задает направление поска домашней позиции
         - по умочанию равен 0, поиск домашне позиции отключен
     */
-    c->state=NOT_HOMED;
-    c->homingDir = 0;
     if ((c->homingDir = get_option_enum_val(slot_num, "homingDir","", "CW", "CCW", NULL)) < 0){
         
     }
@@ -216,9 +218,13 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     */
     stdcommand_register(&c->cmds, stepCMD_goHome, "goHome", PARAMT_none);
 
-    /* Команда включает, режим управления по положению и устанавливает целевое значение
+    /* Команда включает, режим управления по положению и устанавливает целевое значение в абсолютном режиме
     */
-    stdcommand_register(&c->cmds, stepCMD_moveTo, "moveTo", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_moveToAbs, "moveToAbs", PARAMT_int);
+
+    /* Команда включает, режим управления по положению и устанавливает целевое значение в виде приращения
+    */
+    stdcommand_register(&c->cmds, stepCMD_moveToInc, "moveToInc", PARAMT_int);
 
     /* Команда включает, режим управления по скорости и устанавливает максимальную скорость движения мотора
     */
@@ -263,46 +269,6 @@ void getHomingSenesorState(int slot_num, int* state){
         }
     }
 }
-
-// void homingProcedure(){
-//     //-----------homing--------------
-//     if(homingDir!=0){
-//         stepper.maxSpeed = homingSpeed;
-//         int sensorState = 0;
-//         vTaskDelay(pdMS_TO_TICKS(2000));
-//         getHomingSenesorState(slot_num, &sensorState);
-//         if(sensorState==1){
-//             while(sensorState!=0){
-//                 //---sensor is active run away---
-//                 ESP_LOGD(TAG, "Homing sensor active run away");
-//                 stepper_moveTo(&stepper, stepper.currentPos + 100*homingDir*(-1));
-//                 while(stepper.currentPos!=stepper.targetPos){
-//                     stepper_speedUpdate(&stepper, refreshPeriod);
-//                     // pcnt_unit_get_count(stepper.pcntUnit, &stepper.currentPos);
-//                     // ESP_LOGD(TAG, "Wait move done currentPos:%ld targetPos:%ld", stepper.currentPos, stepper.targetPos);
-//                     getHomingSenesorState(slot_num, &sensorState);
-//                     vTaskDelayUntil(&lastWakeTime, refreshPeriod);
-//                 }
-//                 ESP_LOGD(TAG, "moveEnd sensorIs:%d", sensorState);
-//             }
-//             stepper_setZero(&stepper);
-//             stepper_stop(&stepper);
-//         }
-//         ESP_LOGD(TAG, "Lets search sensor");
-//         stepper_moveTo(&stepper, INT32_MAX*homingDir);
-//         while(sensorState!=1){
-//             stepper_speedUpdate(&stepper, refreshPeriod);
-//             getHomingSenesorState(slot_num, &sensorState);
-//             //ESP_LOGD(TAG, "sensorState:%d", sensorState);
-//             vTaskDelayUntil(&lastWakeTime, refreshPeriod);
-//         }
-//         stepper_setZero(&stepper);
-//         stepper_stop(&stepper);
-//         report("/homeFound",slot_num);
-//         stepper.maxSpeed=maxSpeed;
-//         ESP_LOGD(TAG, "----------------Homing done-----------------");
-//     }
-// }
 
 #define HOMING_WAITING 1
 #define HOMING_TO_SENSOR 2 
@@ -349,7 +315,8 @@ void stepper_task(void *arg){
     
 
     TickType_t lastWakeTime = xTaskGetTickCount();
-   
+    int32_t target=0;
+
     while(1){
 
         int cmd = stdcommand_receive(&c->cmds, &params, 5);
@@ -364,28 +331,37 @@ void stepper_task(void *arg){
                 ESP_LOGD(TAG, "[stepper_%d] lets go home", slot_num);
                 break;
 
-            case stepCMD_moveTo:
-                if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
-                    break; 
-                }
+            case stepCMD_moveToInc:
+                // if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
+                //     break; 
+                // }
                 c->state = RUN_POS;
                 stepper.runSpeedFlag = 0;
-                int32_t target=0;
-                if(cmd_arg[0]==43){
-                    target = stepper.currentPos + atoi(cmd_arg+1);
-                }else if(cmd_arg[0]==45){
+                target=0;
+                if(cmd_arg[0]==45){
                     target = stepper.currentPos - atoi(cmd_arg+1);
                 }else{
-                    target = atoi(cmd_arg); 
+                    target = stepper.currentPos + atoi(cmd_arg); 
                 }
                 stepper_moveTo(&stepper, target);
                 ESP_LOGD(TAG, "[stepper_%d] moveTo:%ld", slot_num, target);
                 break;
 
+            case stepCMD_moveToAbs:
+                // if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
+                //     break; 
+                // }
+                c->state = RUN_POS;
+                stepper.runSpeedFlag = 0;
+                target=atoi(cmd_arg);
+                stepper_moveTo(&stepper, target);
+                ESP_LOGD(TAG, "[stepper_%d] moveTo:%ld", slot_num, target);
+                break;
+
             case stepCMD_runSpeed:
-                if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
-                    break; 
-                }
+                // if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
+                //     break; 
+                // }
                 c->state = RUN_SPEED;
                 stepper.runSpeedFlag = 1;
                 stepper.maxSpeed = atoi(cmd_arg);
@@ -406,6 +382,9 @@ void stepper_task(void *arg){
             case stepCMD_stop:
                 stepper_stop(&stepper);
                 ESP_LOGD(TAG, "[stepper_%d] STOP", slot_num);
+                if(c->state==GOING_HOME){
+                    c->state=NOT_HOMED;
+                }
                 break;
 
             case stepCMD_break:
@@ -421,20 +400,18 @@ void stepper_task(void *arg){
 
         if(c->state==GOING_HOME){
             if(homingProcedureState==HOMING_WAITING){
-                if(c->homingSensorState!=-1){
-                    stdreport_s(c->homeReport, "homing");
-                    stepper.maxSpeed = c->homingSpeed;
-                    stepper.accel = stepper.maxSpeed/4;
+                stdreport_s(c->homeReport, "homing");
+                stepper.maxSpeed = c->homingSpeed;
+                stepper.accel = stepper.maxSpeed*2;
 
-                    if(c->homingSensorState==1){
-                        homingProcedureState = HOMING_OUT_SENSOR;
-                        stepper_moveTo(&stepper,(c->homingDir) ? INT32_MIN : INT32_MAX);
-                        ESP_LOGD(TAG, "[stepper_%d] homing out of sensor", slot_num);
-                    }else{
-                        homingProcedureState = HOMING_TO_SENSOR; 
-                        stepper_moveTo(&stepper, (c->homingDir) ? INT32_MAX : INT32_MIN);
-                        ESP_LOGD(TAG, "[stepper_%d] homing to sensor", slot_num);
-                    }
+                if(c->homingSensorState==1){
+                    homingProcedureState = HOMING_OUT_SENSOR;
+                    stepper_moveTo(&stepper,(c->homingDir) ? INT32_MIN : INT32_MAX);
+                    ESP_LOGD(TAG, "[stepper_%d] homing out of sensor", slot_num);
+                }else{
+                    homingProcedureState = HOMING_TO_SENSOR; 
+                    stepper_moveTo(&stepper, (c->homingDir) ? INT32_MAX : INT32_MIN);
+                    ESP_LOGD(TAG, "[stepper_%d] homing to sensor", slot_num);
                 }
             }else if(homingProcedureState == HOMING_OUT_SENSOR){
                 if(c->homingSensorState==0){
@@ -456,42 +433,6 @@ void stepper_task(void *arg){
             }
         }
 
-        // command_message_t msg;
-        // if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-        //     //ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, msg.slot_num);
-        //     char* payload = NULL;
-        //     char* cmd = msg.str;
-        //     if(strstr(cmd, ":")!=NULL){
-        //         cmd = strtok_r(msg.str, ":", &payload);
-        //         ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-        //         cmd = cmd + strlen(me_state.action_topic_list[slot_num]);
-        //         if(strstr(cmd, "moveTo")!=NULL){
-        //             int32_t val = atoi(payload);
-        //             stepper_moveTo(&stepper, val);
-        //             stepper.runSpeedFlag = 0;
-        //         }else if(strstr(cmd, "runSpeed")!=NULL){
-        //             stepper.maxSpeed = atoi(payload);
-        //             stepper_moveTo(&stepper, stepper.maxSpeed>0?(INT32_MAX-1):(INT32_MIN+1));
-        //             stepper.runSpeedFlag = 1;
-        //             ESP_LOGD(TAG, "Run speed:%ld", stepper.maxSpeed);
-        //         }else if(strstr(cmd, "setAccel")!=NULL){
-        //             stepper.accel = atoi(payload);
-        //             ESP_LOGD(TAG, "Set accel:%ld", stepper.accel);
-        //         }else if(strstr(cmd, "setMaxSpeed")!=NULL){
-        //             stepper.maxSpeed = atoi(payload);
-        //             ESP_LOGD(TAG, "Set maxSpeed:%ld", stepper.maxSpeed);
-        //         } 
-        //     }else{
-        //         ESP_LOGD(TAG, "Input command %s", cmd);
-        //     }
-        //     if(strstr(cmd, "stop")!=NULL){
-        //         stepper_stop(&stepper);
-        //     }else if(strstr(cmd, "break")!=NULL){
-        //         stepper_break(&stepper);
-        //     }
-            
-            
-        // }
         stepper_speedUpdate(&stepper, c->refreshPeriod);
         stepper_getCurrentPos(&stepper);
         //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);

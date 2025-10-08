@@ -56,7 +56,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_CONNECTED");
 		me_state.MQTT_init_res = ESP_OK;
-		ESP_LOGD(TAG, "MQTT_CONNEKT_OK");
 
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
 			if(memcmp(me_state.action_topic_list[i],"none", 4)){
@@ -66,6 +65,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 				mqtt_sub(tmpS);
 			}	
 		}
+
+		char tmpSB[255];
+		sprintf(tmpSB, "%s/system/#", me_config.deviceName);
+		mqtt_sub(tmpSB);
 
 		sprintf(willTopic, "clients/%s/state", me_config.deviceName);
 		mqtt_pub(willTopic, "1");
@@ -132,7 +135,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_DATA:
 		//ESP_LOGI(TAG, "MQTT_EVENT_DATA");
 		char strT[255];
-		sprintf(strT, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
+		if(event->data_len > 0){
+			sprintf(strT, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
+		}else{
+			sprintf(strT, "%.*s", event->topic_len, event->topic);
+		}
+		//sprintf(strT, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
 		execute(strT);
 
 		break;

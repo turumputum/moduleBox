@@ -193,7 +193,7 @@ void exec_led(int slot_num, int payload) {
 }
 
 void execute(char *action) {
-	//ESP_LOGD(TAG, "Execute action:%s", action);
+	ESP_LOGD(TAG, "Execute action:%s", action);
 	exec_message_t msg;
 	strcpy(msg.str, action);
 
@@ -219,7 +219,7 @@ void executer_task(void * param){
 				ESP_LOGD(TAG, "Get state");
 				reportState();
 				sum++;
-			}else if(strstr(msg.str, "restart")!=NULL){
+			}else if(strstr(msg.str, "system/restart")!=NULL){
 				ESP_LOGD(TAG, "restart");
 				esp_restart();
 				sum++;
