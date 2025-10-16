@@ -174,6 +174,11 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 		*/
 		ch->event_filter = get_option_flag_val(slot_num, "eventfilter");
 
+		/* Период обновления
+		*/
+		ch->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096));
+		ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",ch->refreshPeriod, slot_num);
+
 		if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) 
 		{
 			/* Топик для событий кнопки
@@ -395,19 +400,20 @@ void button_task(void *arg)
 	// 	esp_timer_create(&delay_timer_args, &debounce_gap_timer);
 	// 	esp_timer_start_periodic(debounce_gap_timer, c.debounce_gap*1000);
 	// }
-	
+	c->longPressSignaled = false;
 	waitForWorkPermit(slot_num);
+	TickType_t lastWakeTime = xTaskGetTickCount();
     //while (workIsPermitted(slot_num))
 	while (true)
 	{
 		if (c->longPressTime) // Если активен режим длинного нажатия
 		{
+			//ESP_LOGD(TAG, "---Long press sig:%d", c->longPressSignaled);
 			if (button_state != prev_state) // Если было изменение кнопки
 			{
 				if (button_state)
 				{
 					c->pressTimeBegin = xTaskGetTickCount();
-
 					// Посылаем лишний короткий при нажатии без фильтра
 					if (!c->event_filter) 
 						_buttonStateChanged(c, BSTYPE_short, 1, slot_num);
@@ -463,7 +469,7 @@ void button_task(void *arg)
 
 		// Получаем сигнал от GPIO или таймера
 		uint8_t msg;
-		if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, portMAX_DELAY) == pdPASS)
+		if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, c->refreshPeriod) == pdPASS)
 		{
 			//debounceStat_t * st = &me_state.counters[slot_num];
 			//ESP_LOGD(TAG, "Button task is working! slotNum:%d", slot_num);
@@ -517,6 +523,8 @@ void button_task(void *arg)
 			// 	st->total 	= 0;
 			// }
 		}
+		//ESP_LOGD(TAG,"---ebola:%d", c->refreshPeriod);
+		//vTaskDelayUntil(&lastWakeTime, c->refreshPeriod);
     }
 
 }
