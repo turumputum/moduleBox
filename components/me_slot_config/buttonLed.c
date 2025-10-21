@@ -178,7 +178,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 		{
 			/* Топик для событий кнопки
 			*/
-			char * custom_topic = get_option_string_val(slot_num, "buttonTopic");
+			char * custom_topic = get_option_string_val(slot_num, "buttonTopic", "/button_0");
 			me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 			ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 		}else{
@@ -231,7 +231,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 			char* custom_topic=NULL;
 			/* Топик для режима свечения
 			*/
-			custom_topic = get_option_string_val(slot_num, "ledTopic");
+			custom_topic = get_option_string_val(slot_num, "ledTopic", "/led_0");
 			me_state.action_topic_list[slot_num]=strdup(custom_topic);
 			ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
 		}else{

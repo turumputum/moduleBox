@@ -276,7 +276,7 @@ float get_option_float_val(int slot_num, char* string, float default_value)
 
 	return result;
 }
-char* get_option_string_val(int slot_num, char* option, ...){
+char* get_option_string_val(int slot_num, char* option, char* default_value){
 	char* resault;
 	char *options_copy = strdup(me_config.slot_options[slot_num]);
 	char *ind_of_vol = strstr(options_copy, option);

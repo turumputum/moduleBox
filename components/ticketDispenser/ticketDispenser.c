@@ -106,7 +106,7 @@ void ticketDispenser_task(void *arg) {
     //---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/ticketDispenser_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);

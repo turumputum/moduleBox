@@ -304,7 +304,7 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 
 	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
 		/* Определяет топик для MQTT сообщений */
-		ch->custom_topic = get_option_string_val(slot_num,"topic");
+		ch->custom_topic = get_option_string_val(slot_num,"topic", "/adc_0");
 		ESP_LOGD(TAG, "S%d: Custom topic:%s", slot_num, ch->custom_topic);
 		ch->flag_custom_topic=1;
 	}

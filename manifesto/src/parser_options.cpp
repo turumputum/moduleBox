@@ -171,6 +171,10 @@ bool Parser::extractOptStringParam(Option &     opt,
         case 1:
             strcpy(opt.name, value);
             break;
+
+        case 2:
+            strcpy(opt.defaultValStr, value);
+            break;
         
         default:
             result = false;
@@ -464,10 +468,12 @@ bool Parser::generateManifestoOfOptions()
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
                         "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"string\"\n"
+                        "\t\t\t\t\"valueType\": \"string\",\n"
+                        "\t\t\t\t\"valueDefault\": \"%s\"\n"
                         "\t\t\t}",
                         f->name,
-                        f->c.descRaw);
+                        f->c.descRaw,
+                        f->defaultValStr);
                    
                 break;
         

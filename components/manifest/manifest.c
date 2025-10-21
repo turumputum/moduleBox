@@ -93,7 +93,15 @@ static const char * configDescription =
 "                \"mode\": \"empty\",\n"
 "                \"description\": \"Пустой слот\",\n"
 "                \"options\": []\n"
+"        },\n"
+"        {\n"
+"                \"mode\": \"SD_card\",\n"
+"                \"description\": \"Карта SD\",\n"
+"                \"options\": []\n"
 "        },";
+
+
+
 
 
 

@@ -149,7 +149,7 @@ void buttonMatrix_task(void* arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/buttonMatrix_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -384,7 +384,7 @@ void dialer_task(void* arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/dialer_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -529,7 +529,7 @@ void academKick_task(void* arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/kick_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -618,12 +618,12 @@ void volnaKolya_task(void* arg) {
     //---
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/volna_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/volna_")+3];
+		char t_str[strlen(me_config.deviceName)+strlen("/volna_0")+3];
 		sprintf(t_str, "%s/volna_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
@@ -758,7 +758,7 @@ void furbyEye_task(void* arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/eye_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
     }else{
