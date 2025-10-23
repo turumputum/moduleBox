@@ -16,6 +16,8 @@
 
 void Parser::resetReports(bool first)
 {
+    resetCommon(first);
+    
     for (int i = 0; i < int(sizeof(reps) / sizeof(Report)); i++)
     {
         *reps[i].c.funcName = 0;
@@ -23,6 +25,7 @@ void Parser::resetReports(bool first)
         reps[i].type = RPTT_unknown;
         *reps[i].c.name = 0;
         *reps[i].unit = 0;
+        *reps[i].topic = 0;
 
         if (!first)
         {
@@ -47,49 +50,38 @@ void Parser::resetReports(bool first)
     
     numOfReps = 0;
 }
-bool Parser::extractRepParam(Report &       rep,
-                             int            idx,
-                             char *         value)
-{
-    bool result = true;
-    //char * end_ptr;
+// bool Parser::extractRepParam(Report &       rep,
+//                              int            idx,
+//                              char *         value)
+// {
+//     bool result = true;
+//     //char * end_ptr;
 
-    switch (idx)
-    {
-        case 0:
-            // skip
-            break;
+//     switch (idx)
+//     {
+//         case 0: // RPTT_int
+//             // skip
+//             break;
 
-        case 1:
-            // skip
-            break;
+//         case 1: // slot_num
+//             // skip
+//             break;
         
-        case 2:
-            // skip
-            break;
+//         case 2: // unit
+//             strcpy(rep.unit, value);
+//             break;
         
-        case 3:
-            //opt.defaultVal = strtol(value, &end_ptr, 10);
-            //result = errno != EINVAL;
-            break;
+//         case 3: // topic
+//             strcpy(rep.topic, value);
+//             break;
         
-        case 4:
-            //opt.minVal = strtol(value, &end_ptr, 10);
-            //result = errno != EINVAL;
-            break;
+//         default:
+//             //result = false;
+//             break;
+//     }
 
-        case 5:
-            //opt.maxVal = strtol(value, &end_ptr, 10);
-            //result = errno != EINVAL;
-            break;
-
-        default:
-            //result = false;
-            break;
-    }
-
-    return result;
-}
+//     return result;
+// }
 bool Parser::extractRepParams(Report &     rep)
 {
     bool        result  = true;
@@ -141,6 +133,30 @@ bool Parser::extractRepParams(Report &     rep)
                 break;
 
             default:
+
+                switch (idx)
+                {
+                    // case 0: // RPTT_int
+                    //     // skip
+                    //     break;
+
+                    case 1: // slot_num
+                        // skip
+                        break;
+                    
+                    case 2: // unit
+                        strcpy(rep.unit, tmp);
+                        break;
+                    
+                    case 3: // topic
+                        strcpy(rep.topic, tmp);
+                        break;
+                    
+                    default:
+                        //result = false;
+                        break;
+                }
+
                 break;
         }
 
@@ -244,9 +260,11 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"int\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t},\n",
+			"\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
-                        f->unit);
+                        f->unit,
+                        f->topic);
                 break;
         
             case RPTT_float:
@@ -255,9 +273,11 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"float\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
-                        f->unit);
+                        f->unit,
+                        f->topic);
                 break;
 
             case RPTT_string:
@@ -266,9 +286,11 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"string\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
-                        f->unit);
+                        f->unit,
+                        f->topic);
                 break;
 
             case RPTT_ratio:
@@ -277,9 +299,11 @@ bool Parser::generateManifestoOfReports()
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"ratio\",\n"
                         "\t\t\t\t\"unit\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"topic\": \"%s\"\n"
+                        "\t\t\t}",
                         f->c.descRaw,
-                        f->unit);
+                        f->unit,
+                        f->topic);
                 break;
 
             default:
@@ -287,6 +311,12 @@ bool Parser::generateManifestoOfReports()
         }
 
         manifesto.append(tmp);
+
+        if (i < (numOfReps - 1))
+            manifesto.append(",\n");
+        else
+            manifesto.append("\n");
+
     }
 
     snprintf(tmp, sizeof(tmp), "\t\t],\n");

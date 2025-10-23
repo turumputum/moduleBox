@@ -333,7 +333,7 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "ledTopic");
+    	custom_topic = get_option_string_val(slot_num, "ledTopic", "/smartLed_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
@@ -806,7 +806,7 @@ void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
 
     if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "ledTopic");
+    	custom_topic = get_option_string_val(slot_num, "ledTopic", "/swiperLed_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
     }else{
@@ -1087,7 +1087,7 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
     if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "ledTopic");
+    	custom_topic = get_option_string_val(slot_num, "ledTopic", "/ledRing_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
@@ -1354,7 +1354,7 @@ void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
     if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
 		char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "ledTopic");
+    	custom_topic = get_option_string_val(slot_num, "ledTopic", "/ledBar_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{

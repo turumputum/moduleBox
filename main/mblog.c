@@ -16,20 +16,21 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
+#include <arsenal.h>
+
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
 #define DEF_LOG_FILE_BASE_NAME  "/sdcard/log"
 
-#define LOG_BUFF_SIZE       2048
+//#define LOG_BUFF_SIZE       2048
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
 // -----|-------------------|-------------------------------------------------
 
 static  SemaphoreHandle_t   logMutex    = NULL;
-static  char *              logBuff     = NULL;
 static  FILE *              logFile     = NULL;
 
 extern configuration        me_config;
@@ -49,10 +50,22 @@ static const char * PRIONAMES_SHORT [] =
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
+char * _getAvailableBuff(int * avail)
+{
+    char * result   = nil;
+    *avail          = 2048;
+
+    do 
+    {
+        result = malloc(*avail + 2);
+    }
+    while (!result && ((*avail >> 1) > 100));
+   
+    return result;
+}
 void mblog_init()
 {
     logMutex    = xSemaphoreCreateMutex();
-    logBuff     = malloc(LOG_BUFF_SIZE + 2);
 }
 
 bool file_exists (char *filename) 
@@ -94,33 +107,40 @@ void mblog(esp_log_level_t level, const char *msg, ...)
 {
     va_list             st_va_list;
     size_t              sz;
+    int                 avail;
+    char *              logBuff;
 
     if (logMutex && me_config.logLevel && (level <= me_config.logLevel))
     {
         if (xSemaphoreTake(logMutex, portMAX_DELAY) == pdTRUE)
         {
-            sz = snprintf(logBuff, LOG_BUFF_SIZE, "(%d) ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
-
-            va_start(st_va_list, msg);
-            sz += vsnprintf(logBuff + sz, LOG_BUFF_SIZE - sz - 1, msg, st_va_list);
-            va_end(st_va_list);
-
-            *(logBuff + sz) = 0;
-
-            printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
-
-            if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
+            if ((logBuff = _getAvailableBuff(&avail)) != nil)
             {
-                fprintf(logFile, "%s\n", logBuff);
+                sz = snprintf(logBuff, avail, "(%d) ", (int)pdTICKS_TO_MS(xTaskGetTickCount()));
 
-                sz = ftell(logFile);
+                va_start(st_va_list, msg);
+                sz += vsnprintf(logBuff + sz, avail - sz - 1, msg, st_va_list);
+                va_end(st_va_list);
 
-                fclose(logFile);
+                *(logBuff + sz) = 0;
 
-                if (sz > (me_config.logMaxSize / me_config.logChapters))
+                printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
+
+                if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
                 {
-                    _shiftLogs();
+                    fprintf(logFile, "%s\n", logBuff);
+
+                    sz = ftell(logFile);
+
+                    fclose(logFile);
+
+                    if (sz > (me_config.logMaxSize / me_config.logChapters))
+                    {
+                        _shiftLogs();
+                    }
                 }
+
+                free(logBuff);
             }
 
             xSemaphoreGive(logMutex);

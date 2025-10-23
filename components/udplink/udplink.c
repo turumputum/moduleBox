@@ -26,6 +26,7 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
+#include "moduleboxapp.h"
 
 #include "stateConfig.h"
 
@@ -79,8 +80,9 @@ static 	UDPCROSSLINK		links	[ 30 ];
 
 int udpcrosslinker(char * buff)
 {
-	int 		result	= 0;
-	char 		tmp 	[ 280 ];
+	int 		result		= 0;
+	char * 		response;
+	char 		tmp 		[ 280 ];
 
 	if (linksCount)
 	{
@@ -215,17 +217,25 @@ void udplink_task()
 			
 			while(1)
 			{
-				if (linksCount)
+				if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
 				{
-					if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
+					*(buff + len) = 0;
+					//printf("got: '%s'\n", buff);
+					char * on = strstr(buff, MODULEBOXAPP_TOPIC);
+
+					if (on)
 					{
-						*(buff + len) = 0;
-						//printf("got: '%s'\n", buff);
-						udpcrosslinker(buff);
+						int cnt = 0;
+						char * response;
+
+						while ((response  = moduleboxapp_command(on + MODULEBOXAPP_TOPIC_SZ, cnt++)) != nil)
+						{
+							sendto(me_state.udplink_socket, response, strlen(response), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
+						}
 					}
+					else 
+						udpcrosslinker(buff);
 				}
-				else
-					vTaskDelay(pdMS_TO_TICKS(20));
 			}
 		}
 		else

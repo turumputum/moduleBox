@@ -16,6 +16,8 @@
 
 void Parser::resetOptions(bool first)
 {
+    resetCommon(first);
+
     for (int i = 0; i < int(sizeof(opts) / sizeof(Option)); i++)
     {
         *opts[i].c.funcName = 0;
@@ -168,6 +170,10 @@ bool Parser::extractOptStringParam(Option &     opt,
 
         case 1:
             strcpy(opt.name, value);
+            break;
+
+        case 2:
+            strcpy(opt.defaultValStr, value);
             break;
         
         default:
@@ -417,7 +423,7 @@ bool Parser::generateManifestoOfOptions()
                         "\t\t\t\t\"valueDefault\": %d,\n"
                         "\t\t\t\t\"valueMax\": %d,\n"
                         "\t\t\t\t\"valueMin\": %d\n"
-                        "\t\t\t},\n",
+                        "\t\t\t}",
                         f->name,
                         f->c.descRaw,
                         f->unit,
@@ -436,7 +442,7 @@ bool Parser::generateManifestoOfOptions()
                         "\t\t\t\t\"valueDefault\": %g,\n"
                         "\t\t\t\t\"valueMax\": %g,\n"
                         "\t\t\t\t\"valueMin\": %g\n"
-                        "\t\t\t},\n",
+                        "\t\t\t}",
                         f->name,
                         f->c.descRaw,
                         f->defaultValF,
@@ -450,8 +456,8 @@ bool Parser::generateManifestoOfOptions()
                         "\t\t\t{\n"
                         "\t\t\t\t\"name\": \"%s\",\n"
                         "\t\t\t\t\"description\": \"%s\",\n"
-                        "\t\t\t\t\"valueType\": \"flag\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"valueType\": \"flag\"\n"
+                        "\t\t\t}",
                         f->name,
                         f->c.descRaw);
                    
@@ -463,9 +469,11 @@ bool Parser::generateManifestoOfOptions()
                         "\t\t\t\t\"name\": \"%s\",\n"
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"string\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"valueDefault\": \"%s\"\n"
+                        "\t\t\t}",
                         f->name,
-                        f->c.descRaw);
+                        f->c.descRaw,
+                        f->defaultValStr);
                    
                 break;
         
@@ -494,7 +502,7 @@ bool Parser::generateManifestoOfOptions()
                     }
                 }                
 
-                snprintf(tmp, sizeof(tmp), "%s", " ]\n\t\t\t},\n");
+                snprintf(tmp, sizeof(tmp), "%s", " ]\n\t\t\t}");
                   
                 break;
 
@@ -504,8 +512,8 @@ bool Parser::generateManifestoOfOptions()
                         "\t\t\t\t\"name\": \"%s\",\n"
                         "\t\t\t\t\"description\": \"%s\",\n"
                         "\t\t\t\t\"valueType\": \"color\",\n"
-                        "\t\t\t\t\"valueDefault\": \"%s\",\n"
-                        "\t\t\t},\n",
+                        "\t\t\t\t\"valueDefault\": \"%s\"\n"
+                        "\t\t\t}",
                         f->name,
                         f->c.descRaw,
                         f->defaultValStr);
@@ -518,6 +526,11 @@ bool Parser::generateManifestoOfOptions()
         }
 
         manifesto.append(tmp);
+
+        if (i < (numOfOpts - 1))
+            manifesto.append(",\n");
+        else
+            manifesto.append("\n");
     }
 
     snprintf(tmp, sizeof(tmp), "\t\t],\n");

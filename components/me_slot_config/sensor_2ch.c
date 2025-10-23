@@ -84,7 +84,7 @@ void sensors_task(void *arg){
     int mode = INDEPENDENT_MODE;
 	if (strstr(me_config.slot_options[slot_num], "mode") != NULL) {
         char* mode_str=NULL;
-		mode_str = get_option_string_val(slot_num, "mode");
+		mode_str = get_option_string_val(slot_num, "mode", "");
         if(strstr(mode_str,"OR_logic")!=NULL){
             mode= OR_LOGIC_MODE;
         }else if(strstr(mode_str,"AND_logic")!=NULL){
@@ -95,7 +95,7 @@ void sensors_task(void *arg){
     
     if (strstr(me_config.slot_options[slot_num], "sens_topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "sens_topic");
+    	custom_topic = get_option_string_val(slot_num, "sens_topic", "/sens_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{

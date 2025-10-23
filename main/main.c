@@ -26,6 +26,7 @@
 #include "input_key_service.h"
 #include "periph_adc_button.h"
 #include "board.h"
+#include "udplink.h"
 
 #include "rtp_play.h"
 #include <stdio.h>
@@ -83,6 +84,7 @@
 
 #include <manifest.h>
 #include <mbdebug.h>
+#include <moduleboxapp.h>
 
 
 
@@ -402,6 +404,7 @@ void app_main(void)
 	board_init(); // USB hardware
 	
 	mblog_init();
+	moduleboxapp_init();
 
 	nvs_init();
 

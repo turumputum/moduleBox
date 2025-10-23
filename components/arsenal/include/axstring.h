@@ -42,6 +42,16 @@ PSTR                strz_cpy                    (PSTR               psz_target,
                                                  PCSTR              psz_source,
                                                  UINT               u_size);
 
+PCSTR               strz_notspace               (PCSTR              psz_string,
+                                                 UINT               len,
+                                                 BOOL               b_stop_at_eol);
+
+PSTR                strz_clean                  (PSTR               psz_string);
+
+PSTR                strz_substrs_get_u          (PSTR               str,
+                                                 PUINT              plen,
+                                                 CHAR               sep);
+
 
 #ifdef __cplusplus
 }

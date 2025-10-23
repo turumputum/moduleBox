@@ -16,6 +16,8 @@
 
 void Parser::resetCommands(bool first)
 {
+    resetCommon(first);
+
     for (int i = 0; i < int(sizeof(cmds) / sizeof(Command)); i++)
     {
         *cmds[i].c.funcName = 0;
@@ -82,7 +84,7 @@ bool Parser::extractCmdParams(Command &     cmd)
 
         switch (idx)
         {
-            case 0: // pinter to COMMAND structure
+            case 0: // pointer to COMMAND structure
                 break;
 
             case 1: // local int ID of command
@@ -305,8 +307,8 @@ bool Parser::generateManifestoOfCommands()
                 "\t\t\t{\n"
                 "\t\t\t\t\"command\": \"%s\",\n"
                 "\t\t\t\t\"description\": \"%s\",\n"
-                "\t\t\t\t\"parametersType: \"%s\",\n"
-                "\t\t\t\t\"parameters: [ ",
+                "\t\t\t\t\"parametersType\": \"%s\",\n"
+                "\t\t\t\t\"parameters\": [ ",
                 f->c.name,
                 f->c.descRaw,
                 (f->type == PARAMT_enum) ? "enum" : "types");
@@ -365,10 +367,13 @@ bool Parser::generateManifestoOfCommands()
             }
         }
 
-        manifesto.append("]\n\t\t\t},\n");
+        if (i < (numOfCmds - 1))
+            manifesto.append("]\n\t\t\t},\n");
+        else
+            manifesto.append("]\n\t\t\t}\n");
     }
 
-    snprintf(tmp, sizeof(tmp), "\t\t],\n");
+    snprintf(tmp, sizeof(tmp), "\t\t]\n");
 
     manifesto.append(tmp);
 

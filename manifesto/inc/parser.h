@@ -109,6 +109,7 @@ public:
         Common          c;
         RPTT            type;
         char            unit                    [ 32 ];
+        char            topic                   [ 64 ];
 
         char *          paramsRaw;
 
@@ -215,7 +216,7 @@ private:
         bool            parseOptiosParams       (Option &       opt,
                                                  char *         on);
 
-        bool            generateManifestoForModule();
+        bool            generateManifestoForModule(bool first);
 
         bool            generateManifestoOfOptions();
 
@@ -223,6 +224,8 @@ private:
         bool            generateManifestoOfCommands();
 
         void            cleanValue              (char *         value);
+
+        void            resetCommon             (bool           first);
 
         void            resetOptions            (bool           first);
 

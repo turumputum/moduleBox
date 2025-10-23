@@ -1,6 +1,7 @@
 
 #include <arsenal.h>
 #include <axstring.h>
+#include <string.h>
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
@@ -237,6 +238,132 @@ PSTR strz_cpy(PSTR      psz_target,
 
     *psz_on_tgt = 0;
     psz_result  = psz_on_tgt;
+
+    RETURN(psz_result);
+}
+// ***************************************************************************
+// FUNCTION
+//      strz_notspace
+// PURPOSE
+//
+// PARAMETERS
+//      PCSTR psz_string    --
+//      UINT  len           --
+//      BOOL  b_stop_at_eol --
+// RESULT
+//      PCSTR --
+// ***************************************************************************
+PCSTR strz_notspace(PCSTR         psz_string,
+                    UINT         len,
+                    BOOL         b_stop_at_eol)
+{
+    PCSTR           result   = psz_string;
+    UINT            left            = len;
+
+    ENTER(result);
+
+    while (  *result                                &&
+             left--                                 &&
+             (*(PU8)result <= ' ')                  &&
+             (!b_stop_at_eol || (*result != '\n'))  )
+    {
+        result++;
+    }
+    
+    RETURN(result);
+}
+// ***************************************************************************
+// FUNCTION
+//      strz_clean
+// PURPOSE
+//
+// PARAMETERS
+//      PSTR   psz_string --
+// RESULT
+//      PSTR  --
+// ***************************************************************************
+PSTR strz_clean(PSTR psz_string)
+{
+    PU8          p_result        = nil;
+    PU8          p_on;
+    UINT         u_len;
+
+    ENTER(psz_string);
+
+    p_result    = (PU8)strz_notspace(psz_string, -1, false);
+    p_on        = p_result;
+
+    if (*p_on && ((u_len = strlen((PSTR)p_on)) > 0))
+    {
+        p_on       += u_len;
+
+        while (  (p_on != p_result)     &&
+                 (*(p_on - 1) <= ' ')   )
+        {
+            p_on--;
+        }
+
+        *p_on = 0;
+    }
+
+    RETURN((PSTR)p_result);
+}
+// ***************************************************************************
+// FUNCTION
+//      strz_substrs
+// PURPOSE
+//
+// PARAMETERS
+//      PSTR   psz_tgt        --
+//      UINT   u_tgt          --
+//      PSTR   psz_src        --
+//      UINT   u_src          --
+//      CHAR   c_sep          --
+//      BOOL   b_sep_is_field --
+// RESULT
+//      PSTR  --
+// ***************************************************************************
+PSTR strz_substrs_get_u(PSTR    str,
+                        PUINT   plen,
+                        CHAR    sep)
+{
+    PSTR            psz_result      = nil;
+    PSTR            on;
+    UINT            left;
+
+    ENTER(str && plen);
+
+    if (*plen)
+    {
+        psz_result  = str;
+        on          = str;
+        left        = *plen;
+
+        while (left)
+        {
+            if (*on)
+            {
+                if (*on == sep)
+                {
+                    *on = 0;
+                    break;
+                }
+    
+                on++;
+                left--;
+            }
+            else
+            {
+                psz_result  = (++on);
+                *(plen)     = (--left);
+            }
+        }
+
+        if (!left)
+        {
+            *(plen) = 0;
+        }
+    }
 
     RETURN(psz_result);
 }
