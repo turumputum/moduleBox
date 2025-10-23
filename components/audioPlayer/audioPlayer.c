@@ -167,6 +167,7 @@ void fill_equalizer_gains(int low_gain, int mid_gain, int high_gain, int *set_ga
 }
 /*
     Звуковой Модуль
+    slots: 0
 */
 void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 {

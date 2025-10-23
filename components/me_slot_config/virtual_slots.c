@@ -93,6 +93,7 @@ typedef struct __tag_COUNTER_CONFIG{
 
 /* 
     Виртуальный модуль счетчик
+    slots: 6-11
 */
 void configure_counter(PCOUNTER_CONFIG	ch, int slot_num){
     
@@ -250,6 +251,7 @@ typedef struct __tag_RND_CONFIG{
 
 /*
     Модуль для генерации случайных чисел
+    slots: 6-11
 */
 void configure_random(PRND_CONFIG	ch, int slot_num){
     
@@ -356,6 +358,7 @@ typedef enum{
 
 /* 
     Виртуальный модуль таймер
+    slots: 6-11
 */
 void configure_timer(PTIMER_CONFIG	ch, int slot_num){
     
@@ -714,6 +717,7 @@ typedef struct __tag_WHITELIST_CONFIG{
 
 /*
     Программный модуль для размещения связей во внешнем файле. Виртуальный слот, не взаимодействует с аппаратной частью.
+    slots: 6-11
 */
 void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
     

@@ -91,11 +91,13 @@ static const char * configDescription =
 "\"modes\" : [\n"
 "        {\n"
 "                \"mode\": \"empty\",\n"
+"                \"slots\": \"0-11\",\n"
 "                \"description\": \"Пустой слот\",\n"
 "                \"options\": []\n"
 "        },\n"
 "        {\n"
 "                \"mode\": \"SD_card\",\n"
+"                \"slots\": \"1\",\n"
 "                \"description\": \"Карта SD\",\n"
 "                \"options\": []\n"
 "        },";

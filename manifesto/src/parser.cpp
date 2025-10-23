@@ -285,7 +285,9 @@ bool Parser::generateManifestoForModule(bool first)
     bool            result      = true;
     char            tmp     [ 1024 ];
 
-    snprintf(tmp, sizeof(tmp), "%s\t{\n\t\t\"mode\": \"%s\",\n\t\t\"description\": \"%s\",\n", first ? "\n" : ",\n", mod.name, mod.descRaw);
+    snprintf(tmp, sizeof(tmp), "%s\t{\n\t\t\"mode\": \"%s\",\n\t\t\"slots\": \"%d-%d\",\n\t\t\"description\": \"%s\",\n", first ? "\n" : ",\n", 
+        mod.name, mod.slotFrom, mod.slotTo,
+        mod.descRaw);
     manifesto.append(tmp);
 
     if (  generateManifestoOfOptions()  && 
@@ -331,6 +333,37 @@ char * Parser::findCorellatedCurlyBrace(char *         begin)
     
     return result;
 }
+void Parser::searchSlots(char * desc)
+{
+    char * on = strstr(desc, "slots:");
+    char * from;
+    char * to;
+
+    if (on)
+    {
+        *on = 0;
+        on++;
+        if ((on = strchr(on, ':')) != nil)
+        {
+            from = ++on;
+            if ((to = strchr(from, '-')) != nil)
+            {
+                to++;
+
+                mod.slotFrom    = atoi(from);
+                mod.slotTo      = atoi(to);
+            }
+            else
+                mod.slotFrom = mod.slotTo = atoi(from);
+        }
+    }
+    else
+    {
+        mod.slotFrom = 0;
+        mod.slotTo   = 5;
+    }
+
+}
 bool Parser::getModuleDesc(char *         moduleBegin)
 {
     bool        result = false;
@@ -346,6 +379,7 @@ bool Parser::getModuleDesc(char *         moduleBegin)
             if (dupFromTo(mod.descRaw, begin, end) > 0)
             {
                 cleanValue(mod.descRaw);
+                searchSlots(mod.descRaw);
                 result = true;
             }
             else

@@ -70,10 +70,16 @@ typedef struct __tag_Common
 class Module
 {
 public:
+                        Module ()
+                        { slotFrom = 0; slotTo = 5; }
+
         int             line;
         char            name                    [ 64 ];
 
         char *          begin;
+
+        int             slotFrom;
+        int             slotTo;
 
         char *          descRaw;
 }; 
@@ -172,6 +178,9 @@ private:
         int             dupFromTo               (char * &       dest, 
                                                  char *         begin,
                                                  char *         end);
+
+
+        void            searchSlots             (char *         desc);
 
         void            resetSearching          ();
 
