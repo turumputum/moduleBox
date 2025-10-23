@@ -764,8 +764,9 @@ void processLedEffect(swiperLed_HandleTypeDef *swiperLed) {
 
 	//return swiperLed.state;
 }
+
 /*
-   Модуль поддержки SWIPER LED
+    Модуль кнопка с управляемой подсветкой в режиме свайпера
 */
 void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
 {

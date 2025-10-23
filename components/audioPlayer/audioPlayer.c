@@ -246,6 +246,9 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
+	/* Рапортует номер трека при завершении
+	*/
+	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
 
 
     /* Проиграть трек
@@ -268,9 +271,6 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
 
-	/* Рапортует номер трека при завершении
-	*/
-	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
 
 }
 

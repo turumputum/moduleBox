@@ -739,7 +739,10 @@ typedef struct __tag_AS5600CONFIG
 	uint16_t				numOfPos;
 	int 					pole;
 	uint16_t 				divider;
-	uint16_t				glitchFilter;
+
+	int 					absReport;
+	int						incReport;
+	int 					floatReport;
 } AS5600CONFIG, * PAS5600CONFIG; 
 
 /* 
@@ -753,62 +756,60 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 		По умолчанию  - инкрементальный
 	*/
 	c->encoderMode = get_option_flag_val(slot_num, "absolute");
-	ESP_LOGD(TAG, "Encoder slotNum:%d mode:%s", slot_num, c->encoderMode? "incremental" : "absolute");
+	ESP_LOGD(TAG, "[encoder_%d] mode:%s", slot_num, c->encoderMode? "incremental" : "absolute");
 
 	/* Флаг натраивает выходные значения в виде числа с плавающей точкой,
 		иначе - целочисленное
 	*/
 	c->floatOutput = get_option_flag_val(slot_num, "floatOutput");
-	ESP_LOGD(TAG, "Encoder slotNum:%d  float_output", slot_num);
+	ESP_LOGD(TAG, "[encoder_%d]  float_output", slot_num);
 
 	/* Флаг задаёт инверсию направления */
 	c->dirInverse = get_option_flag_val(slot_num, "dirInverse");
-	ESP_LOGD(TAG, "Encoder slotNum:%d dirInverse", slot_num);
+	ESP_LOGD(TAG, "[encoder_%d] dir:%s", slot_num, c->dirInverse ? "normal" : "inverse");
 
 	/* Значение зоны не чуствительности
 	*/
 	c->deadZone = get_option_int_val(slot_num, "deadZone", "", 0, 0, INT16_MAX);
-	ESP_LOGD(TAG, "Encoder slotNum:%d deadZone: %d", slot_num, c->deadZone);
+	ESP_LOGD(TAG, "[encoder_%d] deadZone: %d", slot_num, c->deadZone);
 
 	/* Значение смещения нуля после делителя
 	*/
 	c->zeroShift = get_option_int_val(slot_num, "zeroShift", "", 0, INT16_MIN, INT16_MAX);
-	ESP_LOGD(TAG, "Encoder slotNum:%d zero_shift: %d", slot_num, c->zeroShift);
+	ESP_LOGD(TAG, "[encoder_%d] zero_shift: %d", slot_num, c->zeroShift);
 
 	/* Значение смещения нуля после делителя
 	*/
 	c->filterK = get_option_float_val(slot_num, "filterK", 1.0);
-	ESP_LOGD(TAG, "Encoder slotNum:%d filterK: %f", slot_num, c->filterK);
+	ESP_LOGD(TAG, "[encoder_%d] filterK: %f", slot_num, c->filterK);
 
+	c->minVal = 0;
+	c->maxVal = 4095;
+	c->pole = c->maxVal - c->minVal;
 
-	/* Минимальное значение */
-	c->minVal = get_option_int_val(slot_num, "minVal", "", 0, INT32_MIN, INT32_MAX);
-	ESP_LOGD(TAG, "MIN_VAL: %ld", c->minVal);
-
-
-	/* Максимальное значение
+	/* Количество сегментов на окружности
 	*/
-	c->maxVal = get_option_int_val(slot_num, "maxVal", "", 4096, INT32_MIN, INT32_MAX);
-	ESP_LOGD(TAG, "maxVal: %ld", c->maxVal);
+	c->numOfPos = get_option_int_val(slot_num, "numOfPos", "", 24, 0, 4096);
+	ESP_LOGD(TAG, "[encoder_%d] numOfPos:%d ", slot_num, c->numOfPos);
 
 	
 	/* Период проверки значений
 		- еденицы измерения раз в секунду
 	*/
 	c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate","fps", 20, 1, 100));
-	ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",c->refreshPeriod, slot_num);
+	ESP_LOGD(TAG, "[encoder_%d] refreshPeriod:%d", slot_num,c->refreshPeriod);
 	
-	c->pole = c->maxVal - c->minVal;
+	
 
 	/* Делитель*/
 	c->divider = get_option_int_val(slot_num, "divider", "", 4, 1, UINT16_MAX);
-	ESP_LOGD(TAG, "dirInverse slot: %d", slot_num);
+	ESP_LOGD(TAG, "[encoder_%d] divider:%d", slot_num, c->divider);
 
 	
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
 		/* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "topic", "/encoder_0");
+    	custom_topic = get_option_string_val(slot_num, "topic");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -817,6 +818,20 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
+
+
+	/* Рапортует текущее абсолютное положение
+	*/
+	c->absReport = stdreport_register(RPTT_string, slot_num, "", "abs");
+
+	/* Рапортует текущее инкрементальное приращение
+	*/
+	c->incReport = stdreport_register(RPTT_string, slot_num, "", "inc");
+
+	/* Рапортует текущее отношение в формате числа с плавающей точкой
+	*/
+	c->floatReport = stdreport_register(RPTT_string, slot_num, "", "float");
+
 }
 
 // AS5600 I2C registers
@@ -829,59 +844,17 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 
 #define I2C_MASTER_TIMEOUT_MS 100
 
-
-
-void encoderAS5600_task(void *arg)
-{
-	AS5600CONFIG c = {0};
-	int slot_num = *(int *)arg;
-	
-	configure_encoderAS5600(&c, slot_num);
-
-	char str[255];
-	
-	// I2C initialization
-	uint8_t sda_pin = SLOTS_PIN_MAP[slot_num][0];
-	uint8_t scl_pin = SLOTS_PIN_MAP[slot_num][1];
-	
-	i2c_config_t conf = {
-		.mode = I2C_MODE_MASTER,
-		.sda_io_num = sda_pin,
-		.scl_io_num = scl_pin,
-		.sda_pullup_en = GPIO_PULLUP_ENABLE,
-		.scl_pullup_en = GPIO_PULLUP_ENABLE,
-		.master.clk_speed = 100000,
-	};
-	
-	int i2c_num = me_state.free_i2c_num;
-	me_state.free_i2c_num++;
-	if(i2c_num == I2C_NUM_MAX) {
-		ESP_LOGE(TAG, "No free I2C driver for slot:%d", slot_num);
-		vTaskDelete(NULL);
-	}
-	
-	i2c_param_config(i2c_num, &conf);
-	esp_err_t ret = i2c_driver_install(i2c_num, conf.mode, 0, 0, 0);
-	if (ret == ESP_OK) {
-		ESP_LOGI(TAG, "I2C_%d initialized for AS5600 slot:%d", i2c_num, slot_num);
-	} else {
-		ESP_LOGE(TAG, "Failed to initialize I2C_%d for slot:%d", i2c_num, slot_num);
-		vTaskDelete(NULL);
-	}
-	
-	float pos_length = (float)c.pole / c.numOfPos;
-	uint16_t raw_angle;
-	int current_pos=0, prev_pos = -1;
-	
+esp_err_t checkMagnetStatus(int i2c_num, int slot_num){
 	// Test AS5600 connection by reading status register
+	esp_err_t ret = ESP_OK;
 	uint8_t status;
 	ret = i2c_master_write_read_device(i2c_num, AS5600_I2C_ADDRESS, 
-									   &(uint8_t){AS5600_STATUS_REG}, 1, 
-									   &status, 1, 
-									   I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+										&(uint8_t){AS5600_STATUS_REG}, 1, 
+										&status, 1, 
+										I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 	if (ret != ESP_OK) {
 		char tmpStr[100];
-		sprintf(tmpStr, "AS5600 not found on slot:%d", slot_num);
+		sprintf(tmpStr, "AS5600 not found on slot:%d task terminated", slot_num);
 		ESP_LOGE(TAG, "%s", tmpStr);
 		mblog(0, tmpStr);
 		vTaskDelete(NULL);
@@ -896,17 +869,74 @@ void encoderAS5600_task(void *arg)
 	if (!magnet_detected) {
 		char tmpStr[100];
 		if (magnet_too_low) {
-			sprintf(tmpStr,"AS5600 slot:%d - магнитное поле слишком слабое!", slot_num);
+			sprintf(tmpStr,"AS5600 slot:%d - magnet field too weak! task terminated", slot_num);
 		} else if (magnet_too_high) {
-			printf(tmpStr, "AS5600 slot:%d - магнитное поле слишком сильное!", slot_num);
+			printf(tmpStr, "AS5600 slot:%d - magnet field too strong! task terminated", slot_num);
 		} else {
-			printf(tmpStr, "AS5600 slot:%d - магнит не обнаружен!", slot_num);
+			printf(tmpStr, "AS5600 slot:%d - magnet not found! task terminated", slot_num);
 		}
 		ESP_LOGE(TAG,"%s", tmpStr);
 		mblog(0, tmpStr);
 		vTaskDelete(NULL);
 	}
+	return ret;
+}
+
+void encoderAS5600_task(void *arg)
+{
+	AS5600CONFIG c = {0};
+	int slot_num = *(int *)arg;
 	
+	configure_encoderAS5600(&c, slot_num);
+
+	char str[255];
+	
+	// I2C initialization
+	uint8_t sda_pin = SLOTS_PIN_MAP[slot_num][0];
+	uint8_t scl_pin = SLOTS_PIN_MAP[slot_num][1];
+	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][2];
+
+	esp_rom_gpio_pad_select_gpio(led_pin);
+	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(led_pin, 1);
+	
+	i2c_config_t conf = {
+		.mode = I2C_MODE_MASTER,
+		.sda_io_num = sda_pin,
+		.scl_io_num = scl_pin,
+		.sda_pullup_en = GPIO_PULLUP_ENABLE,
+		.scl_pullup_en = GPIO_PULLUP_ENABLE,
+		.master.clk_speed = 100000,
+	};
+	
+	char tmpStr[100];
+
+	int i2c_num = me_state.free_i2c_num;
+	me_state.free_i2c_num++;
+	if(i2c_num == I2C_NUM_MAX) {
+		sprintf(tmpStr, "No free I2C driver for slot:%d task terminated", slot_num);
+		ESP_LOGE(TAG, "%s", tmpStr);
+		mblog(0, tmpStr);
+		vTaskDelete(NULL);
+	}
+	
+	i2c_param_config(i2c_num, &conf);
+	esp_err_t ret = i2c_driver_install(i2c_num, conf.mode, 0, 0, 0);
+	if (ret == ESP_OK) {
+		ESP_LOGI(TAG, "I2C_%d initialized for AS5600 slot:%d", i2c_num, slot_num);
+	} else {
+		sprintf(tmpStr,  "Failed to initialize I2C_%d for slot:%d", i2c_num, slot_num);
+		ESP_LOGE(TAG, "%s", tmpStr);
+		mblog(0, tmpStr);
+		vTaskDelete(NULL);
+	}
+	
+	float pos_length = (float)c.pole / c.numOfPos;
+	uint16_t raw_angle;
+	int current_pos=0, prev_pos = -1;
+
+	checkMagnetStatus(i2c_num, slot_num);
+
 	// Read magnetic field magnitude
 	uint8_t magnitude_data[2];
 	ret = i2c_master_write_read_device(i2c_num, AS5600_I2C_ADDRESS,
@@ -922,10 +952,18 @@ void encoderAS5600_task(void *arg)
 	float filtredVal = 0;
 	float prew_filtredVal = -1;
 	TickType_t lastWakeTime = xTaskGetTickCount();
-	
+	int checkTick = 0;
+
 	waitForWorkPermit(slot_num);
 	
 	while (1) {
+		if(checkTick>1000){
+			checkMagnetStatus(i2c_num, slot_num);
+			checkTick = 0;
+		}else{
+			checkTick++;
+		}
+
 		// Read raw angle from AS5600
 		uint8_t angle_reg = AS5600_RAW_ANGLE_REG;
 		uint8_t angle_data[2];
@@ -935,22 +973,23 @@ void encoderAS5600_task(void *arg)
 										   angle_data, 2,
 										   I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 		
-		if (ret != ESP_OK) {
-			ESP_LOGW(TAG, "Failed to read AS5600 angle on slot:%d", slot_num);
-			vTaskDelay(pdMS_TO_TICKS(10));
-			continue;
-		}
+		// if (ret != ESP_OK) {
+		// 	ESP_LOGW(TAG, "Failed to read AS5600 angle on slot:%d", slot_num);
+		// 	vTaskDelay(pdMS_TO_TICKS(10));
+		// 	continue;
+		// }
 		
 		// Combine bytes and convert to 12-bit value (0-4095)
 		raw_angle = ((uint16_t)angle_data[0] << 8) | angle_data[1];
 		raw_angle &= 0x0FFF; // Mask to 12 bits
 		
 		// Apply offset
+		//ESP_LOGD(TAG, "rawVal:%d angle on slot:%d", raw_angle, slot_num);
 		int16_t adjusted_angle = raw_angle + c.zeroShift;
-		while (adjusted_angle < 0) {
+		if(adjusted_angle < 0) {
 			adjusted_angle += 4096;
 		}
-		while (adjusted_angle >= 4096) {
+		if(adjusted_angle >= 4096) {
 			adjusted_angle -= 4096;
 		}
 		
@@ -964,33 +1003,34 @@ void encoderAS5600_task(void *arg)
 		// Check dead zone
 		if (abs(filtredVal - prew_filtredVal) > c.deadZone) {
 			prew_filtredVal = filtredVal;
-			
+			gpio_set_level(led_pin, (int)filtredVal % 2);
+
 			// Calculate position based on filtered value
-			current_pos = 0;
-			float tmpVal = filtredVal * c.pole / 4096.0; // Scale to configured range
-			
-			while (tmpVal > pos_length) {
-				current_pos++;
-				tmpVal -= pos_length;
+
+			current_pos = filtredVal/pos_length;
+			if(current_pos>=c.numOfPos){
+				current_pos -=c.numOfPos;
 			}
-			
-			while (current_pos >= c.numOfPos) {
-				current_pos -= c.numOfPos;
-			}
-			
+
+			//ESP_LOGD(TAG, "current_pos:%d filtredVal:%f sector;%f",current_pos, filtredVal, pos_length);
 			if (c.dirInverse) {
 				current_pos = c.numOfPos - current_pos;
 			}
 		}
+
 		
 		// Report changes
 		if (current_pos != prev_pos) {
+			//ESP_LOGD(TAG, "current_pos:%d prev_pos:%d slot:%d", current_pos, prev_pos, slot_num);
 			if (c.encoderMode == ABSOLUTE) {
 				if (c.floatOutput) {
 					sprintf(str, "%f", (float)current_pos / (c.numOfPos - 1));
+					stdreport_s(c.floatReport, str);
 				} else {
 					sprintf(str, "%d", current_pos);
+					stdreport_s(c.absReport, str);
 				}
+				
 			} else if (c.encoderMode == INCREMENTAL) {
 				int delta = abs(current_pos - prev_pos);
 				if (delta < (c.numOfPos / 2)) {
@@ -1007,8 +1047,10 @@ void encoderAS5600_task(void *arg)
 						sprintf(str, "-%d", delta);
 					}
 				}
+				stdreport_s(c.incReport, str);
 			}
-			report(str, slot_num);
+			
+			//report(str, slot_num);
 			prev_pos = current_pos;
 		}
 			

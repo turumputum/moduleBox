@@ -109,10 +109,12 @@ int init_slots(void){
 			start_in_3ch_task(i, 1);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);			// OK
-//		}else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
-//			start_encoderPPM_task(i);	// OK
+		// }else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
+		// 	start_encoderPPM_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "encoderInc", 10)){
 			start_encoder_inc_task(i);	// OK
+		}else if(!memcmp(me_config.slot_mode[i], "encoderAS5600", 13)){
+			start_encoderAS5600_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "benewakeTOF", 12)){
 			start_benewakeTOF_task(i);	// OK
 		}else if(!memcmp(me_config.slot_mode[i], "VL53TOF", 7)){
@@ -190,8 +192,6 @@ int init_slots(void){
 			start_furbyEye_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
 			start_stepper_conductor_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "encoderAS5600", 13)){
-			start_encoderAS5600_task(i);
 		}
 		
 	}
