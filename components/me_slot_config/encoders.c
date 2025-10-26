@@ -789,7 +789,7 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 
 	/* Количество сегментов на окружности
 	*/
-	c->numOfPos = get_option_int_val(slot_num, "numOfPos", "", 24, 0, 4096);
+	c->numOfPos = get_option_int_val(slot_num, "numOfPos", "", 24, 2, 4095);
 	ESP_LOGD(TAG, "[encoder_%d] numOfPos:%d ", slot_num, c->numOfPos);
 
 	
