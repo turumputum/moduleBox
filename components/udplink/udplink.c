@@ -220,16 +220,20 @@ void udplink_task()
 				if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
 				{
 					*(buff + len) = 0;
-					printf("got: '%s'\n", buff);
+					//printf("got: '%s'\n", buff);
 					char * on = strstr(buff, MODULEBOXAPP_TOPIC);
 
 					if (on)
 					{
+						//printf("'%s' is present\n", MODULEBOXAPP_TOPIC);
+
 						int cnt = 0;
 						char * response;
 
+
 						while ((response  = moduleboxapp_command(on + MODULEBOXAPP_TOPIC_SZ, cnt++)) != nil)
 						{
+							//printf("sending '%s'\n", response);
 							sendto(me_state.udplink_socket, response, strlen(response), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
 						}
 					}
@@ -259,7 +263,7 @@ int udplink_send(int slot_num, const char * message)
 
 	if ((me_state.udplink_socket) != -1 && *me_config.udpServerAdress)
 	{
-		//printf("udplink_send: stage 1\n");
+		//printf("udplink_send: stage 2\n");
 
 		struct sockaddr_in destAddr = {0};
 		destAddr.sin_addr.s_addr = inet_addr(me_config.udpServerAdress);
