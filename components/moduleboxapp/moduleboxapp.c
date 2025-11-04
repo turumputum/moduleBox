@@ -75,18 +75,24 @@ char * moduleboxapp_command(char * command, int count)
 	char * 	on;
 	UINT 	len;
 
+//	printf("moduleboxapp_command: '%s' count = %d\n", command, count);
+
 	if (count)
 	{
-
+//		printf("moduleboxapp_command: stage 1\n");
 	}
 	else // First call
 	{ 
 		bool 	got 		= false;
 
+//		printf("moduleboxapp_command: stage 2\n");
+
 		if (xSemaphoreTake(mbaMutex, portMAX_DELAY) == pdTRUE)
 		{
 			if (REQ_NONE == currentRequest)
 			{
+//				printf("moduleboxapp_command: stage 3\n");
+
 				currentRequest 	= REQ_IN_PROGRESS;
 				got 			= true;
 			}
@@ -96,6 +102,8 @@ char * moduleboxapp_command(char * command, int count)
 
 		if (got)
 		{
+//			printf("moduleboxapp_command: stage 4\n");
+
 			on 	= strz_clean(command);
 			len	= strlen(on);
 
@@ -107,10 +115,7 @@ char * moduleboxapp_command(char * command, int count)
 				}
 			}
 
-			if (!result)
-			{
-				currentRequest 	= REQ_NONE;
-			}
+			currentRequest 	= REQ_NONE;
 		}
 	}
 
