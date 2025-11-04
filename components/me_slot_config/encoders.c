@@ -809,7 +809,7 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
 		/* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "encoder_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -984,7 +984,7 @@ void encoderAS5600_task(void *arg)
 		raw_angle &= 0x0FFF; // Mask to 12 bits
 		
 		// Apply offset
-		//ESP_LOGD(TAG, "rawVal:%d angle on slot:%d", raw_angle, slot_num);
+		// ESP_LOGD(TAG, "rawVal:%d angle on slot:%d", raw_angle, slot_num);
 		int16_t adjusted_angle = raw_angle + c.zeroShift;
 		if(adjusted_angle < 0) {
 			adjusted_angle += 4096;

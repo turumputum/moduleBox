@@ -64,8 +64,8 @@ typedef enum
     rtpCMD_setVolume
 } rtpCMD;
 
-#define ENABLE 0
-#define DISABLE 1
+#define ENABLE 1
+#define DISABLE 0
 
 void _setVolume_num(audio_element_handle_t i2s_stream, uint8_t vol) {
 	if(vol>100){
@@ -182,13 +182,25 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num){
 	c->port =  get_option_int_val(slot_num, "port", "", 7777, 0, UINT16_MAX);
     ESP_LOGD(TAG, "[LANplayer_%d] port:%d", slot_num, c->port);
 
-    /* Команда включает плеер
-    */
-    stdcommand_register(&c->cmds, rtpCMD_enable, "enable", PARAMT_none);
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+        /* Топик 
+        */
+        char * custom_topic = get_option_string_val(slot_num, "topic", "/audioLAN_0");
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/audioLAN_0")+3];
+		sprintf(t_str, "%s/audioLAN_%d",me_config.deviceName, slot_num);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
 
-    /* Команда выключает плеер
+
+    /* Команда включает/выключает плеер
     */
-    stdcommand_register(&c->cmds, rtpCMD_disable, "disable", PARAMT_none);
+    stdcommand_register(&c->cmds, rtpCMD_enable, "enable", PARAMT_int);
 
     /* Команда устанавливает номер канала
     0-255
@@ -198,11 +210,20 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num){
     /* Команда устанавливает значение громкости
     0-100
     */
-   stdcommand_register(&c->cmds, rtpCMD_setChannel, "setChannel", PARAMT_int);
+    stdcommand_register(&c->cmds, rtpCMD_setVolume, "setVolume", PARAMT_int);
 }
 
 void audioLAN_task(void *arg){
 	int slot_num = *(int *)arg;
+    if(slot_num!=0){
+        char tmpStr[100];
+		sprintf(tmpStr, "Wrong slot, only for SLOT_0, task terminated");
+		ESP_LOGE(TAG, "%s", tmpStr);
+		mblog(0, tmpStr);
+		vTaskDelete(NULL);
+    }
+
+
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
     vTaskDelay(pdMS_TO_TICKS(1000));
     while (me_state.LAN_init_res != ESP_OK){
@@ -237,19 +258,13 @@ void audioLAN_task(void *arg){
                 break;
 
             case rtpCMD_enable:
-                if(c->state != ENABLE){
-                    c->state = ENABLE;
+                if((atoi(cmd_arg)==ENABLE)&&(c->state != ENABLE)){
+                    pipelineStart(c);
+                }else if((atoi(cmd_arg)==DISABLE)&&(c->state != DISABLE)){
                     pipelineStart(c);
                 }
-                ESP_LOGD(TAG, "[audioLAN_%d] lets play stream. Free heap:%d", slot_num, xPortGetFreeHeapSize());
-                break;
-
-            case rtpCMD_disable:
-                if(c->state != DISABLE){
-                    c->state = DISABLE;
-                    pipelineStop(c);
-                }
-                ESP_LOGD(TAG, "[audioLAN_%d] lets stop stream. Free heap:%d", slot_num, xPortGetFreeHeapSize());
+                c->state = atoi(cmd_arg);
+                ESP_LOGD(TAG, "[audioLAN_%d] lets set state:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
                 break;
 
             case rtpCMD_setChannel:
