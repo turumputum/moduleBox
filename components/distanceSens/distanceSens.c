@@ -131,6 +131,9 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
 
 void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
     char str[255];
+    if(distanceSens->inverse){
+        distanceSens->currentPos= distanceSens->maxVal - distanceSens->currentPos;
+    }
     if (distanceSens->k < 1) {
         distanceSens->currentPos = (float)distanceSens->prevPos * (1 - distanceSens->k) + (float)distanceSens->currentPos * distanceSens->k;
     }
@@ -139,6 +142,7 @@ void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
     }else if(distanceSens->currentPos<distanceSens->minVal){
         distanceSens->currentPos=distanceSens->minVal;
     }
+    
     // Apply threshold and inverse if configured
     if(xTaskGetTickCount()- distanceSens->lastTick > distanceSens->debounceGap){
         if (distanceSens->threshold > 0) {
