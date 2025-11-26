@@ -148,7 +148,7 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/pwmRGB_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{

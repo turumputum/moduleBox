@@ -32,6 +32,81 @@
 
 static const char *TAG      = "MAIN";
 
+
+static const char * configDescription = 
+"{ \"config\" : [\n"
+"        { \"chapter\" : \"SYSTEM\",\n"
+"          \"values\" : [\n"
+"                    { \"key\" : \"deviceName\",\n"
+"                      \"default\": \"moduleBox\" },\n"
+"                    { \"key\" : \"statusPeriod\",\n"
+"                      \"default\" : \"900\" },\n"
+"                    { \"key\" : \"statusAllChannels\",\n"
+"                      \"enum\" : [ \"false\", \"true\" ]  },\n"
+"                    { \"key\" : \"loglevel\",\n"
+"                      \"enum\" : [ \"none\", \"error\", \"warn\", \"info\", \"debug\", \"verbose\" ]  }\n"
+"                ]\n"
+"        },\n"
+"        { \"chapter\" : \"LAN\",\n"
+"          \"values\" : [\n"
+"                    { \"key\" : \"LAN_enable\",\n"
+"                      \"enum\" : [ \"false\", \"true\" ]  },\n"
+"                    { \"key\" : \"DHCP\",\n"
+"                      \"enum\" : [ \"false\", \"true\" ]  },\n"
+"                    { \"key\" : \"ipAdress\",\n"
+"                      \"default\" : \"192.168.1.100\" },\n"
+"                    { \"key\" : \"netMask\",\n"
+"                      \"default\" : \"255.255.255.0\" },\n"
+"                    { \"key\" : \"gateWay\",\n"
+"                      \"default\" : \"192.168.1.1\" }\n"
+"                ]\n"
+"        },\n"
+"        { \"chapter\" : \"UDP\",\n"
+"          \"values\" : [\n"
+"                    { \"key\" : \"udpServerAdress\",\n"
+"                      \"default\" : \"192.168.1.55\" },\n"
+"                    { \"key\" : \"udpServerPort\",\n"
+"                      \"default\" : \"9000\" },\n"
+"                    { \"key\" : \"udpMyPort\",\n"
+"                      \"default\" : \"9000\" }\n"
+"                ]\n"
+"        },\n"
+"        { \"chapter\" : \"MQTT\",\n"
+"          \"values\" : [\n"
+"                    { \"key\" : \"mqttBrokerAdress\",\n"
+"                      \"default\" : \"192.168.1.55\" }\n"
+"                ]\n"
+"        },\n"
+"        { \"chapter\" : \"SLOT_*\",\n"
+"          \"values\" : [\n"
+"                    { \"key\" : \"mode\",\n"
+"                      \"spec\" : \"slot_mode\" },\n"
+"                    { \"key\" : \"options\",\n"
+"                      \"spec\" : \"slot_options\" },\n"
+"                    { \"key\" : \"cross_link\",\n"
+"                      \"spec\" : \"slot_crosslink\" }\n"
+"                ]\n"
+"        }\n"
+"],\n"
+"\"modes\" : [\n"
+"        {\n"
+"                \"mode\": \"empty\",\n"
+"                \"slots\": \"0-11\",\n"
+"                \"description\": \"Пустой слот\",\n"
+"                \"options\": []\n"
+"        },\n"
+"        {\n"
+"                \"mode\": \"SD_card\",\n"
+"                \"slots\": \"1\",\n"
+"                \"description\": \"Карта SD\",\n"
+"                \"options\": []\n"
+"        },";
+
+
+
+
+
+
 #define MOD(a) get_manifest_##a
 
 typedef const char *        (*GET_MANIFEST_FUNC)();
@@ -110,17 +185,17 @@ int saveManifesto()
     {
         if ((manFile = fopen(MANIFESTO_FULL_FNAME, "w")) != NULL)
         {
-            fprintf(manFile, "%s", "[\n");
+            fprintf(manFile, "%s", configDescription);
 
             for (int i = 0; (f = funcs[i]) != NULL; i++)
             {
                 if ((tmp = (*f)()) != NULL)
                 {
-                    fprintf(manFile, "%s", tmp);
+                    fprintf(manFile, "%s%s", 0 == i ? "\n" : ",\n", tmp);
                 }
             }
 
-            fprintf(manFile, "%s", "]\n");
+            fprintf(manFile, "%s", "\n]\n}\n");
 
             ESP_LOGI(TAG, "manifest saved");
 

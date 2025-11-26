@@ -12,7 +12,7 @@ int init_slots(void);
 
 int get_option_int_val(int slot_num, char* string, const char*  unit_name, int default_value, int min_value, int max_value);
 float get_option_float_val(int slot_num, char* string, float default_value);
-char* get_option_string_val(int slot_num, char* option, ...);
+char* get_option_string_val(int slot_num, char* option, char * default_value);
 int get_option_enum_val(int slot_num, char* option, ...);
 int get_option_flag_val(int slot_num, char* string);
 int get_option_color_val(RgbColor * output, int slot_num, char* string, char * default_value);

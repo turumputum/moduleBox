@@ -45,7 +45,7 @@ void startup_task(void *arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/startup");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "startup_report_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -93,6 +93,7 @@ typedef struct __tag_COUNTER_CONFIG{
 
 /* 
     Виртуальный модуль счетчик
+    slots: 6-9
 */
 void configure_counter(PCOUNTER_CONFIG	ch, int slot_num){
     
@@ -128,7 +129,7 @@ void configure_counter(PCOUNTER_CONFIG	ch, int slot_num){
         char* custom_topic=NULL;
         /* Не cтандартный топик для таймера
         */
-        custom_topic = get_option_string_val(slot_num, "topic");
+        custom_topic = get_option_string_val(slot_num, "topic", "/counter_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         ESP_LOGD(TAG, "customTopic:%s", me_state.action_topic_list[slot_num]);
@@ -250,6 +251,7 @@ typedef struct __tag_RND_CONFIG{
 
 /*
     Модуль для генерации случайных чисел
+    slots: 6-9
 */
 void configure_random(PRND_CONFIG	ch, int slot_num){
     
@@ -272,7 +274,7 @@ void configure_random(PRND_CONFIG	ch, int slot_num){
         char* custom_topic=NULL;
         /* Не cтандартный топик для таймера
         */
-        custom_topic = get_option_string_val(slot_num, "topic");
+        custom_topic = get_option_string_val(slot_num, "topic", "/random_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         ESP_LOGD(TAG, "customTopic:%s", me_state.action_topic_list[slot_num]);
@@ -356,6 +358,7 @@ typedef enum{
 
 /* 
     Виртуальный модуль таймер
+    slots: 6-9
 */
 void configure_timer(PTIMER_CONFIG	ch, int slot_num){
     
@@ -370,7 +373,7 @@ void configure_timer(PTIMER_CONFIG	ch, int slot_num){
         char* custom_topic=NULL;
         /* Не cтандартный топик для таймера
         */
-        custom_topic = get_option_string_val(slot_num, "topic");
+        custom_topic = get_option_string_val(slot_num, "topic", "/timer_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         ESP_LOGD(TAG, "customTopic:%s", me_state.action_topic_list[slot_num]);
@@ -525,7 +528,7 @@ void flywheel_task(void *arg){
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/flywheel_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -714,6 +717,7 @@ typedef struct __tag_WHITELIST_CONFIG{
 
 /*
     Программный модуль для размещения связей во внешнем файле. Виртуальный слот, не взаимодействует с аппаратной частью.
+    slots: 6-9
 */
 void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
     
@@ -722,7 +726,7 @@ void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
 		/* 
             Имя файла со списком. По умолчанию whitelist.txt.
         */
-       strcat(ch->filename, get_option_string_val(slot_num, "filename"));
+       strcat(ch->filename, get_option_string_val(slot_num, "filename", ""));
 	}else{
         strcat(ch->filename,"whitelist.txt");
     }
@@ -741,7 +745,7 @@ void configure_whitelist(PWHITELIST_CONFIG	ch, int slot_num){
 		char* custom_topic=NULL;
     	/* Не cтандартный топик для таймера
         */
-        custom_topic = get_option_string_val(slot_num, "topic");
+        custom_topic = get_option_string_val(slot_num, "topic", "/whitelist_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
@@ -868,7 +872,7 @@ void collector_task(void *arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/collector_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
@@ -987,7 +991,7 @@ void scaler_task(void* arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/scaler_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
@@ -1079,7 +1083,7 @@ void tankControl_task(void* arg) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/tankControl_0");
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
@@ -1202,7 +1206,7 @@ void stepper_conductor_task(void *arg) {
     // Configure topics
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = NULL;
-        custom_topic = get_option_string_val(slot_num, "topic");
+        custom_topic = get_option_string_val(slot_num, "topic", "/conductor_0");
         me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
         me_state.action_topic_list[slot_num] = strdup(custom_topic);
         ESP_LOGD(TAG, "topic:%s", me_state.trigger_topic_list[slot_num]);

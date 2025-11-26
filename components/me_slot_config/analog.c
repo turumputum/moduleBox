@@ -98,7 +98,7 @@ void configure_analog(PANALOG_CONFIG	ch, int slot_num)
 	}
     
     if (strstr(me_config.slot_options[slot_num], "deadBand")!=NULL){
-		/* Фильтрация "дребезга" - определяет порог срабатывания */
+		/* Фильтрация дребезга - определяет порог срабатывания */
         ch->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
 		ESP_LOGD(TAG, "Set dead_band:%d. Slot:%d", ch->dead_band, slot_num);
 	}
@@ -111,7 +111,7 @@ void configure_analog(PANALOG_CONFIG	ch, int slot_num)
 
 	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
 		/* Определяет топик для MQTT сообщений */
-		ch->custom_topic = get_option_string_val(slot_num,"topic");
+		ch->custom_topic = get_option_string_val(slot_num,"topic", "/adc_0");
 		ESP_LOGD(TAG, "Custom topic:%s", ch->custom_topic);
 		ch->flag_custom_topic=1;
 	}
