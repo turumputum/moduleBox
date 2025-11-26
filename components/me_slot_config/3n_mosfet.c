@@ -186,7 +186,8 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
 }
 
 void rgb_ledc_task(void *arg){
-    PMOSFETCONFIG c = calloc(1, sizeof(MOSFETCONFIG));
+    //PMOSFETCONFIG c = calloc(1, sizeof(MOSFETCONFIG));
+    MOSFETCONFIG c = {0};
     uint32_t startTick = xTaskGetTickCount();
 	int slot_num = *(int*) arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
@@ -244,7 +245,7 @@ void rgb_ledc_task(void *arg){
 	ESP_LOGD(TAG, "LEDC channel counter:%d", me_state.ledc_chennelCounter);
 
 	int16_t currentBright=0;
-    int16_t targetBright=abs(255*c->inverse-c->min_bright);
+    int16_t targetBright=abs(255*c.inverse-c.min_bright);
     RgbColor currentRGB={
         .r=0,
         .g=0,
@@ -258,83 +259,83 @@ void rgb_ledc_task(void *arg){
 
     while (1) {
 
-        switch (stdcommand_receive(&c->cmds, &params, 0))
+        switch (stdcommand_receive(&c.cmds, &params, 0))
         {
             case -1: // none
                 break;
 
 
             case MYCMD_default:
-                c->state = params.p[0].i;
+                c.state = params.p[0].i;
                 break;
 
             case MYCMD_setRGB:
-                c->targetRGB.r = params.p[0].i;
-                c->targetRGB.g = params.p[1].i;
-                c->targetRGB.b = params.p[2].i;
+                c.targetRGB.r = params.p[0].i;
+                c.targetRGB.g = params.p[1].i;
+                c.targetRGB.b = params.p[2].i;
 
-                ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c->targetRGB.r, c->targetRGB.g, c->targetRGB.b); 
+                ESP_LOGD(TAG, "Slot:%d target RGB: %d %d %d", slot_num, c.targetRGB.r, c.targetRGB.g, c.targetRGB.b); 
                 break;
 
             case MYCMD_setMode:
-                c->ledMode = params.enumResult;
+                c.ledMode = params.enumResult;
                 break;
 
             case MYCMD_setIncrement:
-                c->increment = params.p[0].i;
-                ESP_LOGD(TAG, "Set fade increment:%d", c->increment);
+                c.increment = params.p[0].i;
+                ESP_LOGD(TAG, "Set fade increment:%d", c.increment);
                 break;
 
             case MYCMD_setMaxBright:
-                c->max_bright = params.p[0].i;
+                c.max_bright = params.p[0].i;
                 break;
 
             case MYCMD_setMinBright:
-                c->min_bright = params.p[0].i;
+                c.min_bright = params.p[0].i;
                 break;
 
             default:
                 break;                
         }
 
-        if(c->state==0){
-            targetBright =abs(255*c->inverse-c->min_bright); 
-            checkColorAndBright(&currentRGB, &c->targetRGB, &currentBright, &targetBright, c->increment);
+        if(c.state==0){
+            targetBright =abs(255*c.inverse-c.min_bright); 
+            checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
 			set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB,currentBright);
         }else{
-            if (c->ledMode==MODE_DEFAULT){
-                targetBright = abs(255*c->inverse-c->max_bright); 
-                checkColorAndBright(&currentRGB, &c->targetRGB, &currentBright, &targetBright, c->increment);
+            if (c.ledMode==MODE_DEFAULT){
+                targetBright = abs(255*c.inverse-c.max_bright); 
+                checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB ,currentBright);
                 //ESP_LOGD(TAG, "pwmRGB currentBright:%f targetBright:%f", currentBright, targetBright); 
-            }else if(c->ledMode==MODE_FLASH){
+            }else if(c.ledMode==MODE_FLASH){
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d", currentBright, targetBright); 
-                if(currentBright==c->min_bright){
-                    targetBright=abs(255*c->inverse-c->max_bright);
+                if(currentBright==c.min_bright){
+                    targetBright=abs(255*c.inverse-c.max_bright);
                     //ESP_LOGD(TAG, "Flash min bright:%d targetBright:%d", currentBright, targetBright); 
-                }else if(currentBright==c->max_bright){
-                    targetBright=fabs(255*c->inverse-c->min_bright);
+                }else if(currentBright==c.max_bright){
+                    targetBright=fabs(255*c.inverse-c.min_bright);
                     //ESP_LOGD(TAG, "Flash max bright:%d targetBright:%d", currentBright, targetBright); 
                 }
-                checkColorAndBright(&currentRGB, &c->targetRGB, &currentBright, &targetBright, c->increment);
+                checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB, currentBright);
-            }else if(c->ledMode==MODE_RAINBOW){
-                targetBright = c->max_bright;
-                HsvColor hsv=RgbToHsv(c->targetRGB);
+            }else if(c.ledMode==MODE_RAINBOW){
+                targetBright = c.max_bright;
+                HsvColor hsv=RgbToHsv(c.targetRGB);
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d H:%d S:%d V:%d",currentBright, targetBright, hsv.h, hsv.s, hsv.v);
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d R:%d G:%d B:%d", currentBright, targetBright, currentRGB.r, currentRGB.g, currentRGB.b);
                 //ESP_LOGD(TAG, "hsv before:%d %d %d", hsv.h, hsv.s, hsv.v);
-                hsv.h+=c->increment;
+                hsv.h+=c.increment;
                 //hsv.s = 255;
                 //hsv.v = (uint8_t)(max_bright*255);
                 //ESP_LOGD(TAG, "hsv after:%d %d %d", hsv.h, hsv.s, hsv.v);
-                c->targetRGB = HsvToRgb(hsv);
+                c.targetRGB = HsvToRgb(hsv);
                 //ESP_LOGD(TAG, "Flash currentBright:%f targetBright:%f R:%d G:%d B:%d", currentBright, targetBright, targetRGB.r, targetRGB.g, targetRGB.b);
-                checkColorAndBright(&currentRGB, &c->targetRGB, &currentBright, &targetBright, c->increment);
+                checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB, currentBright);
             }
         }
-        vTaskDelayUntil(&lastWakeTime, c->refreshPeriod);
+        vTaskDelayUntil(&lastWakeTime, c.refreshPeriod);
     }
 
 	EXIT:
