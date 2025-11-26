@@ -92,7 +92,7 @@ void in_task(void *arg){
     
     if (strstr(me_config.slot_options[slot_num], "inTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "inTopic");
+    	custom_topic = get_option_string_val(slot_num, "inTopic", "/in_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
@@ -224,7 +224,7 @@ void out_task(void *arg) {
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "outTopic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "outTopic");
+    	custom_topic = get_option_string_val(slot_num, "outTopic", "/out_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
@@ -396,7 +396,7 @@ void out_2ch_task(void *arg) {
     //---add action to topic list---
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = NULL;
-        custom_topic = get_option_string_val(slot_num, "topic");
+        custom_topic = get_option_string_val(slot_num, "topic", "/out_0");
         me_state.action_topic_list[slot_num] = strdup(custom_topic);
         ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     } else {
@@ -563,7 +563,7 @@ void out_3ch_task(void *arg) {
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/out_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
@@ -799,7 +799,7 @@ void in_3ch_task(void *arg){
 	
 	if (strstr(me_config.slot_options[inData.slot_num], "logic") != NULL) {
         char* mode_str=NULL;
-		mode_str = get_option_string_val(inData.slot_num, "logic");
+		mode_str = get_option_string_val(inData.slot_num, "logic", "");
         if(strstr(mode_str,"or")!=NULL){
             inData.logic= OR_LOGIC_MODE;
         }else if(strstr(mode_str,"and")!=NULL){
@@ -810,7 +810,7 @@ void in_3ch_task(void *arg){
     
     if (strstr(me_config.slot_options[inData.slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(inData.slot_num, "topic");
+    	custom_topic = get_option_string_val(inData.slot_num, "topic", "/in_0");
 		me_state.trigger_topic_list[inData.slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[inData.slot_num]);
     }else{

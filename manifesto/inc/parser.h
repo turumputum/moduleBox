@@ -70,10 +70,16 @@ typedef struct __tag_Common
 class Module
 {
 public:
+                        Module ()
+                        { slotFrom = 0; slotTo = 5; }
+
         int             line;
         char            name                    [ 64 ];
 
         char *          begin;
+
+        int             slotFrom;
+        int             slotTo;
 
         char *          descRaw;
 }; 
@@ -109,6 +115,7 @@ public:
         Common          c;
         RPTT            type;
         char            unit                    [ 32 ];
+        char            topic                   [ 64 ];
 
         char *          paramsRaw;
 
@@ -172,6 +179,9 @@ private:
                                                  char *         begin,
                                                  char *         end);
 
+
+        void            searchSlots             (char *         desc);
+
         void            resetSearching          ();
 
         char *          findNextFunction        (Common &       c,
@@ -215,7 +225,7 @@ private:
         bool            parseOptiosParams       (Option &       opt,
                                                  char *         on);
 
-        bool            generateManifestoForModule();
+        bool            generateManifestoForModule(bool first);
 
         bool            generateManifestoOfOptions();
 
@@ -223,6 +233,8 @@ private:
         bool            generateManifestoOfCommands();
 
         void            cleanValue              (char *         value);
+
+        void            resetCommon             (bool           first);
 
         void            resetOptions            (bool           first);
 

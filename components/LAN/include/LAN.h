@@ -17,7 +17,6 @@ void start_osc_recive_task();
 void start_ftp_task();
 void start_mdns_task();
 void start_mqtt_task();
-int udplink_send(int slot_num, const char * message);
 const char * networkGetStatusString();
 
 #endif // #define __LAN_H__

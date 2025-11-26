@@ -22,6 +22,14 @@ const char * CONFIGURE_BEGIN = "void configure_";
 // -------------------------------- OptionS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
+void Parser::resetCommon(bool           first)
+{
+    if (!first)
+    {
+        funcSearchEnd   = mod.begin;
+    }
+}
+
 char * Parser::findNextFunction(Common &        c,
                                 const char *    part1,
                                 const char *    part2)
@@ -70,11 +78,38 @@ int Parser::dupFromTo(char * &       dest,
                        char *         begin,
                        char *         end)
 {
-    int len = end - begin;
+    int oriLen  = end - begin;
+    int len     = 0;
+    
 
-    if ((dest = (char*)malloc(len + 3)) != nil)
+    if ((dest = (char*)malloc(oriLen * 2 + 3)) != nil)
     {
-        memcpy(dest, begin, len);
+        // len = oriLen;
+        // memcpy(dest, begin, len);
+
+        for (int i = 0; i < oriLen; i++)
+        {
+            switch (begin[i])
+            {
+                case '\r':
+                    break;
+
+                case '\t':
+                    dest[len++] = '\\';
+                    dest[len++] = 't';
+                    break;
+
+                case '\n':
+                    dest[len++] = '\\';
+                    dest[len++] = 'n';
+                    break;
+
+                default:
+                    dest[len++] = begin[i];
+                    break;
+            }
+        }
+
         dest[len] = 0;
     }
 
@@ -223,7 +258,7 @@ const char * Parser::parse(char * source)
                       getReports()  && 
                       getCommands() )
                 {
-                    if (generateManifestoForModule())
+                    if (generateManifestoForModule(0 == mods))
                     {
                         mods++;
                     }
@@ -245,19 +280,21 @@ const char * Parser::parse(char * source)
 
     return result;
 }
-bool Parser::generateManifestoForModule()
+bool Parser::generateManifestoForModule(bool first)
 {
     bool            result      = true;
     char            tmp     [ 1024 ];
 
-    snprintf(tmp, sizeof(tmp), "\n\t{\n\t\t\"mode\": \"%s\",\n\t\t\"description\": \"%s\",\n", mod.name, mod.descRaw);
+    snprintf(tmp, sizeof(tmp), "%s\t{\n\t\t\"mode\": \"%s\",\n\t\t\"slots\": \"%d-%d\",\n\t\t\"description\": \"%s\",\n", first ? "\n" : ",\n", 
+        mod.name, mod.slotFrom, mod.slotTo,
+        mod.descRaw);
     manifesto.append(tmp);
 
     if (  generateManifestoOfOptions()  && 
           generateManifestoOfReports()  &&
           generateManifestoOfCommands() )
     {
-        snprintf(tmp, sizeof(tmp), "%s", "\t},\n");
+        snprintf(tmp, sizeof(tmp), "%s", "\t}");
         manifesto.append(tmp);
         result = true;
     }
@@ -296,6 +333,37 @@ char * Parser::findCorellatedCurlyBrace(char *         begin)
     
     return result;
 }
+void Parser::searchSlots(char * desc)
+{
+    char * on = strstr(desc, "slots:");
+    char * from;
+    char * to;
+
+    if (on)
+    {
+        *on = 0;
+        on++;
+        if ((on = strchr(on, ':')) != nil)
+        {
+            from = ++on;
+            if ((to = strchr(from, '-')) != nil)
+            {
+                to++;
+
+                mod.slotFrom    = atoi(from);
+                mod.slotTo      = atoi(to);
+            }
+            else
+                mod.slotFrom = mod.slotTo = atoi(from);
+        }
+    }
+    else
+    {
+        mod.slotFrom = 0;
+        mod.slotTo   = 5;
+    }
+
+}
 bool Parser::getModuleDesc(char *         moduleBegin)
 {
     bool        result = false;
@@ -311,6 +379,7 @@ bool Parser::getModuleDesc(char *         moduleBegin)
             if (dupFromTo(mod.descRaw, begin, end) > 0)
             {
                 cleanValue(mod.descRaw);
+                searchSlots(mod.descRaw);
                 result = true;
             }
             else

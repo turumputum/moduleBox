@@ -49,7 +49,7 @@ void swiper_task(void *arg) {
 
     if (strstr(me_config.slot_options[slot_num], "swiper_topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "swiper_topic");
+    	custom_topic = get_option_string_val(slot_num, "swiper_topic", "/swiper_0");
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
