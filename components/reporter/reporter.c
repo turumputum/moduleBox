@@ -421,13 +421,25 @@ void report(char *msg, int slot_num){
 	//free(send_message.str);
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 }
-void reportState(){
-	char tmpStr[512];  // Increased buffer size for JSON
-    
-	sprintf(tmpStr, "{");
 
-    sprintf(tmpStr+ strlen(tmpStr), "\"freeRAM\":%d,", xPortGetFreeHeapSize());
+void reportFreeRAM(){
+	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
+    sprintf(tmpStr, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
+	send_report(&tmpStr);
+	heap_caps_free(tmpStr);
+}
 
+void reportVersion(){
+	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
+    sprintf(tmpStr, "%s/system/version:%s",me_config.deviceName, VERSION);
+	send_report(&tmpStr);
+	heap_caps_free(tmpStr);
+}
+
+void reportNETstatus(){
+	//char tmpStr[512];  // Increased buffer size for JSON
+	char * tmpStr = heap_caps_malloc(512, MALLOC_CAP_8BIT);
+	sprintf(tmpStr, "%s/system/NETstatus:{",me_config.deviceName);
     // Add WIFI network info if initialized successfully
     sprintf(tmpStr+ strlen(tmpStr), "\"WIFI_init_res\":%d," , me_state.WIFI_init_res);
 	if (me_state.WIFI_init_res == ESP_OK) {
@@ -460,7 +472,19 @@ void reportState(){
         me_state.OSC_init_res,
         me_state.FTP_init_res
     );
+	//ESP_LOGD(TAG,"debug state report:%s", tmpStr);
+	send_report(&tmpStr);
+	heap_caps_free(tmpStr);
+}
 
-	send_report(tmpStr);
+void reportTaskList(){
+	//char tmpStr[512];  // Increased buffer size for JSON
+	char * tmpStr = heap_caps_malloc(1024, MALLOC_CAP_8BIT);
+	sprintf(tmpStr, "%s/system/TaskList:",me_config.deviceName);
+	vTaskList(tmpStr+ strlen(tmpStr));
+	//vTaskList(tmpStr);
+	// ESP_LOGD(TAG,"taskList:%s", tmpStr);
+	send_report(&tmpStr);
+	heap_caps_free(tmpStr);
 }
 

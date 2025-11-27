@@ -27,6 +27,16 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.4.12
+  espressif/esp_websocket_client:
+    component_hash: 723aba370113196c66321442426cd6452c351eef31c85c83bd1446831ef9f8f4
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.6.0
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -67,18 +77,30 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.4
+  espressif/zlib:
+    component_hash: d901723af51f13fc8e5824f39f32239c847956e8fd951a05266588dc5cfbb9ae
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.3.1
   idf:
     source:
       type: idf
-    version: 5.3.1
+    version: 5.3.3
 direct_dependencies:
 - cybergear-robotics/cybergear
 - espressif/ds18b20
 - espressif/esp-dsp
+- espressif/esp_websocket_client
 - espressif/jsmn
 - espressif/mdns
 - espressif/nghttp
+- espressif/zlib
 - idf
-manifest_hash: 1e38c7ec1a59cefc3f813a4524936c89811b1156138373f9faf6d1dbf275f22b
+manifest_hash: b254b47920a489c3e3a4a7b82b2cf69dc269836eb9fc5362307d4859f19ae81b
 target: esp32s3
 version: 2.0.0

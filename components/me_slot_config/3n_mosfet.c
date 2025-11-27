@@ -345,7 +345,7 @@ void rgb_ledc_task(void *arg){
 void init_3n_mosfet(int slot_num) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
-    xTaskCreate(rgb_ledc_task, "smartLed_task", 1024*4, &slot_num,12, NULL);
+    xTaskCreate(rgb_ledc_task, "pwmRGB_task", 1024*4, &slot_num,12, NULL);
 
 	ESP_LOGD(TAG,"pwmRGB_led task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

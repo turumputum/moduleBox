@@ -193,6 +193,9 @@ void exec_led(int slot_num, int payload) {
 }
 
 void execute(char *action) {
+	if(strlen(action)>MAX_STRING_LENGTH){
+		action[MAX_STRING_LENGTH]='\0';
+	}
 	ESP_LOGD(TAG, "Execute action:%s", action);
 	exec_message_t msg;
 	strcpy(msg.str, action);
@@ -215,18 +218,27 @@ void executer_task(void * param){
 		if (xQueueReceive(me_state.executor_queue, &msg, portMAX_DELAY) == pdPASS){
 			//ESP_LOGD(TAG, "incoming cmd:%s", msg.str);
 			int sum=0;
-			if(strstr(msg.str, "getState")!=NULL){
-				ESP_LOGD(TAG, "Get state");
-				reportState();
+			if(strstr(msg.str, "system/getFreeRAM")!=NULL){
+				ESP_LOGD(TAG, "Get RAM status");
+				reportFreeRAM();
+				sum++;
+			}else if(strstr(msg.str, "system/getNETstatus")!=NULL){
+				ESP_LOGD(TAG, "getNETstatus");
+				reportNETstatus();
+				sum++;
+			}else if(strstr(msg.str, "system/getTaskList")!=NULL){
+				ESP_LOGD(TAG, "getTaskList");
+				reportTaskList();
+				sum++;
+			}else if(strstr(msg.str, "system/getVersion")!=NULL){
+				ESP_LOGD(TAG, "getVersion");
+				reportVersion();
 				sum++;
 			}else if(strstr(msg.str, "system/restart")!=NULL){
 				ESP_LOGD(TAG, "restart");
 				esp_restart();
 				sum++;
 
-			}else if(strstr(msg.str, "status")!=NULL){				
-				makeStatusReport(true);
-				sum++;
 			}else{
 				for(int i=0; i<NUM_OF_SLOTS; i++){
 					//ESP_LOGD(TAG, "command_queue[%d]:%d",i,me_state.command_queue[i]==NULL);
@@ -243,7 +255,7 @@ void executer_task(void * param){
 			}
 			if(sum==0){
 				usbprint("Action not found!!!");
-				ESP_LOGE(TAG, "Action not found: %s", msg.str);
+				//ESP_LOGE(TAG, "Action not found: %s", msg.str);
 			}
 		}
 	}
