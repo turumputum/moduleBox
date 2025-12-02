@@ -213,6 +213,21 @@ static bool ftp_open_file (PCLIENT cl, const char *path, const char *mode) {
 		return false;
 	}
 	cl->ftp_data.e_open = E_FTP_FILE_OPEN;
+	
+	char* on;
+	if ((on = strrchr(path, '/')) != 0)
+	{
+		on++;
+	}
+	else
+		on = path;
+
+	if (!strcasecmp(on, "config.ini"))
+	{
+		cl->ftp_data.configItIs = 1;
+	}
+
+
 	return true;
 }
 
@@ -269,6 +284,11 @@ static ftp_result_t ftp_write_file (PCLIENT cl, char *filebuf, uint32_t size) {
 	ftp_result_t result = E_FTP_RESULT_FAILED;
 	uint32_t actualsize = fwrite(filebuf, 1, size, cl->ftp_data.fp);
 	if (actualsize == size) {
+		if (cl->ftp_data.configItIs && !cl->ftp_data.configWasWritten)
+		{
+			cl->ftp_data.configWasWritten = 1;
+		}
+
 		result = E_FTP_RESULT_OK;
 	} else {
 		ftp_close_files_dir(cl);
@@ -518,7 +538,11 @@ static void ftp_close_cmd_data(PCLIENT cl) {
 	ftp_close_filesystem_on_error (cl);
 
 	cl->inUse = false;
-	cl->resetTrigger = true;
+
+	if (cl->ftp_data.configWasWritten)
+	{
+		cl->resetTrigger = true;
+	}
 }
 
 //----------------------------
