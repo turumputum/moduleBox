@@ -46,6 +46,7 @@
 #include <rgbHsv.h>
 #include <stdreport.h>
 #include "rtp_play.h"
+#include <mbdebug.h>
 
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -81,8 +82,13 @@ int init_slots(void){
 	reporter_init();
 
 	for(int i=0;i<NUM_OF_SLOTS; i++){
-		ESP_LOGD(TAG,"[%d] check mode:%s", i,me_config.slot_mode[i]);
-		if(!memcmp(me_config.slot_mode[i], "audioPlayer", 11)){
+		ESP_LOGD(TAG,"[%d] check mode: '%s'", i,me_config.slot_mode[i]);
+
+		if(!strlen(me_config.slot_mode[i])) {
+			// empty
+		}else if(!memcmp(me_config.slot_mode[i], "empty", 5)){
+			// empty
+		}else if(!memcmp(me_config.slot_mode[i], "audioPlayer", 11)){
 			audioInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "audioLAN", 8)){
 			start_audioLAN_task(i); 		// W, C
@@ -193,7 +199,11 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
 			start_stepper_conductor_task(i); // NOW, NOC
 		}
-		
+		else
+		{
+			mblog(E, "Wrong mode for SLOT_%d: %s", i, me_config.slot_mode[i]);
+		}
+	
 	}
 
 	ESP_LOGD(TAG, "Load config complite. Duration: %ld ms. Heap usage: %lu",
