@@ -221,8 +221,9 @@ void start_mdns_task(){
 
 		//mdns_query_ptr()
 		//initialize service
-		char tmp[strlen(me_config.deviceName)+strlen("FTP server on")+5];
-		sprintf(tmp,"FTP server on %s",me_config.deviceName);
+		char * stamp = "FTP server on moduleBox '%s'";
+		char tmp[strlen(me_config.deviceName)+strlen(stamp)+5];
+		sprintf(tmp,stamp,me_config.deviceName);
 		ESP_ERROR_CHECK( mdns_service_add(tmp, "_ftp", "_tcp", 21, 0, 0) );
 		ESP_LOGD(TAG, "mDNS task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 		

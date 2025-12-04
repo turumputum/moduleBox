@@ -13,16 +13,16 @@
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
-#define MODULEBOXAPP_TOPIC      "moduleBoxApp:"
-#define MODULEBOXAPP_TOPIC_SZ   13
+// #define MODULEBOXAPP_TOPIC      "moduleBoxApp:"
+// #define MODULEBOXAPP_TOPIC_SZ   13
 
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-void                moduleboxapp_init           ();
+// void                moduleboxapp_init           ();
 
-char *              moduleboxapp_command        (char *             command, 
-                                                 int                count);
+// char *              moduleboxapp_command        (char *             command, 
+//                                                  int                count);
 
 #endif // #define __MODULEBOXAPP_H__

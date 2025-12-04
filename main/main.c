@@ -404,7 +404,6 @@ void app_main(void)
 	board_init(); // USB hardware
 	
 	mblog_init();
-	moduleboxapp_init();
 
 	nvs_init();
 

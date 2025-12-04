@@ -123,6 +123,8 @@ typedef struct {
     bool            listroot;
     uint32_t        total;
     uint32_t        time;
+    uint8_t         configItIs;
+    uint8_t         configWasWritten;
 } ftp_data_t;
 
 typedef struct {
