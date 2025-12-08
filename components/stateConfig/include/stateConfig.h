@@ -3,6 +3,8 @@
 #include <ff.h>
 
 #include <stdint.h>
+#include <schedule_parser.h>
+
 #define MAX_NUM_OF_TRACKS 10
 #define FILE_NAME_LEGHT 300
 #define INIT_OK 0
@@ -88,6 +90,13 @@ typedef struct {
 
 typedef TCHAR file_t[FILE_NAME_LEGHT];
 
+// Schedule entry structure
+typedef struct {
+    schedule_time_t time;
+    char * command;
+} schedule_entry2_t;
+
+
 typedef struct {
 	uint8_t WIFI_enable; 
 	char * WIFI_ssid;
@@ -154,6 +163,10 @@ typedef struct {
 	uint8_t f_report_osc;
 
 	char ssidT[33];
+
+	char *				ntpServer;
+	uint8_t 			scheduleCount;
+	schedule_entry2_t 	scheduleEntries[MAX_SCHEDULE_ENTRIES];
 
 } configuration;
 

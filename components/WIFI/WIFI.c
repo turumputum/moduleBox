@@ -73,31 +73,6 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 	}
 }
 
-void time_sync_notification_cb(struct timeval *tv) {
-	ESP_LOGI(TAG, "Notification of a time synchronization event");
-}
-
-static void initialize_sntp(void) {
-	ESP_LOGI(TAG, "Initializing SNTP");
-	sntp_setoperatingmode(SNTP_OPMODE_POLL);
-	sntp_setservername(0, "pool.ntp.org");
-	// ESP_LOGI(TAG, "Your NTP Server is %s", CONFIG_NTP_SERVER);
-	// sntp_setservername(0, CONFIG_NTP_SERVER);
-	sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-	sntp_init();
-}
-
-void obtain_time(void) {
-	initialize_sntp();
-	// wait for time to be set
-	int retry = 0;
-	const int retry_count = 10;
-	while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
-		ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
-		vTaskDelay(2000 / portTICK_PERIOD_MS);
-	}
-}
-
 void wifi_scan(void) {
 	char apList[128];
 	ESP_ERROR_CHECK(esp_netif_init());
