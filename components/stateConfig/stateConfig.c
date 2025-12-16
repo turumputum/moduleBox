@@ -18,6 +18,7 @@
 //#include "buttonLed.h"
 #include "help.h"
 #include <axstring.h>
+#include <mbdebug.h>
 
 #define TAG "stateConfig"
 
@@ -169,6 +170,16 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->oscMyPort = atoi(value);
 	} else if (MATCH("MQTT", "mqttBrokerAdress")) {//-----------------------------------------------
 		pconfig->mqttBrokerAdress = strdup(value);
+	} else if (MATCH("SCHEDULE", "ntpServer")) {//-----------------------------------------------
+		pconfig->ntpServer = strdup(value);
+	} else if (MATCH("SCHEDULE", "time")) {//-----------------------------------------------
+		if (parse_schedule_time(value, &pconfig->scheduleEntries[pconfig->scheduleCount].time) == -1)
+		{
+			mblog(E, "Error parsing schedule time value: '%s'", value);
+		}
+	} else if (MATCH("SCHEDULE", "command")) {//-----------------------------------------------
+		pconfig->scheduleEntries[pconfig->scheduleCount].command = strdup(value);
+		pconfig->scheduleCount++;
 	}else {
 		return 0; /* unknown section/name, error */
 	}
