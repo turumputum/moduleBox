@@ -1,48 +1,27 @@
-#!/usr/bin/env python3
-"""
-OSC сообщение отправитель
-Отправляет строковое сообщение через OSC протокол
-"""
+import time
+from pythonosc.udp_client import SimpleUDPClient
 
-from pythonosc import udp_client
-import argparse
-import sys
+# Настройки OSC
+OSC_IP = "192.168.88.134"
+OSC_PORT = 9000
+OSC_ADDRESS = "/mbGlassPanTouch/smartLed_5"
 
-def send_osc_message(ip="127.0.0.1", port=5005, address="/message", message="Hello OSC"):
-    """
-    Отправляет OSC сообщение
-    
-    Args:
-        ip (str): IP адрес получателя
-        port (int): Порт получателя
-        address (str): OSC адрес
-        message (str): Сообщение для отправки
-    """
-    try:
-        # Создаем клиент
-        client = udp_client.SimpleUDPClient(ip, port)
-        
-        # Отправляем сообщение
-        client.send_message(address, message)
-        print(f"Отправлено: '{message}' на {ip}:{port}{address}")
-        
-    except Exception as e:
-        print(f"Ошибка отправки: {e}")
-        return False
-    
-    return True
+# Создаём клиент
+client = SimpleUDPClient(OSC_IP, OSC_PORT)
 
-def main():
-    parser = argparse.ArgumentParser(description='Отправка OSC сообщений')
-    parser.add_argument('--ip', default='127.0.0.1', help='IP адрес (по умолчанию: 127.0.0.1)')
-    parser.add_argument('--port', type=int, default=5005, help='Порт (по умолчанию: 5005)')
-    parser.add_argument('--address', default='/message', help='OSC адрес (по умолчанию: /message)')
-    parser.add_argument('--message', default='Hello OSC', help='Сообщение для отправки')
-    
-    args = parser.parse_args()
-    
-    success = send_osc_message(args.ip, args.port, args.address, args.message)
-    sys.exit(0 if success else 1)
+print(f"Отправка OSC-сообщений на {OSC_IP}:{OSC_PORT}{OSC_ADDRESS}")
 
-if __name__ == "__main__":
-    main()
+try:
+    while True:
+        # Отправляем 1
+        client.send_message(OSC_ADDRESS, 1)
+        print("Отправлено: 1")
+        time.sleep(1)
+
+        # Отправляем 0
+        client.send_message(OSC_ADDRESS, 0)
+        print("Отправлено: 0")
+        time.sleep(1)
+
+except KeyboardInterrupt:
+    print("\nОстановка скрипта...")
