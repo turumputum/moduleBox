@@ -86,6 +86,8 @@
 #include <mbdebug.h>
 #include <moduleboxapp.h>
 
+#include <scheduler.h>
+
 
 
 
@@ -404,7 +406,6 @@ void app_main(void)
 	board_init(); // USB hardware
 	
 	mblog_init();
-	moduleboxapp_init();
 
 	nvs_init();
 
@@ -472,6 +473,8 @@ void app_main(void)
 		me_state.content_search_res = ESP_FAIL;
 	}
 
+	start_scheduler_task();
+
 	startNetworkServices();
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
@@ -483,6 +486,7 @@ void app_main(void)
 	int freeHeapSizeFLAG = 0;
 
 	uint32_t periodicTicks = xTaskGetTickCount();
+	uint32_t scheduleTicks = xTaskGetTickCount();
 
 	while (1)
 	{
@@ -524,7 +528,7 @@ void app_main(void)
 
 		uint32_t now = xTaskGetTickCount();
 
-		// ever 15 minutes
+		// every 15 minutes
 		if (me_config.statusPeriod)
 		{
 			if ((now - periodicTicks) >= pdMS_TO_TICKS(me_config.statusPeriod * 1000)) 
@@ -534,8 +538,16 @@ void app_main(void)
 				periodicTicks = now;
 			}
 		}
+
+		// every second 
+		if ((now - scheduleTicks) >= pdMS_TO_TICKS(1000))
+		{
+			scheduler_periodic_turn();
+
+			scheduleTicks = now;
+		}
 		
-		vTaskDelay(pdMS_TO_TICKS(1000));
+		vTaskDelay(pdMS_TO_TICKS(200));
 	}
 }
 

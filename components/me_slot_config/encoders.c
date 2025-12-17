@@ -984,7 +984,7 @@ void encoderAS5600_task(void *arg)
 		raw_angle &= 0x0FFF; // Mask to 12 bits
 		
 		// Apply offset
-		//ESP_LOGD(TAG, "rawVal:%d angle on slot:%d", raw_angle, slot_num);
+		// ESP_LOGD(TAG, "rawVal:%d angle on slot:%d", raw_angle, slot_num);
 		int16_t adjusted_angle = raw_angle + c.zeroShift;
 		if(adjusted_angle < 0) {
 			adjusted_angle += 4096;

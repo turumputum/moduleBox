@@ -220,25 +220,8 @@ void udplink_task()
 				if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
 				{
 					*(buff + len) = 0;
-					printf("got: '%s'\n", buff);
-					char * on = strstr(buff, MODULEBOXAPP_TOPIC);
-
-					if (on)
-					{
-						printf("'%s' is present\n", MODULEBOXAPP_TOPIC);
-
-						int cnt = 0;
-						char * response;
-
-
-						while ((response  = moduleboxapp_command(on + MODULEBOXAPP_TOPIC_SZ, cnt++)) != nil)
-						{
-							printf("sending '%s'\n", response);
-							sendto(me_state.udplink_socket, response, strlen(response), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-						}
-					}
-					else 
-						udpcrosslinker(buff);
+					//printf("got: '%s'\n", buff);
+					udpcrosslinker(buff);
 				}
 			}
 		}
