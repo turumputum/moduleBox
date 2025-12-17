@@ -156,7 +156,9 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num){
 
     /* задает значение по умолчанию
     */
-    c->defaultState = get_option_enum_val(slot_num, "defaultState", "enable", "disable", NULL);
+    if ((c->defaultState = get_option_enum_val(slot_num, "defaultState", "disable", "enable", NULL)) < 0){
+        ESP_LOGE(TAG, "defaultState: unricognized value");
+    }
     c->state = c->defaultState;
 
     /* Громкость
@@ -240,11 +242,14 @@ void audioLAN_task(void *arg){
     gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
     esp_rom_gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
-	gpio_set_level(led_pin, !c->state);
+	gpio_set_level(led_pin, c->state);
 
     waitForWorkPermit(slot_num);
     if(c->state == ENABLE){
         pipelineStart(c);
+        ESP_LOGD(TAG,"audioLAN_%d state ENABLE", slot_num);
+    }else{
+        ESP_LOGD(TAG,"audioLAN_%d slot state DISABLE", slot_num);
     }
     //TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -260,8 +265,10 @@ void audioLAN_task(void *arg){
             case rtpCMD_enable:
                 if((atoi(cmd_arg)==ENABLE)&&(c->state != ENABLE)){
                     pipelineStart(c);
+                    gpio_set_level(led_pin, !c->state);
                 }else if((atoi(cmd_arg)==DISABLE)&&(c->state != DISABLE)){
                     pipelineStart(c);
+                    gpio_set_level(led_pin, !c->state);
                 }
                 c->state = atoi(cmd_arg);
                 ESP_LOGD(TAG, "[audioLAN_%d] lets set state:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());

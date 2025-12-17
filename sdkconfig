@@ -2257,6 +2257,12 @@ CONFIG_MDNS_PREDEF_NETIF_AP=y
 CONFIG_MDNS_PREDEF_NETIF_ETH=y
 # end of MDNS Predefined interfaces
 # end of mDNS
+
+#
+# NGHTTP configuration
+#
+CONFIG_ESP_NGHTTP2_INBOUND_BUFFER_LENGTH=4096
+# end of NGHTTP configuration
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set
