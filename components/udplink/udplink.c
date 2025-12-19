@@ -56,8 +56,8 @@
 
 typedef struct __tag_UDPCROSSLINK
 {
-	char * 	key;
-	char * 	action;
+	char * 	name;
+	char * 	rule;
 } UDPCROSSLINK;
 
 // ---------------------------------------------------------------------------
@@ -67,10 +67,11 @@ typedef struct __tag_UDPCROSSLINK
 extern configuration me_config;
 extern stateStruct me_state;
 extern void crosslinker(char* str);
+extern void crosslinker_(char* str, char* rules);
 
 static const char *TAG = "[UDP]";
 
-static 	char * 				udp_cross_link 	= nil;
+static 	char * 				udp_crosslink 	= nil;
 static  int 				linksCount		= 0;
 static 	UDPCROSSLINK		links	[ 30 ];
 
@@ -78,28 +79,19 @@ static 	UDPCROSSLINK		links	[ 30 ];
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-int udpcrosslinker(char * buff)
+static void _cut_crlfs(char * value)
 {
-	int 		result		= 0;
-	char * 		response;
-	char 		tmp 		[ 280 ];
+	char * on;
 
-	if (linksCount)
+	if ((on = strchr(value, '\r')) != 0)
 	{
-		for (int i = 0; !result && (i < linksCount); i++)
-		{
-			if (!strcmp(buff, links[i].key))
-			{
-				snprintf(tmp, sizeof(tmp) - 1, "%s/%s", me_config.deviceName, links[i].action);
-
-				ESP_LOGD(TAG, "execute: %s\n", tmp);
-				execute(tmp);
-				result = 1;
-			}
-		}
+		*on = 0;
 	}
 
-	return result;
+	if ((on = strchr(value, '\n')) != 0)
+	{
+		*on = 0;
+	}
 }
 static char * _skip_spaces(char * value)
 {
@@ -112,26 +104,64 @@ static char * _skip_spaces(char * value)
                              
     return (char*)on;
 }
+int execute_links(char * buff)
+{
+	int 		result		= 0;
+	char * 		response;
+	char * 		name;
+	char * 		event;
+	char * 		on;
+	char 		tmp 		[ 280 ];
+
+	if (linksCount)
+	{
+		_cut_crlfs(buff);
+		name = _skip_spaces(buff);
+
+		if ((event = strchr(name, '/')) != 0)
+		{
+			*event = 0;
+			event++;
+
+			for (int i = 0; !result && (i < linksCount); i++)
+			{
+				if (!strcmp(name, links[i].name))
+				{
+					snprintf(tmp, sizeof(tmp) - 1, "%s/%s", me_config.deviceName, event);
+
+					printf("UDP crosslink: name '%s', event '%s', rule '%s'\n", name, tmp, links[i].rule);
+
+					ESP_LOGD(TAG, "UDP crosslink: name '%s', event '%s', rule '%s'", name, tmp, links[i].rule);
+
+					crosslinker_(tmp, links[i].rule);
+					result = 1;
+				}
+			}
+		}
+	}
+
+	return result;
+}
 static void parseUdpCrossLinks()
 {
-	if (*me_config.udp_cross_link)
+	if (*me_config.udp_crosslink)
 	{
-		if ((udp_cross_link	= strdup(me_config.udp_cross_link)) != nil)
+		if ((udp_crosslink	= strdup(me_config.udp_crosslink)) != nil)
 		{
 			char * on;
-			char * begin = udp_cross_link;
+			char * begin = udp_crosslink;
 
 			do
 			{
 				on = _skip_spaces(begin);
 
-				if ((on = strstr(on, "->")) != nil)
+				if ((on = strchr(on, '/')) != nil)
 				{
 					*on = 0;
-					on += 2;
+					on += 1;
 
-					links[linksCount].key 		= begin;
-					links[linksCount].action 	= on;
+					links[linksCount].name 		= begin;
+					links[linksCount].rule 		= on;
 
 					linksCount++;
 				}
@@ -146,12 +176,11 @@ static void parseUdpCrossLinks()
 
 			} while (begin);
 
-			// printf("UDP cross links: %d\n", linksCount);
-
-			// for (int i = 0; i < linksCount; i++)
-			// {
-			// 	printf("rule: '%s'  --->  '%s'\n", links[i].key, links[i].redir);
-			// }
+			printf("UDP cross links: %d\n", linksCount);
+			for (int i = 0; i < linksCount; i++)
+			{
+				printf("name: %s rule: '%s'\n", links[i].name, links[i].rule);
+			}
 		}
 	}
 }
@@ -186,7 +215,7 @@ void udplink_task()
 			me_config.udpServerPort = DEFAULT_UDP_PORT;
 		}
 
-		if (*me_config.udp_cross_link)
+		if (*me_config.udp_crosslink)
 		{
 			parseUdpCrossLinks();
 		}
@@ -221,7 +250,7 @@ void udplink_task()
 				{
 					*(buff + len) = 0;
 					//printf("got: '%s'\n", buff);
-					udpcrosslinker(buff);
+					execute_links(buff);
 				}
 			}
 		}

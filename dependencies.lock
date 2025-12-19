@@ -27,24 +27,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.4.12
-  espressif/esp_websocket_client:
-<<<<<<< HEAD
-    component_hash: 723aba370113196c66321442426cd6452c351eef31c85c83bd1446831ef9f8f4
-=======
-    component_hash: ac62982fcf9b266409c2299d2b6b1844122105b35163a3b7f8d0adaa9f7eb989
->>>>>>> origin/task20250902
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-<<<<<<< HEAD
-    version: 1.6.0
-=======
-    version: 1.5.0
->>>>>>> origin/task20250902
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -56,7 +38,7 @@ dependencies:
       type: service
     version: 1.1.0
   espressif/mdns:
-    component_hash: 3ec0af5f6bce310512e90f482388d21cc7c0e99668172d2f895356165fc6f7c5
+    component_hash: 29e47564b1a7ee778135e17fbbf2a2773f71c97ebabfe626c8eda7c958a7ad16
     dependencies:
     - name: idf
       require: private
@@ -64,9 +46,9 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.8.2
+    version: 1.9.1
   espressif/nghttp:
-    component_hash: 32e513409ddce0000990ec74b0711f535462726236d72578cd70498e6bd66dc3
+    component_hash: 3a1e3977701dea1ea90df840ad2bc6d2bfcb70439109e49568700c13070f7a5c
     dependencies:
     - name: idf
       require: private
@@ -74,7 +56,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.65.0
+    version: 1.65.0~1
   espressif/onewire_bus:
     component_hash: 11729fd9a5de80225177a61e9cd77de91683b8ec300e83710d5327b666dbe884
     dependencies:
@@ -85,30 +67,18 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.4
-  espressif/zlib:
-    component_hash: d901723af51f13fc8e5824f39f32239c847956e8fd951a05266588dc5cfbb9ae
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.3.1
   idf:
     source:
       type: idf
-    version: 5.3.3
+    version: 5.3.1
 direct_dependencies:
 - cybergear-robotics/cybergear
 - espressif/ds18b20
 - espressif/esp-dsp
-- espressif/esp_websocket_client
 - espressif/jsmn
 - espressif/mdns
 - espressif/nghttp
-- espressif/zlib
 - idf
-manifest_hash: b254b47920a489c3e3a4a7b82b2cf69dc269836eb9fc5362307d4859f19ae81b
+manifest_hash: 1e38c7ec1a59cefc3f813a4524936c89811b1156138373f9faf6d1dbf275f22b
 target: esp32s3
 version: 2.0.0

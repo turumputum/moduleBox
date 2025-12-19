@@ -61,8 +61,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		} else if (MATCH(str, "options")) {
 			pconfig->slot_options[i] = strdup(value);
 			return 1;
-		} else if (MATCH(str, "cross_link")) {
-			pconfig->slot_cross_link[i] = strdup(value);
+		} else if (MATCH(str, "crosslink")) {
+			pconfig->slot_crosslink[i] = strdup(value);
 			return 1;
 		}
 	}
@@ -154,14 +154,14 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->FTP_login = strdup(value);
 	} else if (MATCH("FTP", "FTP_pass")) {
 		pconfig->FTP_pass = strdup(value);
-    } else if (MATCH("UDP", "udpServerAdress")){//-----------------------------------------------
+    } else if (MATCH("UDP", "server_adress")){//-----------------------------------------------
         pconfig->udpServerAdress = strdup(value);
-    } else if (MATCH("UDP", "udpServerPort")) {
+    } else if (MATCH("UDP", "server_port")) {
         pconfig->udpServerPort = atoi(value);
-    } else if (MATCH("UDP", "udpMyPort")) {
+    } else if (MATCH("UDP", "my_port")) {
         pconfig->udpMyPort = atoi(value);
-	} else if (MATCH("UDP", "cross_link")) {
-		pconfig->udp_cross_link = strdup(value);
+	} else if (MATCH("UDP", "crosslink")) {
+		pconfig->udp_crosslink = strdup(value);
 	} else if (MATCH("OSC", "oscServerAdress")) {//-----------------------------------------------
 		pconfig->oscServerAdress = strdup(value);
 	} else if (MATCH("OSC", "oscServerPort")) {
@@ -230,7 +230,7 @@ void load_Default_Config(void) {
     me_config.udpServerAdress = strdup("");
     me_config.udpServerPort = 0;
     me_config.udpMyPort = 0;
-    me_config.udp_cross_link = strdup("");
+    me_config.udp_crosslink = strdup("");
     me_state.UDP_init_res = ESP_FAIL;
 
 	
@@ -262,10 +262,10 @@ void load_Default_Config(void) {
 		char *str_1 = calloc(1, sizeof(char));
 		me_config.slot_options[i] = str_1;
 		char *str_2 = calloc(1, sizeof(char));
-		me_config.slot_cross_link[i] = str_2;
+		me_config.slot_crosslink[i] = str_2;
 	}
 
-	me_config.startup_cross_link = strdup("");
+	me_config.startup_crosslink = strdup("");
 
 	ESP_LOGD(TAG, "Load default config complite. Duration:%ld ms. Heap usage:%lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -346,16 +346,16 @@ int saveConfig(void) {
     sprintf(tmp, "\r\n[UDP] \r\n");
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "udpServerAdress = %s \r\n", me_config.udpServerAdress);
+    sprintf(tmp, "server_adress = %s \r\n", me_config.udpServerAdress);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "udpServerPort = %d \r\n", me_config.udpServerPort);
+    sprintf(tmp, "server_port = %d \r\n", me_config.udpServerPort);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "udpMyPort = %d \r\n", me_config.udpMyPort);
+    sprintf(tmp, "my_port = %d \r\n", me_config.udpMyPort);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "cross_link = %s \r\n", me_config.udp_cross_link);
+	sprintf(tmp, "crosslink = %s \r\n", me_config.udp_crosslink);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
@@ -392,7 +392,7 @@ int saveConfig(void) {
 		sprintf(tmp, "options = %s \r\n", "empty");
 		fprintf(configFile, tmp);
 		memset(tmp, 0, strlen(tmp));
-		sprintf(tmp, "cross_link = %s \r\n", "empty");
+		sprintf(tmp, "crosslink = %s \r\n", "empty");
 		fprintf(configFile, tmp);
 		memset(tmp, 0, strlen(tmp));
 	}
