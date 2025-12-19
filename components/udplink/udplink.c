@@ -129,7 +129,7 @@ int execute_links(char * buff)
 				{
 					snprintf(tmp, sizeof(tmp) - 1, "%s/%s", me_config.deviceName, event);
 
-					printf("UDP crosslink: name '%s', event '%s', rule '%s'\n", name, tmp, links[i].rule);
+					//printf("UDP crosslink: name '%s', event '%s', rule '%s'\n", name, tmp, links[i].rule);
 
 					ESP_LOGD(TAG, "UDP crosslink: name '%s', event '%s', rule '%s'", name, tmp, links[i].rule);
 
@@ -176,11 +176,11 @@ static void parseUdpCrossLinks()
 
 			} while (begin);
 
-			printf("UDP cross links: %d\n", linksCount);
-			for (int i = 0; i < linksCount; i++)
-			{
-				printf("name: %s rule: '%s'\n", links[i].name, links[i].rule);
-			}
+			// printf("UDP cross links: %d\n", linksCount);
+			// for (int i = 0; i < linksCount; i++)
+			// {
+			// 	printf("name: %s rule: '%s'\n", links[i].name, links[i].rule);
+			// }
 		}
 	}
 }
