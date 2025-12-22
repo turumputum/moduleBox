@@ -21,6 +21,7 @@ const char *        get_manifest_3n_mosfet      ();
 const char *        get_manifest_encoders       ();
 const char *        get_manifest_smartLed       ();
 const char *        get_manifest_virtual_slots  ();
+// const char *        get_manifest_st7789_display ();
 
 
 int                 saveManifesto               ();

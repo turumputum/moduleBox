@@ -91,6 +91,7 @@
 
 
 
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 
 extern void board_init(void);
@@ -388,6 +389,11 @@ void makeStatusReport(bool spread)
 	
 	mblog(I, str);
 }
+
+
+
+
+
 void app_main(void)	
 {
 
