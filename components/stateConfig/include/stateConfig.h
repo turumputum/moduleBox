@@ -129,7 +129,7 @@ typedef struct {
     char *udpServerAdress;
     uint16_t udpServerPort;
     uint16_t udpMyPort;
-    char *udp_cross_link;
+    char *udp_crosslink;
 
 	char *oscServerAdress;
 	uint16_t oscServerPort;
@@ -152,9 +152,9 @@ typedef struct {
 
 	char *slot_mode[NUM_OF_SLOTS];
 	char *slot_options[NUM_OF_SLOTS];
-	char *slot_cross_link[NUM_OF_SLOTS];
+	char *slot_crosslink[NUM_OF_SLOTS];
 
-	char *startup_cross_link;
+	char *startup_crosslink;
 
 	char configFile[FILE_NAME_LEGHT];
 	char introIco[FILE_NAME_LEGHT];

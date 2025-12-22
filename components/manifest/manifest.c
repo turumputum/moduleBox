@@ -83,7 +83,7 @@ static const char * configDescription =
 "                      \"spec\" : \"slot_mode\" },\n"
 "                    { \"key\" : \"options\",\n"
 "                      \"spec\" : \"slot_options\" },\n"
-"                    { \"key\" : \"cross_link\",\n"
+"                    { \"key\" : \"crosslink\",\n"
 "                      \"spec\" : \"slot_crosslink\" }\n"
 "                ]\n"
 "        }\n"
