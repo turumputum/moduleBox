@@ -21,6 +21,11 @@
 #include "me_slot_config.h"
 #include <mbdebug.h>
 
+//#include "st7789_display.h"
+#include "st7789.h"
+// #include "fontx.h"
+#include "decode_jpeg.h"
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
@@ -810,4 +815,217 @@ void start_furbyEye_task(int slot_num){
 	ESP_LOGD(TAG,"furbyEye_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
+
+
+
+//---------------------st7789----------------
+
+TFT_t screen;
+
+
+void st7789_init() {
+	#define CONFIG_WIDTH 240
+	#define CONFIG_HEIGHT 240
+	
+	#define CONFIG_MOSI_GPIO 18
+	#define CONFIG_SCLK_GPIO 17
+	#define CONFIG_CS_GPIO -1
+	#define CONFIG_DC_GPIO 15
+	#define CONFIG_RESET_GPIO 3
+	#define CONFIG_BL_GPIO 8
+	
+		uint32_t startTick = xTaskGetTickCount();
+		uint32_t heapBefore = xPortGetFreeHeapSize();
+	
+		spi_master_init(&screen, CONFIG_MOSI_GPIO, CONFIG_SCLK_GPIO, CONFIG_CS_GPIO,
+		CONFIG_DC_GPIO, CONFIG_RESET_GPIO, CONFIG_BL_GPIO);
+		lcdInit(&screen, CONFIG_WIDTH, CONFIG_HEIGHT, 0, 80);
+	
+		//InitFontx(fx32G, "/spiffs/ILGH32XB.FNT", ""); // 16x32Dot Gothic
+	
+		lcdFillScreen(&screen, GREEN);
+	
+		ESP_LOGD(TAG, "Screen init complite. Duration: %ld ms. Heap usage: %ld free heap:%d", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
+				xPortGetFreeHeapSize());
+}
+
+
+// Function to scan for .jpg files and return sorted paths
+char** scan_jpg_files(const char* mount_point, int* file_count) {
+    DIR *dir;
+    struct dirent *entry;
+    struct stat entry_stat;
+    char path[512];
+    char **jpg_files = NULL;
+    int capacity = 10; // Initial capacity
+    int count = 0;
+    
+    // Allocate initial array for file paths
+    jpg_files = malloc(capacity * sizeof(char*));
+    if (!jpg_files) {
+        ESP_LOGE(TAG, "Failed to allocate memory for file paths array");
+        return NULL;
+    }
+    
+    dir = opendir(mount_point);
+    if (dir == NULL) {
+        ESP_LOGE(TAG, "Cannot open directory: %s", mount_point);
+        free(jpg_files);
+        return NULL;
+    }
+    
+    while ((entry = readdir(dir)) != NULL) {
+        // Create full path
+        snprintf(path, sizeof(path), "%s/%s", mount_point, entry->d_name);
+        
+        // Check if it's a file (not a subdirectory)
+        if (stat(path, &entry_stat) == 0 && S_ISREG(entry_stat.st_mode)) {
+            // Check if the file has .jpg extension (case insensitive)
+            const char *ext = strrchr(entry->d_name, '.');
+            if (ext != NULL) {
+                if (strcasecmp(ext, ".jpg") == 0 || strcasecmp(ext, ".jpeg") == 0) {
+                    // Check if we need to expand the array
+                    if (count >= capacity) {
+                        capacity *= 2;
+                        char **temp = realloc(jpg_files, capacity * sizeof(char*));
+                        if (temp == NULL) {
+                            ESP_LOGE(TAG, "Failed to reallocate memory for file paths array");
+                            // Clean up allocated memory
+                            for (int i = 0; i < count; i++) {
+                                free(jpg_files[i]);
+                            }
+                            free(jpg_files);
+                            closedir(dir);
+                            return NULL;
+                        }
+                        jpg_files = temp;
+                    }
+                    
+                    // Allocate memory for the file path and copy it
+                    jpg_files[count] = strdup(path);
+                    if (jpg_files[count] == NULL) {
+                        ESP_LOGE(TAG, "Failed to allocate memory for file path: %s", path);
+                        // Clean up allocated memory
+                        for (int i = 0; i < count; i++) {
+                            free(jpg_files[i]);
+                        }
+                        free(jpg_files);
+                        closedir(dir);
+                        return NULL;
+                    }
+                    count++;
+                }
+            }
+        }
+    }
+    
+    closedir(dir);
+    
+    // Resize the array to the exact size needed
+    if (count > 0) {
+        char **temp = realloc(jpg_files, count * sizeof(char*));
+        if (temp == NULL && count > 0) {
+            ESP_LOGE(TAG, "Failed to resize file paths array");
+            // Clean up allocated memory
+            for (int i = 0; i < count; i++) {
+                free(jpg_files[i]);
+            }
+            free(jpg_files);
+            return NULL;
+        }
+        jpg_files = temp;
+    } else {
+        // If no files found, free the initially allocated array
+        free(jpg_files);
+        jpg_files = NULL;
+    }
+    
+    // Sort the file paths alphabetically using a simple bubble sort
+    if (count > 1) {
+        for (int i = 0; i < count - 1; i++) {
+            for (int j = 0; j < count - i - 1; j++) {
+                if (strcmp(jpg_files[j], jpg_files[j + 1]) > 0) {
+                    // Swap the strings
+                    char *temp = jpg_files[j];
+                    jpg_files[j] = jpg_files[j + 1];
+                    jpg_files[j + 1] = temp;
+                }
+            }
+        }
+    }
+    
+    *file_count = count;
+    return jpg_files;
+}
+
+
+void st7789_task(void* arg) {
+    int slot_num = *(int*)arg;
+
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+    st7789_init();
+	// 
+   
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+		char* custom_topic=NULL;
+    	custom_topic = get_option_string_val(slot_num, "topic", "/eye_0");
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
+    }else{
+		char t_str[strlen(me_config.deviceName)+strlen("/display_0")+3];
+		sprintf(t_str, "%s/display_%d",me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
+	} 
+
+
+    int file_count = 0;
+    char** jpg_files = scan_jpg_files("/sdcard", &file_count);
+    
+    
+    int val=0;
+    JPEGTest(&screen, jpg_files[val], 240, 240); 
+    waitForWorkPermit(slot_num);
+    
+   
+    
+    TickType_t lastWakeTime = xTaskGetTickCount(); 
+    while(1){
+        command_message_t temp_msg;
+        command_message_t msg;
+        uint8_t recv_state=0;
+
+        while(xQueueReceive(me_state.command_queue[slot_num], &temp_msg, 0) == pdPASS) {
+            msg = temp_msg;
+            recv_state=1;
+        }
+        if(recv_state==1){
+            ESP_LOGD(TAG, "Input command %s for slot:%d", msg.str, slot_num);
+            char* payload;
+            char* cmd = strtok_r(msg.str, ":", &payload);
+            //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
+            cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
+            if(strstr(cmd, "setPic")!=NULL){
+                val = atoi(payload);
+                if (val>file_count-1){
+                    val = file_count-1;
+                }
+                JPEGTest(&screen, jpg_files[val], 240, 240);
+
+            }
+        }
+        vTaskDelayUntil(&lastWakeTime, 10);
+    }
+}
+
+void start_st7789_task(int slot_num){
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+	int t_slot_num = slot_num;
+	char tmpString[60];
+	sprintf(tmpString, "st7789_task_%d", slot_num);
+	xTaskCreatePinnedToCore(st7789_task, tmpString, 1024*8, &t_slot_num,12, NULL, 1);
+
+	ESP_LOGD(TAG,"st7789_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
 

@@ -46,6 +46,7 @@ typedef struct __tag_RTPCONFIG{
 	uint8_t 				channel;
 	uint8_t                 group;
     uint16_t                port;
+    char *                  host;
 
     STDCOMMANDS             cmds;
 
@@ -114,13 +115,13 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
     // _setVolume_num(c->i2s_stream_writer, c->volume);
 
     ESP_LOGI(TAG, "[2.2] Create rtp client stream to read data");
-    char hostStr[15];
-    sprintf(hostStr, "239.0.%d.%d", c->group, c->channel);
+    c->host = calloc(16, sizeof(char));
+    sprintf(c->host, "239.0.%d.%d", c->group, c->channel);
     rtp_stream_cfg_t rtp_cfg = RTP_STREAM_CFG_DEFAULT();
     rtp_cfg.type = AUDIO_STREAM_READER;
     rtp_cfg.port = c->port;
     //rtp_cfg.port = 7777;
-    rtp_cfg.host = hostStr;
+    rtp_cfg.host = c->host;
     //rtp_cfg.host = "239.0.7.1";
     rtp_cfg.task_core=1;
     c->rtp_stream_reader = rtp_stream_init(&rtp_cfg);
