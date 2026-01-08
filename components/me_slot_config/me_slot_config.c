@@ -14,6 +14,7 @@
 #include "esp_err.h"
 #include "reporter.h"
 #include "audioPlayer.h"
+#include "wavPlayer.h"
 #include "3n_mosfet.h"
 #include "encoders.h"
 #include "tachometer.h"
@@ -90,6 +91,8 @@ int init_slots(void){
 			// empty
 		}else if(!memcmp(me_config.slot_mode[i], "audioPlayer", 11)){
 			audioInit(i);
+		}else if(!memcmp(me_config.slot_mode[i], "wavPlayer", 9)){
+			wavPlayerInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "audioLAN", 8)){
 			start_audioLAN_task(i); 		// W, C
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){

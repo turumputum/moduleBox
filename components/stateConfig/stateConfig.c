@@ -267,6 +267,8 @@ void load_Default_Config(void) {
 
 	me_config.startup_crosslink = strdup("");
 
+	strcpy(me_config.audioExtension, ".wav");
+
 	ESP_LOGD(TAG, "Load default config complite. Duration:%ld ms. Heap usage:%lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
@@ -454,7 +456,7 @@ uint8_t scan_dir(const char *path) {
 						} else {
 							char *detect = strrchr(fno.fname, '.');
 							//ESP_LOGD(TAG, "{scanFileSystem} cut extension: %s ", detect);
-							if (strcasecmp(detect, ".mp3") == 0) {
+							if (strcasecmp(detect, me_config.audioExtension) == 0) {
 								//ESP_LOGD(TAG, "{scanFileSystem} soundFile founded ");
 								if (strcmp(path, "/") == 0) {
 									sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s", fno.fname);

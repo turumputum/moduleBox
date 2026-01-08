@@ -211,6 +211,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("MAIN", level);
 	esp_log_level_set(TAG, level);
 	esp_log_level_set("AUDIO", level);
+	esp_log_level_set("WAV", level);
 	esp_log_level_set("AUDIO_ELEMENT", ESP_LOG_ERROR);
 	esp_log_level_set("MP3_DECODER", ESP_LOG_ERROR);
 	esp_log_level_set("CODEC_ELEMENT_HELPER:", ESP_LOG_ERROR);

@@ -158,6 +158,7 @@ typedef struct {
 
 	char configFile[FILE_NAME_LEGHT];
 	char introIco[FILE_NAME_LEGHT];
+	char audioExtension[10];
 
 	uint8_t f_report_udp;
 	uint8_t f_report_osc;
