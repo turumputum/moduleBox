@@ -84,7 +84,7 @@ typedef struct __tag_WAVPLAYERCONFIG
 
     STDCOMMANDS             cmds;
 
-    i2s_chan_handle_t 		tx_handle;
+    i2s_chan_handle_t 		audio_ch_handle;
 
 	int						ETreport;
 } WAVPLAYERCONFIG, * PWAVPLAYERCONFIG; 
@@ -123,7 +123,7 @@ esp_err_t i2s_setup(PWAVPLAYERCONFIG c)
 {
   // setup a standard config and the channel
   i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &c->tx_handle, NULL));
+  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &c->audio_ch_handle, NULL));
 
   // setup the i2s config
   i2s_std_config_t std_cfg = {
@@ -143,7 +143,7 @@ esp_err_t i2s_setup(PWAVPLAYERCONFIG c)
           },
       },
   };
-  return i2s_channel_init_std_mode(c->tx_handle, &std_cfg);
+  return i2s_channel_init_std_mode(c->audio_ch_handle, &std_cfg);
 }
 
 esp_err_t play_wav(PWAVPLAYERCONFIG c, char *fp)
@@ -165,20 +165,18 @@ esp_err_t play_wav(PWAVPLAYERCONFIG c, char *fp)
 
   bytes_read = fread(buf, sizeof(int16_t), AUDIO_BUFFER, fh);
 
-  i2s_channel_enable(c->tx_handle);
+  i2s_channel_enable(c->audio_ch_handle);
 
   while (bytes_read > 0)
   {
     // write the buffer to the i2s
-    i2s_channel_write(c->tx_handle, buf, bytes_read * sizeof(int16_t), &bytes_written, portMAX_DELAY);
+    i2s_channel_write(c->audio_ch_handle, buf, bytes_read * sizeof(int16_t), &bytes_written, portMAX_DELAY);
     bytes_read = fread(buf, sizeof(int16_t), AUDIO_BUFFER, fh);
     ESP_LOGV(TAG, "Bytes read: %d", bytes_read);
   }
   
-  i2s_channel_disable(c->tx_handle);
+  i2s_channel_disable(c->audio_ch_handle);
   free(buf);
-
-  ESP_LOGW(TAG, "file playing stopped");
 
   return ESP_OK;
 }
@@ -469,16 +467,9 @@ void wavPlayerInit(uint8_t slot_num){
 	xTaskCreatePinnedToCore(wavplayer_task, tmpString, 1024*8, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
 }
 
-void wavPlayerDeinit(void) {
-	// audio_pipeline_unregister(pipeline, mp3_decoder);
-	// audio_pipeline_unregister(pipeline, i2s_stream_writer);
-	// audio_pipeline_unregister(pipeline, rsp_handle);
-
-	// audio_pipeline_deinit(pipeline);
-	// //audio_element_deinit(fatfs_stream_reader);
-	// audio_element_deinit(i2s_stream_writer);
-	// audio_element_deinit(mp3_decoder);
-	// audio_element_deinit(rsp_handle);
+void wavPlayerDeinit(PWAVPLAYERCONFIG c) {
+  // that'll do pig... that'll do
+  i2s_del_channel(c->audio_ch_handle); // delete the channel
 }
 static void trackShift(char* cmd_arg)
 {

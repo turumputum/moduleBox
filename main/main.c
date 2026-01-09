@@ -440,7 +440,8 @@ void app_main(void)
 
 	load_Default_Config();
 
-	scanFileSystem();
+//	scanFileSystem();
+	sprintf(me_config.configFile, "/sdcard/%s", "config.ini");
 
 	saveManifesto();
 
@@ -460,6 +461,8 @@ void app_main(void)
 	ESP_LOGD(TAG, "Free SPIRAM: %d bytes",heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
 	me_state.slot_init_res = init_slots();
+
+       fillSoundTrackList();
 
 	//start_dwinUart_task(1);
 	//debugTopicLists();
