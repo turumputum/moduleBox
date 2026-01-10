@@ -1,12 +1,12 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  cybergear-robotics/cybergear: "^0.1.0"
-  espressif/mdns: "^1.2.2"
-  espressif/jsmn: "^1.1.0"
-  ds18b20: "^0.1.0"
+  cybergear-robotics/cybergear: ^0.1.0
+  espressif/mdns: ^1.2.2
+  espressif/jsmn: ^1.1.0
+  ds18b20: ^0.1.0
   ## Required IDF version
   idf:
-    version: ">=5.1.0"
+    version: '>=5.1.0'
   # # Put list of dependencies here
   # # For components maintained by Espressif:
   # component: "~1.0.0"
@@ -18,3 +18,4 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
+  espressif/esp_codec_dev: ^1.5.*

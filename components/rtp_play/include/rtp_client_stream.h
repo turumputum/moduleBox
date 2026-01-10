@@ -92,8 +92,8 @@ typedef struct {
 }
 
 /**
- * @brief       Initialize a TCP stream to/from an audio element 
- *              This function creates a TCP stream to/from an audio element depending on the stream type configuration (e.g., 
+ * @brief       Initialize a TCP stream to/from an audio element
+ *              This function creates a TCP stream to/from an audio element depending on the stream type configuration (e.g.,
  *              AUDIO_STREAM_READER or AUDIO_STREAM_WRITER). The handle of the audio element is the returned.
  *
  * @param      config The configuration
@@ -101,6 +101,20 @@ typedef struct {
  * @return     The audio element handle
  */
 audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config);
+
+/**
+ * @brief       Switch to a new multicast address without restarting the device
+ *              This function allows switching from one multicast address to another without closing and reopening the socket.
+ *              It leaves the old multicast group and joins the new one using the same socket.
+ *
+ * @param      self      The audio element handle
+ * @param      new_host  The new multicast host address
+ * @param      new_port  The new port (0 to keep current port)
+ *
+ * @return     ESP_OK on success, ESP_FAIL otherwise
+ */
+esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const char* new_host, uint16_t new_port);
+
 #ifdef __cplusplus
 }
 #endif
