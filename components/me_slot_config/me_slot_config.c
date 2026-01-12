@@ -62,11 +62,14 @@ extern configuration me_config;
 //uint8_t SLOTS_PIN_MAP[4][3] = {{4,5,10},{17,18,0},{6,7,8},{1,2,3}}; // v2.1 
 //uint8_t SLOTS_PIN_MAP[10][3] = {{4,5,10},{17,18,15},{7,6,0},{3,8,0},{3,8,0},{41,42,0}}; //v2.2
 //uint8_t SLOTS_PIN_MAP[10][4] = {{4,5,10,38},{40,21,47,48},{17,18,15,0},{3,8,39,0},{2,1,41,0},{7,6,42,0}}; //v3.x
-uint8_t SLOTS_PIN_MAP[10][4] = {{4,5,10,38},{40,21,47,48},{17,18,15,0},{3,8,39,0},{2,1,41,0},{7,6,42,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}}; //v3.2x
+uint8_t SLOTS_PIN_MAP[10][4];
+
+const uint8_t PIN_MAP_v3[10][4] = {{4,5,10,38},{40,21,47,48},{17,18,15,0},{3,8,39,0},{2,1,41,0},{7,6,42,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};//v3.2x
+const uint8_t PIN_MAP_v4[10][4] = {{1,7,17,47},{2,8,18,48},{6,10,21,0},{4,15,38,0},{5,39,42,0},{3,40,41,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
 
 adc_channel_t SLOT_ADC_MAP[6]={
     ADC1_CHANNEL_3,
-    -1,
+    ADC1_CHANNEL_0, // Placeholder for unused channel, will be checked in code
     ADC2_CHANNEL_6,
     ADC1_CHANNEL_2,
     ADC1_CHANNEL_1,
@@ -78,11 +81,24 @@ int init_slots(void){
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
+	
+	if(me_config.boardVersion==4){
+		memcpy(SLOTS_PIN_MAP, PIN_MAP_v4, sizeof(PIN_MAP_v4));
+	}else{
+		memcpy(SLOTS_PIN_MAP, PIN_MAP_v3, sizeof(PIN_MAP_v3));
+	}
+
 	stdreport_initialize();
 	reporter_init();
 
 	for(int i=0;i<NUM_OF_SLOTS; i++){
-		ESP_LOGD(TAG,"[%d] check mode: '%s'", i,me_config.slot_mode[i]);
+		// Check if slot_mode[i] is not NULL before accessing it
+		if(me_config.slot_mode[i] == NULL) {
+			ESP_LOGD(TAG,"[%d] slot_mode is NULL, skipping", i);
+			continue;
+		}
+
+		ESP_LOGD(TAG,"[%d] check mode: '%s'", i, me_config.slot_mode[i]);
 
 		if(!strlen(me_config.slot_mode[i])) {
 			// empty
@@ -203,9 +219,11 @@ int init_slots(void){
 		}
 		else
 		{
+			// This else branch should only execute if slot_mode[i] is not NULL
+			// But we already checked for NULL at the beginning of the loop
 			mblog(E, "Wrong mode for SLOT_%d: %s", i, me_config.slot_mode[i]);
 		}
-	
+
 	}
 
 	ESP_LOGD(TAG, "Load config complite. Duration: %ld ms. Heap usage: %lu",

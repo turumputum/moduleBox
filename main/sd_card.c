@@ -86,38 +86,49 @@ int spisd_init() {
 
 	ESP_LOGD(TAG, "Initializing SD card");
 
-#ifdef FORCE_SD_40MHZ
-    host.max_freq_khz  = 40000;
-#endif
+	uint8_t clk_pin = 47;
+	uint8_t cmd_pin = 21;
+	uint8_t d0_pin = 40;
+	uint8_t led_pin = 48;
 
+	ESP_LOGD(TAG, "Try old board pinout");
+	gpio_pad_select_gpio(clk_pin);
+	gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
 
-	gpio_pad_select_gpio(47);
-	gpio_set_direction(47, GPIO_MODE_INPUT);
+	gpio_pad_select_gpio(d0_pin);
+	gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
 
-#ifndef JTAG_USED
-	gpio_pad_select_gpio(40);
-	gpio_set_direction(40, GPIO_MODE_INPUT);
-#endif // #ifndef JTAG_USED
+	gpio_pad_select_gpio(cmd_pin);
+	gpio_set_direction(cmd_pin, GPIO_MODE_INPUT);
 
-	gpio_pad_select_gpio(21);
-	gpio_set_direction(21, GPIO_MODE_INPUT);
-	if((gpio_get_level(47)!=1)||(gpio_get_level(40)!=1)||(gpio_get_level(21)!=1)){
-		ESP_LOGW(TAG, "SD card module not found(");
-		return ESP_FAIL;
+	if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
+		ESP_LOGD(TAG, "old board pinout notFound( lets try new bord pinout");
+		clk_pin = 18;
+	 	cmd_pin = 8;
+	 	d0_pin = 2;
+
+		gpio_pad_select_gpio(clk_pin);
+		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
+	 
+		gpio_pad_select_gpio(d0_pin);
+		gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
+	 
+		gpio_pad_select_gpio(cmd_pin);
+		gpio_set_direction(cmd_pin, GPIO_MODE_INPUT);
+
+		if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
+			ESP_LOGW(TAG, "SD card module notFound(");
+			return ESP_FAIL;
+		}
 	}
 
-	gpio_pad_select_gpio(48);
-	gpio_set_direction(48, GPIO_MODE_OUTPUT);
-	gpio_set_level(48, 1);
+	gpio_pad_select_gpio(led_pin);
+	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(led_pin, 1);
 
-	slot_config.clk = 47;
-	slot_config.cmd = 21;
-#ifndef JTAG_USED
-	slot_config.d0 = 40;
-#endif // #ifndef JTAG_USED
-	// slot_config.d1 = 38;
-	// slot_config.d2 = 39;
-	// slot_config.d3 = 40;
+	slot_config.clk = clk_pin;
+	slot_config.cmd = cmd_pin;
+	slot_config.d0 = d0_pin;
 	slot_config.width = 1;
 
 	int res=spisd_mount_fs();

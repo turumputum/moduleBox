@@ -45,8 +45,6 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
-#include "leds.h"
-
 #include "stateConfig.h"
 
 #include "audioPlayer.h"

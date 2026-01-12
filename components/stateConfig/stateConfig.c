@@ -116,6 +116,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->statusPeriod = atoi(value);
 	} else if (MATCH("SYSTEM", "statusAllChannels")) {//-----------------------------------------------
 		pconfig->statusAllChannels = _yesno(value);
+	} else if (MATCH("SYSTEM", "boardVersion")) {//-----------------------------------------------
+		pconfig->boardVersion = atoi(value);
 	} else if (MATCH("SYSTEM", "USB_debug")) {
 		pconfig->USB_debug = _yesno(value);
 	}  else if (MATCH("LAN", "LAN_enable")) {//-----------------------------------------------
@@ -197,7 +199,7 @@ void load_Default_Config(void) {
 	me_config.statusPeriod = 0;
 	me_config.statusAllChannels = true;
 	me_config.USB_debug = 0;
-
+	me_config.boardVersion = 3;
 	
 	
 	me_config.WIFI_enable = 0; // disable

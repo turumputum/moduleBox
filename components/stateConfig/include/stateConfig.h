@@ -141,7 +141,7 @@ typedef struct {
 	char *mqttLogin;
 	char *mqttPass;
 
-	uint8_t monofonEnable;
+	uint8_t boardVersion;
 
 	uint16_t play_delay;
 	uint8_t loop;

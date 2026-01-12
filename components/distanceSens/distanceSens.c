@@ -327,7 +327,7 @@ void benewakeTOF_task(void* arg) {
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     #define BUF_SIZE 256
     uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0);
-
+    ESP_LOGD(TAG, "slot_[%d] UART driver installed TX_pin:%d RX_pin:%d UART%d",slot_num, tx_pin, rx_pin, uart_num);
 
     distanceSens_t distanceSens=DISTANCE_SENS_DEFAULT();
     distanceSens.maxVal = 1200;
@@ -342,7 +342,7 @@ void benewakeTOF_task(void* arg) {
 		char t_str[strlen(me_config.deviceName)+strlen("/TOF_0")+3];
 		sprintf(t_str, "%s/TOF_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);  
 	}
 
 
@@ -355,12 +355,12 @@ void benewakeTOF_task(void* arg) {
     
     waitForWorkPermit(slot_num);
 
+    //ESP_LOGD(TAG,)
     while (1) {
         //uint16_t dist = 0;
         //uint16_t checksum = 0;
         uint16_t len;
         char str[255];
-
         if (uart_read_bytes(uart_num, &rawByte[index], 1, portMAX_DELAY)){
             if (f_msg_start == 0) {
                 if (rawByte[index] == 0x59) {
