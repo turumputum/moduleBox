@@ -44,6 +44,7 @@
 
 #include <generated_files/gen_audioPlayer.h>
 
+extern uint8_t ab_ver;
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
@@ -96,19 +97,6 @@ audio_event_iface_handle_t evt;
 
 extern stateStruct me_state;
 extern configuration me_config;
-
-int your_event_handler_function(audio_event_iface_msg_t *event, void *context){
-    switch (event->cmd) {
-        case AEL_MSG_CMD_NONE:
-            // Handle error events
-            break;
-        case AEL_MSG_CMD_REPORT_MUSIC_INFO:
-            // Handle music info reports
-            break;
-        // Add more cases as needed
-    }
-    return ESP_OK;
-}
 
 void audioSetIndicator(uint8_t slot_num, uint32_t level){
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
@@ -277,7 +265,7 @@ void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
 
 void audio_task(void *arg) {
     PAUDIOCONFIG c = calloc(1, sizeof(AUDIOCONFIG));
-	
+
 	int slot_num = *(int*) arg;
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
@@ -308,6 +296,9 @@ void audio_task(void *arg) {
 	pipeline = audio_pipeline_init(&pipeline_cfg);
 	mem_assert(pipeline);
 
+	if(me_config.boardVersion==4){
+		ab_ver = 4;
+	}
 	//ESP_LOGD(TAG, "Create i2s stream to write data to codec chip");
 	i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
 	i2s_cfg.out_rb_size = 12 * 1024;
@@ -384,8 +375,6 @@ void audio_task(void *arg) {
 	evt_cfg.queue_set_size = 40;//5
 	evt = audio_event_iface_init(&evt_cfg);
 
-	//audio_event_iface_set_listener(evt, your_event_handler_function);
-
 	//xTaskCreatePinnedToCore(listenListener, "audio_listener", 1024 * 4, NULL, 1, NULL, 0);
 	audio_pipeline_set_listener(pipeline, evt);
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
@@ -393,7 +382,6 @@ void audio_task(void *arg) {
 
 	
 	vTaskDelay(100);
-	//audio_event_iface_set_listener(evt, your_event_handler_function);
 
 	int att_flag=0;
 	uint8_t att_vol=c->volume;

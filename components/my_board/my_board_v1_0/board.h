@@ -36,6 +36,7 @@
 extern "C" {
 #endif
 
+
 /**
  * @brief Audio board handle
  */

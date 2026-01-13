@@ -31,6 +31,7 @@
 
 static const char *TAG = "AUDIO_BOARD";
 
+uint8_t ab_ver=3;
 static audio_board_handle_t board_handle = 0;
 
 audio_board_handle_t audio_board_init(void)
