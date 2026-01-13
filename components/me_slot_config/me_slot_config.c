@@ -201,6 +201,8 @@ int init_slots(void){
 			start_furbyEye_task(i); // W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
 			start_stepper_conductor_task(i); // NOW, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "st7789", 6)){
+			start_st7789_task(i); 
 		}
 		else
 		{

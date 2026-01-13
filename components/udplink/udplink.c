@@ -69,6 +69,7 @@ extern stateStruct me_state;
 extern void crosslinker(char* str);
 extern void crosslinker_(char* str, char* rules);
 
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "[UDP]";
 
 static 	char * 				udp_crosslink 	= nil;

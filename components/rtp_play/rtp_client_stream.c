@@ -71,6 +71,8 @@ typedef struct rtp_stream {
    // esp_transport_list_handle_t   transport_list;
     void                          *ctx;
     jbuffer                       jbuf;
+    bool                          is_multicast;  // Flag to indicate if this is a multicast stream
+    char                          prev_host[16]; // Store previous host for leaving multicast group
 } rtp_stream_t;
 
 struct rtp_header {
@@ -96,7 +98,7 @@ static int socket_add_ipv4_multicast_group(int sock, bool assign_source_if, char
     // listen for all interfaces
     imreq.imr_interface.s_addr = IPADDR_ANY;
 
-/* 
+/*
     esp_netif_ip_info_t ip_info = { 0 };
     err = esp_netif_get_ip_info(get_example_netif(), &ip_info);
     if (err != ESP_OK) {
@@ -136,6 +138,42 @@ static int socket_add_ipv4_multicast_group(int sock, bool assign_source_if, char
         ESP_LOGE(V4TAG, "Failed to set IP_ADD_MEMBERSHIP. Error %d", errno);
         goto err;
     }
+
+ err:
+    return err;
+}
+
+// Function to leave multicast group for a specific address
+static int socket_leave_ipv4_multicast_group(int sock, char* host)
+{
+    struct ip_mreq imreq = { 0 };
+    int err = 0;
+
+    // Validate socket is valid
+    if (sock < 0) {
+        ESP_LOGW(V4TAG, "Invalid socket %d for leaving multicast group", sock);
+        return -1;
+    }
+
+    // Configure multicast address to leave
+    err = inet_aton(host, &imreq.imr_multiaddr.s_addr);
+    if (err != 1) {
+        ESP_LOGE(V4TAG, "Configured IPV4 multicast address '%s' is invalid for leaving.", host);
+        err = -1;
+        goto err;
+    }
+
+    // Use any interface to leave the group
+    imreq.imr_interface.s_addr = IPADDR_ANY;
+
+    err = setsockopt(sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
+                         &imreq, sizeof(struct ip_mreq));
+    if (err < 0) {
+        ESP_LOGE(V4TAG, "Failed to set IP_DROP_MEMBERSHIP for %s. Error %d", host, errno);
+        goto err;
+    }
+
+    ESP_LOGI(TAG, "Left IPV4 Multicast address %s", inet_ntoa(imreq.imr_multiaddr.s_addr));
 
  err:
     return err;
@@ -198,6 +236,40 @@ err:
     close(sock);
     return -1;
 }
+
+// Function to switch to a new multicast group without closing the socket
+static int socket_switch_multicast_group(int sock, char* old_host, char* new_host)
+{
+    int err = 0;
+
+    // Validate socket is valid
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Invalid socket %d for multicast group switch", sock);
+        return -1;
+    }
+
+    // Leave the old multicast group if we were part of one
+    if (old_host != NULL && strlen(old_host) > 0 && strcmp(old_host, new_host) != 0) {
+        err = socket_leave_ipv4_multicast_group(sock, old_host);
+        if (err < 0) {
+            ESP_LOGW(TAG, "Warning: Failed to leave old multicast group %s, continuing...", old_host);
+            // Continue anyway as we might still be able to join the new group
+        }
+    }
+
+    // Join the new multicast group
+    err = socket_add_ipv4_multicast_group(sock, true, new_host);
+    if (err < 0) {
+        ESP_LOGE(TAG, "Failed to join new multicast group %s", new_host);
+        return err;
+    }
+
+    ESP_LOGI(TAG, "Successfully switched from multicast group %s to %s",
+             old_host ? old_host : "(none)", new_host);
+
+    return 0;
+}
+
 // // ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int jbuf_free(jbuffer *jbuf)
@@ -331,6 +403,15 @@ static esp_err_t _rtp_open(audio_element_handle_t self)
     }
     rtp->is_open = true;
     _dispatch_event(self, rtp, NULL, 0, RTP_STREAM_STATE_CONNECTED);
+
+
+    // struct timeval tv;
+    // tv.tv_sec = 5;  // Таймаут 5 секунд на любую операцию
+    // tv.tv_usec = 0;
+    // setsockopt(rtp->sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+    // setsockopt(rtp->sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+
+
     return ESP_OK;
 
 _exit:
@@ -338,7 +419,45 @@ _exit:
     return ESP_FAIL;
 }
 
-uint8_t packet_buf[1600];
+static esp_err_t _rtp_close(audio_element_handle_t self){
+
+    AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
+
+    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
+    AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
+    if (!rtp->is_open) {
+        ESP_LOGE(TAG, "Already closed");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGD(TAG, "Shutting down socket");
+    shutdown(rtp->sock, 0);
+    close(rtp->sock);
+    
+    rtp->is_open = false;
+    if (AEL_STATE_PAUSED != audio_element_get_state(self)) {
+        audio_element_set_byte_pos(self, 0);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t _rtp_destroy(audio_element_handle_t self){
+    ESP_LOGD(TAG, "_rtp_destroy");
+    AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
+
+    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
+    AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
+
+    jbuf_free(&rtp->jbuf);
+
+    // Note: The host string is managed by the caller (rtp_play.c),
+    // so we don't free it here to avoid double-free issues
+
+    audio_free(rtp);
+    return ESP_OK;
+}
+
+uint8_t packet_buf[1600]; //fixme todo
 static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
 {
     rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
@@ -352,6 +471,13 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
 
     while (1)
     {
+        if (audio_element_is_stopping(self)) {
+            ESP_LOGW(TAG, "_rtp_read: Received stop command, aborting.");
+            _rtp_close(self);
+            _rtp_destroy(self);
+            return ESP_FAIL;
+        }
+
         ret = recvfrom(rtp->sock, packet_buf, 1600, 0, (struct sockaddr *)&source_addr, &addr_len);
         //TODO validate rtp packet here;
         static uint16_t seq=0; //FIXME must be in rtp struct
@@ -382,7 +508,21 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
             
             if ((uint16_t)tseq !=((uint16_t)seq+1))  ESP_LOGE(TAG, "Missing packet! expected %d got %d", seq+1, tseq);
             seq=tseq; 
+        }else if (ret < 0) 
+        {
+            // === ИСПРАВЛЕНИЕ 2: Обработка ошибок сокета/закрытия ===
+            // Проверяем код ошибки errno. EWOULDBLOCK/EAGAIN ожидаемы при использовании таймаутов/неблокирующего режима.
+            // Если сокет был закрыт извне (_rtp_close), recvfrom может вернуть другую ошибку (например, EBADF).
+            if (errno == EWOULDBLOCK || errno == EAGAIN || audio_element_is_stopping(self)) {
+                 vTaskDelay(pdMS_TO_TICKS(10)); // Небольшая задержка, чтобы не нагружать CPU в цикле ожидания
+                 continue; // Продолжаем ждать данные/сигнал останова
+            } else {
+                 ESP_LOGE(TAG, "_rtp_read: recvfrom error: %d (%s)", errno, strerror(errno));
+                 return ESP_FAIL; // Критическая ошибка, можно вернуть FAIL или ABORT
+            }
         }
+
+
         switch (rtp->jbuf.state)
         {
             case JBUF_IDLE:
@@ -443,40 +583,7 @@ static esp_err_t _rtp_process(audio_element_handle_t self, char *in_buffer, int 
     return w_size;
 }
 
-static esp_err_t _rtp_close(audio_element_handle_t self)
-{
-    AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
 
-    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
-    AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
-    if (!rtp->is_open) {
-        ESP_LOGE(TAG, "Already closed");
-        return ESP_FAIL;
-    }
-
-    ESP_LOGE(TAG, "Shutting down socket");
-    shutdown(rtp->sock, 0);
-    close(rtp->sock);
-    
-    rtp->is_open = false;
-    if (AEL_STATE_PAUSED != audio_element_get_state(self)) {
-        audio_element_set_byte_pos(self, 0);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t _rtp_destroy(audio_element_handle_t self)
-{
-    AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
-
-    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
-    AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
-  
-    jbuf_free(&rtp->jbuf);
-
-    audio_free(rtp);
-    return ESP_OK;
-}
 
 audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
 {
@@ -503,6 +610,13 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
     rtp->type = config->type;
     rtp->port = config->port;
     rtp->host = config->host;
+    rtp->is_multicast = (config->host != NULL && strlen(config->host) > 0) ? true : false;  // Check if this is a multicast address
+    if (config->host) {
+        strncpy(rtp->prev_host, config->host, sizeof(rtp->prev_host) - 1);
+        rtp->prev_host[sizeof(rtp->prev_host) - 1] = '\0';
+    } else {
+        rtp->prev_host[0] = '\0';
+    }
     //rtp->timeout_ms = config->timeout_ms;
     if (config->event_handler) {
         rtp->hook = config->event_handler;
@@ -520,11 +634,76 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
     el = audio_element_init(&cfg);
     AUDIO_MEM_CHECK(TAG, el, goto _rtp_init_exit);
     audio_element_setdata(el, rtp);
-    
+
     jbuf_init(&rtp->jbuf, 4096);
-    
+
     return el;
 _rtp_init_exit:
     audio_free(rtp);
     return NULL;
+}
+
+// Public function to switch to a new multicast address without restarting the device
+esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const char* new_host, uint16_t new_port)
+{
+    AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
+
+    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
+    AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
+
+    if (!rtp->is_open) {
+        ESP_LOGE(TAG, "RTP stream is not open, cannot switch multicast address");
+        return ESP_FAIL;
+    }
+
+    if (!rtp->is_multicast) {
+        ESP_LOGE(TAG, "Current stream is not multicast, cannot switch multicast address");
+        return ESP_FAIL;
+    }
+
+    // Validate that the socket is valid
+    if (rtp->sock < 0) {
+        ESP_LOGE(TAG, "RTP stream socket is invalid, cannot switch multicast address");
+        return ESP_FAIL;
+    }
+
+    // Store the current host for leaving the multicast group
+    char old_host[16];
+    if (rtp->host != NULL) {
+        strncpy(old_host, rtp->host, sizeof(old_host) - 1);
+        old_host[sizeof(old_host) - 1] = '\0';
+    } else {
+        old_host[0] = '\0';  // Empty string if no host
+    }
+
+    // Update the host in the rtp structure
+    // Store the old host in prev_host for leaving the multicast group
+    strncpy(rtp->prev_host, old_host, sizeof(rtp->prev_host) - 1);
+    rtp->prev_host[sizeof(rtp->prev_host) - 1] = '\0';
+
+    // Update the host pointer - note: caller must ensure new_host remains valid during use
+    rtp->host = (char*)new_host;
+
+    // If port changed, we need to handle that separately (for now we'll just update the port)
+    if (new_port != 0 && rtp->port != new_port) {
+        rtp->port = new_port;
+        ESP_LOGW(TAG, "Port changed but socket reconfiguration for port changes not implemented");
+    }
+
+    // Switch to the new multicast group on the same socket
+    int result = socket_switch_multicast_group(rtp->sock, old_host, (char*)new_host);
+    if (result < 0) {
+        ESP_LOGE(TAG, "Failed to switch multicast group from %s to %s", old_host, new_host);
+        return ESP_FAIL;
+    }
+
+    // Reset the buffer to clear any old data
+    jbuffer *jbuf = &rtp->jbuf;
+    memset(jbuf->buf, 0, jbuf->bufsize);
+    jbuf->r_p = 0;
+    jbuf->w_p = jbuf->bufsize;
+    jbuf->state = JBUF_IDLE;
+
+    ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
+    return ESP_OK;
 }
