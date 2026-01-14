@@ -103,9 +103,9 @@ int spisd_init() {
 
 	if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
 		ESP_LOGD(TAG, "old board pinout notFound( lets try new bord pinout");
-		clk_pin = 18;
-	 	cmd_pin = 8;
-	 	d0_pin = 2;
+		clk_pin = 18;//18;
+	 	cmd_pin = 8;//8;
+	 	d0_pin = 2;//2;
 
 		gpio_pad_select_gpio(clk_pin);
 		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
@@ -130,6 +130,8 @@ int spisd_init() {
 	slot_config.cmd = cmd_pin;
 	slot_config.d0 = d0_pin;
 	slot_config.width = 1;
+
+	//host.max_freq_khz = 10000;
 
 	int res=spisd_mount_fs();
 	ESP_LOGD(TAG, "SDcard init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(),
