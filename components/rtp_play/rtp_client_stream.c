@@ -27,6 +27,7 @@
 
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_timer.h"
 
 #include "audio_mem.h"
 #include "rtp_client_stream.h"
@@ -73,6 +74,7 @@ typedef struct rtp_stream {
     jbuffer                       jbuf;
     bool                          is_multicast;  // Flag to indicate if this is a multicast stream
     char                          prev_host[16]; // Store previous host for leaving multicast group
+    int64_t                       last_packet_time;
 } rtp_stream_t;
 
 struct rtp_header {
@@ -402,6 +404,7 @@ static esp_err_t _rtp_open(audio_element_handle_t self)
         goto _exit;
     }
     rtp->is_open = true;
+    rtp->last_packet_time = esp_timer_get_time();
     _dispatch_event(self, rtp, NULL, 0, RTP_STREAM_STATE_CONNECTED);
 
 
@@ -483,6 +486,7 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
         static uint16_t seq=0; //FIXME must be in rtp struct
         if (ret>0) 
         {
+            rtp->last_packet_time = esp_timer_get_time();
             if (ret%4!=0) 
             {
                 ESP_LOGE(TAG, "Wrong packet size! %d", ret-12);
@@ -706,4 +710,21 @@ esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;
+}
+
+esp_err_t rtp_stream_check_connection(audio_element_handle_t self, int timeout_ms)
+{
+    AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
+    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
+    AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
+
+    if (!rtp->is_open) {
+        return ESP_FAIL;
+    }
+
+    int64_t current_time = esp_timer_get_time();
+    if ((current_time - rtp->last_packet_time) > (int64_t)timeout_ms * 1000) {
+        return ESP_FAIL; // Timeout
+    }
+    return ESP_OK; // Connection active
 }

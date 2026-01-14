@@ -282,6 +282,16 @@ void audio_task(void *arg) {
 
 	configure_audioPlayer(c, slot_num);
 
+	char init_report[32];
+	memset(init_report, 0, sizeof(init_report));
+	sprintf(init_report, "/volume:%d", c->volume);
+	report(init_report, slot_num);
+	memset(init_report, 0, sizeof(init_report));
+	sprintf(init_report, "/track:%d", me_state.currentTrack);
+	report(init_report, slot_num);
+	memset(init_report, 0, sizeof(init_report));
+	sprintf(init_report, "/state:stop");
+	report(init_report, slot_num);
 
 	esp_rom_gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
@@ -421,6 +431,13 @@ void audio_task(void *arg) {
 						audioSetIndicator(slot_num, 0);
 					}
 					setVolume_num(c->volume);
+					char track_str[20];
+					memset(track_str, 0, sizeof(track_str));
+					sprintf(track_str, "/track:%d", me_state.currentTrack);
+					report(track_str, slot_num);
+					memset(track_str, 0, sizeof(track_str));
+					sprintf(track_str, "/state:play");
+					report(track_str, slot_num);
 				}
 				break;
  
@@ -432,6 +449,10 @@ void audio_task(void *arg) {
 					audioStop();
 					audioSetIndicator(slot_num, 0);
 				}
+				char track_str[20];
+				memset(track_str, 0, sizeof(track_str));
+				sprintf(track_str, "state:stop");
+				report(track_str, slot_num);
 				break;
 
             case MYCMD_shift:
@@ -445,12 +466,21 @@ void audio_task(void *arg) {
 						}
 					}
 				}
+				char shiftTrack_str[20];
+				memset(shiftTrack_str, 0, sizeof(shiftTrack_str));
+				sprintf(shiftTrack_str, "/track:%d", me_state.currentTrack);
+				report(shiftTrack_str, slot_num);
 				break;
 
             case MYCMD_setVolume:
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
-					setVolume_num(params.p[0].i);
+					c->volume = params.p[0].i;
+					setVolume_num(c->volume);
+					char vol_str[20];
+					memset(vol_str, 0, sizeof(vol_str));
+					sprintf(vol_str, "/volume:%d", c->volume);
+					report(vol_str, slot_num);
 				}
 				break;
 		}

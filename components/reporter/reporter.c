@@ -249,27 +249,21 @@ void send_report(reporter_message_t * msg)
 	char * tmpStr = msg->str;
 	usbprint(tmpStr);
 
-	//ESP_LOGE(TAG,"send_report stage 1\n");
-
 	if(me_state.MQTT_init_res==ESP_OK){
 
-		char tmpString[strlen(tmpStr)];
+		char tmpString[strlen(tmpStr) + 1];
 		strcpy(tmpString, tmpStr);
 		char *payload;
 		char *topic = strtok_r(tmpString, ":", &payload);
 
-		//ESP_LOGE(TAG,"send_report stage 2: %s %s\n", topic, payload);
-
 		mqtt_pub(topic, payload);
 	}
-	// else
-	// 	ESP_LOGE(TAG,"send_report stage 3\n");
 
 	if(me_state.OSC_init_res==ESP_OK){
-		char msg_copy[strlen(tmpStr)+1];
-		if(tmpStr[0]!='/'){
-			strcpy(msg_copy+1, tmpStr);
-			msg_copy[0]='/';
+		char msg_copy[strlen(tmpStr) + 2];
+		if(tmpStr[0] != '/'){
+			msg_copy[0] = '/';
+			strcpy(msg_copy + 1, tmpStr);
 		}else{
 			strcpy(msg_copy, tmpStr);
 		}
@@ -366,16 +360,12 @@ void forward_report(char *msg, int slot_num)
 }
 
 void reporter_task(void){
-	//char tmpStr[555];
 	reporter_message_t received_message;
 	for(;;){
 		if (xQueueReceive(me_state.reporter_queue, &received_message, portMAX_DELAY) == pdPASS){
-			//ESP_LOGD(TAG, "REPORT QueueReceive: %s len:%d from slot:%d", received_message.str, strlen(received_message.str), received_message.slot_num);
-			int len = strlen(received_message.str)+strlen(me_state.trigger_topic_list[received_message.slot_num])+6;
+			int len = strlen(received_message.str) + strlen(me_state.trigger_topic_list[received_message.slot_num]) + 6;
 			char tmpStr[len];
-			memset(tmpStr, 0, strlen(tmpStr));
-
-			//ESP_LOGD(TAG, "test tmpLen:%d topicLen:%d msgLen:%d",len,strlen(me_state.trigger_topic_list[received_message.slot_num]), strlen(received_message.str));
+			memset(tmpStr, 0, len);
 			if(received_message.str[0]=='/'){
 				sprintf(tmpStr,"%s%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}else{
@@ -430,22 +420,20 @@ void report(char *msg, int slot_num){
 void reportFreeRAM(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
     sprintf(tmpStr, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
-	send_report(&tmpStr);
+	forward_report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
 
 void reportVersion(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
     sprintf(tmpStr, "%s/system/version:%s",me_config.deviceName, VERSION);
-	send_report(&tmpStr);
+	forward_report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
 
 void reportNETstatus(){
-	//char tmpStr[512];  // Increased buffer size for JSON
 	char * tmpStr = heap_caps_malloc(512, MALLOC_CAP_8BIT);
 	sprintf(tmpStr, "%s/system/NETstatus:{",me_config.deviceName);
-    // Add WIFI network info if initialized successfully
     sprintf(tmpStr+ strlen(tmpStr), "\"WIFI_init_res\":%d," , me_state.WIFI_init_res);
 	if (me_state.WIFI_init_res == ESP_OK) {
         sprintf(tmpStr + strlen(tmpStr), 
@@ -466,7 +454,6 @@ void reportNETstatus(){
             me_config.LAN_gateWay
         );
     }
-    // Add other initialization states
     sprintf(tmpStr + strlen(tmpStr),
         "\"MQTT_init_res\":%d,"
         "\"UDP_init_res\":%d,"
@@ -477,19 +464,14 @@ void reportNETstatus(){
         me_state.OSC_init_res,
         me_state.FTP_init_res
     );
-	//ESP_LOGD(TAG,"debug state report:%s", tmpStr);
-	send_report(&tmpStr);
+	forward_report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
 
 void reportTaskList(){
-	//char tmpStr[512];  // Increased buffer size for JSON
 	char * tmpStr = heap_caps_malloc(1024, MALLOC_CAP_8BIT);
 	sprintf(tmpStr, "%s/system/TaskList:",me_config.deviceName);
 	vTaskList(tmpStr+ strlen(tmpStr));
-	//vTaskList(tmpStr);
-	// ESP_LOGD(TAG,"taskList:%s", tmpStr);
-	send_report(&tmpStr);
+	forward_report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
-

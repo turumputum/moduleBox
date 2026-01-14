@@ -16,6 +16,7 @@
 #include "board.h"
 #include "esp_peripherals.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "i2s_stream.h"
 #include "filter_resample.h"
@@ -185,7 +186,7 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
     //rtp_cfg.port = 7777;
     rtp_cfg.host = c->host;
     //rtp_cfg.host = "239.0.7.1";
-    rtp_cfg.task_core=1;
+    rtp_cfg.task_core=0;
     c->rtp_stream_reader = rtp_stream_init(&rtp_cfg);
     AUDIO_NULL_CHECK(TAG, c->rtp_stream_reader, return ESP_FAIL);
 
@@ -325,12 +326,44 @@ void audioLAN_task(void *arg){
         ESP_LOGD(TAG,"audioLAN_%d slot state DISABLE", slot_num);
     }
 
+    char init_report[32];
+    memset(init_report, 0, sizeof(init_report));
+    sprintf(init_report, "/state:%d", c->state);
+    report(init_report, slot_num);
+    memset(init_report, 0, sizeof(init_report));
+    sprintf(init_report, "/channel:%d", c->channel);
+    report(init_report, slot_num);
+    memset(init_report, 0, sizeof(init_report));
+    sprintf(init_report, "/volume:%d", c->volume);
+    report(init_report, slot_num);
+
     //TickType_t lastWakeTime = xTaskGetTickCount();
+
+    int64_t last_blink_time = 0;
+    int led_state = 0;
 
     while (1) {
         //ESP_LOGD(TAG, "[audioLAN_%d] I am alive", slot_num);
+
+        //LED Logic
+        if (c->state == DISABLE) {
+            gpio_set_level(led_pin, 0);
+            //ESP_LOGD(TAG, "Slot_%d set MODE light OFF", slot_num);
+        } else {
+            if (rtp_stream_check_connection(c->rtp_stream_reader, 500) == ESP_OK) {
+                gpio_set_level(led_pin, 1);
+                //ESP_LOGD(TAG, "Slot_%d set MODE light ON", slot_num);
+            } else {
+                //ESP_LOGD(TAG, "Slot_%d set MODE light BLINK", slot_num);
+                if ((esp_timer_get_time() - last_blink_time) > 500000) {
+                    led_state = !led_state;
+                    gpio_set_level(led_pin, led_state);
+                    last_blink_time = esp_timer_get_time();
+                }
+            }
+        }
         
-        int cmd = stdcommand_receive(&c->cmds, &params, 100);
+        int cmd = stdcommand_receive(&c->cmds, &params, 150);
 		char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
 
         switch (cmd){
@@ -340,13 +373,15 @@ void audioLAN_task(void *arg){
             case rtpCMD_setState:
                 if((atoi(cmd_arg)==ENABLE)&&(c->state != ENABLE)){
                     audio_pipeline_resume(c->pipeline);
-                    gpio_set_level(led_pin, !c->state);
                 }else if((atoi(cmd_arg)==DISABLE)&&(c->state != DISABLE)){
                     audio_pipeline_pause(c->pipeline);
-                    gpio_set_level(led_pin, c->state);
                 }
                 c->state = atoi(cmd_arg);
                 ESP_LOGD(TAG, "[audioLAN_%d] lets set state:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
+                char state_str[20];
+                memset(state_str, 0, sizeof(state_str));
+                sprintf(state_str, "/state:%d", c->state);
+                report(state_str, slot_num);
                 break;
 
             case rtpCMD_setChannel:
@@ -388,6 +423,10 @@ void audioLAN_task(void *arg){
                     }
 
                     ESP_LOGD(TAG, "[audioLAN_%d] set chan cmd state:%d host:%s group:%d channel:%d  Free heap:%d", slot_num, c->state, c->host, c->group, c->channel, xPortGetFreeHeapSize());
+                    char chan_str[20];
+                    memset(chan_str, 0, sizeof(chan_str));
+                    sprintf(chan_str, "/channel:%d", c->channel);
+                    report(chan_str, slot_num);
                 }
                 break;
             
@@ -395,11 +434,15 @@ void audioLAN_task(void *arg){
                 c->volume = atoi(cmd_arg);
                 _setVolume_num(c->i2s_stream_writer, c->volume);
                 ESP_LOGD(TAG, "[audioLAN_%d] setVolume:%d. Free heap:%d", slot_num, c->volume, xPortGetFreeHeapSize());
+                char vol_str[20];
+                memset(vol_str, 0, sizeof(vol_str));
+                sprintf(vol_str, "/volume:%d", c->volume);
+                report(vol_str, slot_num);
                 break;
         }
 
         audio_event_iface_msg_t msg;
-        esp_err_t ret = audio_event_iface_listen(c->evt, &msg, 100);
+        esp_err_t ret = audio_event_iface_listen(c->evt, &msg, 120);
         if (ret != ESP_OK) {
             //ESP_LOGE(TAG, "[ * ] Event interface error : %d cmd:%d", ret, msg.cmd);
             continue;
@@ -423,9 +466,8 @@ void start_audioLAN_task(int slot_num){
     char tmpString[60];
 	sprintf(tmpString, "task_audioLAN_%d", slot_num);
 	//xTaskCreatePinnedToCore(button_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
-	xTaskCreate(audioLAN_task, tmpString, 1024 * 4, &t_slot_num, 1, NULL);
+	xTaskCreate(audioLAN_task, tmpString, 1024 * 4, &t_slot_num, configMAX_PRIORITIES - 20, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "audioLAN_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
-

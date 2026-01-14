@@ -115,6 +115,16 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config);
  */
 esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const char* new_host, uint16_t new_port);
 
+/**
+ * @brief       Check if data is being received on the RTP stream
+ *
+ * @param      self        The audio element handle
+ * @param      timeout_ms  Timeout in milliseconds to consider the connection lost
+ *
+ * @return     ESP_OK if data was received within timeout, ESP_FAIL otherwise
+ */
+esp_err_t rtp_stream_check_connection(audio_element_handle_t self, int timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif
