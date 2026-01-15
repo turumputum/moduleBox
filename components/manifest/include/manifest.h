@@ -14,6 +14,7 @@
 
 
 const char *        get_manifest_audioPlayer    ();
+const char *        get_manifest_audioLAN       ();
 const char *        get_manifest_adc1           ();
 const char *        get_manifest_analog         ();
 const char *        get_manifest_buttonLed      ();

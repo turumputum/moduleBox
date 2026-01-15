@@ -420,14 +420,14 @@ void report(char *msg, int slot_num){
 void reportFreeRAM(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
     sprintf(tmpStr, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
-	forward_report(tmpStr, 0);
+	report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
 
 void reportVersion(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
     sprintf(tmpStr, "%s/system/version:%s",me_config.deviceName, VERSION);
-	forward_report(tmpStr, 0);
+	report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
 
@@ -464,7 +464,7 @@ void reportNETstatus(){
         me_state.OSC_init_res,
         me_state.FTP_init_res
     );
-	forward_report(tmpStr, 0);
+	report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }
 
@@ -472,6 +472,6 @@ void reportTaskList(){
 	char * tmpStr = heap_caps_malloc(1024, MALLOC_CAP_8BIT);
 	sprintf(tmpStr, "%s/system/TaskList:",me_config.deviceName);
 	vTaskList(tmpStr+ strlen(tmpStr));
-	forward_report(tmpStr, 0);
+	report(tmpStr, 0);
 	heap_caps_free(tmpStr);
 }

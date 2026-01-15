@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "rtp_play.h"
+#include "audioLAN.h"
 
 #include "sdkconfig.h"
 #include <stdint.h>
@@ -31,6 +31,8 @@
 
 #include <manifest.h>
 #include <mbdebug.h>
+
+#include <generated_files/gen_audioLAN.h>
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -218,7 +220,8 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
 	return ESP_OK;
 }
 
-/* Модуль звук через сеть
+/* 
+Модуль звук через сеть
 */
 void configure_audioLAN(PRTPCONFIG c, int slot_num){
     stdcommand_init(&c->cmds, slot_num);
@@ -470,4 +473,10 @@ void start_audioLAN_task(int slot_num){
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "audioLAN_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+const char * get_manifest_audioLAN()
+{
+	return manifesto;
 }
