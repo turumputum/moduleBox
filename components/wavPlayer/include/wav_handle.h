@@ -1,6 +1,8 @@
 #ifndef _WAV_HANDLE_H_
 #define _WAV_HANDLE_H_
 
+#include <arsenal.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -61,7 +63,7 @@ typedef struct {
 
 
 
-typedef struct wav_header {
+typedef AXPACKED(struct) wav_header {
     /* RIFF Header */
     char     riff_header[4]; /*!< Contains the ASCII tag "RIFF". */
     uint32_t wav_size;       /*!< Size of the WAV portion of the file (file size - 8). */
@@ -70,6 +72,9 @@ typedef struct wav_header {
     /* Format Header */
     char     fmt_header[4];    /*!< Contains the ASCII tag "fmt " (includes trailing space). */
     uint32_t fmt_chunk_size;   /*!< Size of the fmt chunk (typically 16 for PCM). */
+} wav_header_t;
+
+typedef AXPACKED(struct) fmt_header {
     uint16_t audio_format;     /*!< Audio format (1 = PCM, 3 = IEEE float). */
     uint16_t num_channels;     /*!< Number of audio channels. */
     uint32_t sample_rate;      /*!< Sampling rate in Hz. */
@@ -77,15 +82,32 @@ typedef struct wav_header {
     uint16_t sample_alignment; /*!< Block alignment (num_channels * bytes_per_sample). */
     uint16_t bit_depth;        /*!< Bits per sample (e.g. 16). */
 
+    uint16_t aligment [ 4 ];
+
     /* Data */
+} fmt_header_t;
+
+typedef AXPACKED(struct) data_header {
     char     data_header[4]; /*!< Contains the ASCII tag "data". */
     uint32_t data_bytes;     /*!< Number of bytes in the data chunk (samples * frame_size). */
-} wav_header_t;
+} data_header_t;
+
+
+typedef struct _tag_WAVDESC
+{
+    int         samplerate;
+    int         channels;
+    int         width;
+    int         start;
+    size_t      len;
+} WAVDESC, * PWAVDESC;
 
 typedef struct _tag_player_stage_t
 {
     WAVCMD          mode;
+    WAVDESC         desc;
     FILE *          fin;
+    size_t          left;
 } player_stage_t;
 
 struct wav_handle {

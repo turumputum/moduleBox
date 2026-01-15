@@ -6,9 +6,17 @@
 // ***************************************************************************
 
 #include "esp_log.h"
+#include <string.h>
 
 #include <wav_handle.h>
 #include <arsenal.h>
+
+// ---------------------------------------------------------------------------
+// ------------------------------- DEFINITIONS -------------------------------
+// -----|-------------------|-------------------------------------------------
+
+#define AUDIO_FORMAT_PCM    1            
+
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
@@ -20,13 +28,65 @@ typedef struct _tag_queue_message_t
     char *      filenamame;
 } queue_message_t;
 
-
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-//static uint8_t buf[WAV_BUF_SIZE];
+static FILE * wavfile_open(wav_handle_t    h, 
+                        PWAVDESC        desc, 
+                        const char *    fname)
+{
+    FILE *          result      = NULL;
+    wav_header_t    header;
+    fmt_header_t    fmt;
+    data_header_t   data;
 
+    if ((result = fopen(fname, "rb")) != nil)
+    {
+        if (    (fread(&header, sizeof(header), 1, result) == 1)    &&
+                !memcmp(header.riff_header, "RIFF", 4)              &&
+                !memcmp(header.wave_header, "WAVE", 4)              &&
+                !memcmp(header.fmt_header, "fmt ", 4)               &&
+                (fread(&fmt, MAC_MIN(sizeof(fmt_header_t), 
+                       header.fmt_chunk_size), 1, result) == 1)     &&
+                (fread(&data, 
+                        sizeof(data_header_t), 1, result) == 1)     &&
+                !memcmp(data.data_header, "data", 4)                &&
+               (fmt.audio_format == AUDIO_FORMAT_PCM)        &&
+                   (fmt.sample_rate >= 8000)                     && 
+               (fmt.sample_rate <= 44100)                    )
+        {
+            ESP_LOGD(h->tag, "num_channels=%" PRIu16, fmt.num_channels);
+            ESP_LOGD(h->tag, "sample_rate=%" PRIu32, fmt.sample_rate);
+            ESP_LOGD(h->tag, "byte_rate=%" PRIu32, fmt.byte_rate);
+            ESP_LOGD(h->tag, "sample_alignment=%" PRIu16, fmt.sample_alignment);
+            ESP_LOGD(h->tag, "bit_depth=%" PRIu16, fmt.bit_depth);
+            ESP_LOGD(h->tag, "data_bytes=%" PRIu32, data.data_bytes);
+
+            // h->num_channels = header.num_channels;
+            // h->sample_rate = header.sample_rate;
+            // h->byte_rate = header.byte_rate;
+            // h->sample_alignment = header.sample_alignment;
+            // h->bit_depth = header.bit_depth;
+            // h->data_start = sizeof(wav_header_t) + 8; //8 bytes of RIFF metadata
+            // h->data_bytes = header.data_bytes;
+
+            desc->channels      = fmt.num_channels;
+            desc->samplerate    = fmt.sample_rate;
+            desc->width         = fmt.bit_depth;
+            desc->len           = data.data_bytes;
+        }
+        else
+        {
+            fclose(result);
+            result = NULL;
+        }
+    }
+
+    return result;
+}
+
+//static uint8_t buf[WAV_BUF_SIZE];
 //i2s_del_channel(c->audio_ch_handle); // delete the channel
 
 static esp_err_t i2s_setup(wav_handle_t h)
@@ -55,42 +115,6 @@ static esp_err_t i2s_setup(wav_handle_t h)
   };
   return i2s_channel_init_std_mode(h->audio_ch_handle, &std_cfg);
 }
-/*
-esp_err_t play_wav(wav_handle_t h, char *fp)
-{
-  FILE *fh = fopen(fp, "rb");
-  if (fh == NULL)
-  {
-    ESP_LOGE(h->tag, "Failed to open file");
-    return ESP_ERR_INVALID_ARG;
-  }
-  
-  // skip the header...
-  fseek(fh, 44, SEEK_SET);
-
-  // create a writer buffer
-  size_t bytes_read = 0;
-  size_t bytes_written = 0;
-
-  bytes_read = fread(buf, sizeof(int16_t), AUDIO_BUFFER, fh);
-
-  i2s_channel_enable(c->audio_ch_handle);
-
-  while (bytes_read > 0)
-  {
-    // write the buffer to the i2s
-    i2s_channel_write(c->audio_ch_handle, buf, bytes_read * sizeof(int16_t), &bytes_written, portMAX_DELAY);
-    bytes_read = fread(buf, sizeof(int16_t), AUDIO_BUFFER, fh);
-    ESP_LOGV(TAG, "Bytes read: %d", bytes_read);
-  }
-  
-  i2s_channel_disable(c->audio_ch_handle);
-  free(buf);
-
-  return ESP_OK;
-}
-*/
-
 static void _stopCurrent(wav_handle_t    h)
 {
     if (h->stage.fin)
@@ -98,6 +122,8 @@ static void _stopCurrent(wav_handle_t    h)
         fclose(h->stage.fin);
 
         h->stage.fin = 0;
+
+        ESP_LOGE(h->tag, "Stopped");
     }
 
     if (h->enabled)
@@ -113,14 +139,13 @@ static int _openNew(wav_handle_t    h,
                     char *             fname)
 {
     int         result      = 0;
-
-    if ((h->stage.fin = fopen(fname, "rb")) != NULL)
+    
+    if ((h->stage.fin = wavfile_open(h, &h->stage.desc, fname)) != NULL)
     {
-        fseek(h->stage.fin, 44, SEEK_SET);
-
         i2s_channel_enable(h->audio_ch_handle);
-        h->enabled   = true;
-        result              = 1;
+        h->stage.left   = h->stage.desc.len;
+        h->enabled      = true;
+        result          = 1;
     }
     else
         ESP_LOGE(h->tag, "Failed to open file %s", fname);
@@ -134,11 +159,17 @@ static int _playCurrent(wav_handle_t    h)
 
     if (h->stage.fin != NULL)
     {
-
-        if ((result = fread(h->buf, 1, WAV_BUF_SIZE, h->stage.fin)) > 0)
+        if (h->stage.left)
         {
-            i2s_channel_write(h->audio_ch_handle, h->buf, result, &bytes_written, portMAX_DELAY);
+            if ((result = fread(h->buf, 1, MAC_MIN(WAV_BUF_SIZE, h->stage.left), h->stage.fin)) > 0)
+            {
+                i2s_channel_write(h->audio_ch_handle, h->buf, result, &bytes_written, portMAX_DELAY);
+
+                h->stage.left -= result;
+            }
         }
+        else
+            result = 0;
 
         //ESP_LOGE(h->tag, "offset: %d, result: %d\n", (int)ftell(h->stage.fin), result);
     }
@@ -213,12 +244,6 @@ void wav_handle_stop(wav_handle_t h)
     
     xQueueSend(h->queue, &msg, portMAX_DELAY);
 }
-void wav_handle_play(wav_handle_t h, char * fname)
-{
-    queue_message_t msg = { WAVCMD_play, fname };
-    
-    xQueueSend(h->queue, &msg, portMAX_DELAY);
-}
 wav_handle_t wav_handle_deinit(wav_handle_t h)
 {
     if (h)
@@ -233,4 +258,10 @@ wav_handle_t wav_handle_deinit(wav_handle_t h)
     }
 
     return nil;
+}
+void wav_handle_play(wav_handle_t h, char * fname)
+{
+    queue_message_t msg = { WAVCMD_play, fname };
+
+    xQueueSend(h->queue, &msg, portMAX_DELAY);
 }
