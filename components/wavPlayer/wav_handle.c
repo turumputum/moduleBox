@@ -134,7 +134,6 @@ static void _stopCurrent(wav_handle_t    h)
 
     h->stage.mode = WAVCMD_silence;
 }
-
 static int _openNew(wav_handle_t    h, 
                     char *             fname)
 {
