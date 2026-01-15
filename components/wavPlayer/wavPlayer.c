@@ -40,8 +40,8 @@
 
 #include "board.h"
 #include "audio_sonic.h"
-#include "esp_audio.h"
-#include "driver/i2s_std.h"
+
+#include "wav_handle.h"
 
 #include <generated_files/gen_wavPlayer.h>
 
@@ -52,18 +52,6 @@
 
 #undef  LOG_LOCAL_LEVEL 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-
-// I2S Configuration
-#define I2S_BLK_PIN GPIO_NUM_4
-#define I2S_WS_PIN GPIO_NUM_5
-#define I2S_DATA_OUT_PIN GPIO_NUM_10
-#define I2S_DATA_IN_PIN I2S_GPIO_UNUSED
-#define I2S_SCLK_PIN I2S_GPIO_UNUSED
-
-#define REBOOT_WAIT 5000            // reboot after 5 seconds
-#define AUDIO_BUFFER 2048           // buffer size for reading the wav file and sending to i2s
-#define WAV_FILE "/sdcard/test.wav" // wav file to play
-
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
@@ -84,9 +72,9 @@ typedef struct __tag_WAVPLAYERCONFIG
 
     STDCOMMANDS             cmds;
 
-    i2s_chan_handle_t 		audio_ch_handle;
-
 	int						ETreport;
+
+	wav_handle_t 			handler;
 } WAVPLAYERCONFIG, * PWAVPLAYERCONFIG; 
 
 typedef enum
@@ -114,73 +102,10 @@ extern configuration me_config;
 // -----------------|---------------------------(|------------------|---------
 
 static void trackShift(char* cmd_arg);
-static esp_err_t audioPlay(PWAVPLAYERCONFIG c, uint8_t truckNum);
+static esp_err_t audioPlay(wav_handle_t h, uint8_t truckNum);
 static void audioSetIndicator(uint8_t slot_num, uint32_t level);
 static void setVolume_num(uint8_t vol);
-static void audioStop(void);
-
-esp_err_t i2s_setup(PWAVPLAYERCONFIG c)
-{
-  // setup a standard config and the channel
-  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &c->audio_ch_handle, NULL));
-
-  // setup the i2s config
-  i2s_std_config_t std_cfg = {
-      .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),                                                    // the wav file sample rate
-      .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO), // the wav faile bit and channel config
-      .gpio_cfg = {
-          // refer to configuration.h for pin setup
-          .mclk = I2S_SCLK_PIN,
-          .bclk = I2S_BLK_PIN,
-          .ws = I2S_WS_PIN,
-          .dout = I2S_DATA_OUT_PIN,
-          .din = I2S_DATA_IN_PIN,
-          .invert_flags = {
-              .mclk_inv = false,
-              .bclk_inv = false,
-              .ws_inv = false,
-          },
-      },
-  };
-  return i2s_channel_init_std_mode(c->audio_ch_handle, &std_cfg);
-}
-
-esp_err_t play_wav(PWAVPLAYERCONFIG c, char *fp)
-{
-  FILE *fh = fopen(fp, "rb");
-  if (fh == NULL)
-  {
-    ESP_LOGE(TAG, "Failed to open file");
-    return ESP_ERR_INVALID_ARG;
-  }
-  
-  // skip the header...
-  fseek(fh, 44, SEEK_SET);
-
-  // create a writer buffer
-  int16_t *buf = calloc(AUDIO_BUFFER, sizeof(int16_t));
-  size_t bytes_read = 0;
-  size_t bytes_written = 0;
-
-  bytes_read = fread(buf, sizeof(int16_t), AUDIO_BUFFER, fh);
-
-  i2s_channel_enable(c->audio_ch_handle);
-
-  while (bytes_read > 0)
-  {
-    // write the buffer to the i2s
-    i2s_channel_write(c->audio_ch_handle, buf, bytes_read * sizeof(int16_t), &bytes_written, portMAX_DELAY);
-    bytes_read = fread(buf, sizeof(int16_t), AUDIO_BUFFER, fh);
-    ESP_LOGV(TAG, "Bytes read: %d", bytes_read);
-  }
-  
-  i2s_channel_disable(c->audio_ch_handle);
-  free(buf);
-
-  return ESP_OK;
-}
-
+static void audioStop(wav_handle_t h);
 
 /*
     Звуковой модуль для несжатых WAV-файлов
@@ -312,7 +237,9 @@ void wavplayer_task(void *arg) {
 
 	configure_wavPlayer(c, slot_num);
 
-	i2s_setup(c);
+	
+	c->handler = wav_handle_init(TAG);
+	
    	// esp_wav_player_init(&c->wav_player, &player_conf);
     // esp_wav_player_set_volume(c->wav_player, 50);
 
@@ -333,10 +260,9 @@ void wavplayer_task(void *arg) {
 
 	waitForWorkPermit(slot_num);
 
-
 	while(1)
 	{
-		int cmd = stdcommand_receive(&c->cmds, &params, 5);
+		int cmd = stdcommand_receive(&c->cmds, &params, pdMS_TO_TICKS(1));
 		char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
 
         switch (cmd)
@@ -354,7 +280,7 @@ void wavplayer_task(void *arg) {
 					trackShift(cmd_arg);
 					ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
 					vTaskDelay(pdMS_TO_TICKS(c->play_delay));
-					if(audioPlay(c, me_state.currentTrack)==ESP_OK){
+					if(audioPlay(c->handler, me_state.currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);
 					}else{
 						audioSetIndicator(slot_num, 0);
@@ -400,7 +326,7 @@ void wavplayer_task(void *arg) {
 			//ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
 			setVolume_num(att_vol);
 			if(att_vol==0){
-				audioStop();
+				audioStop(c->handler);
 				audioSetIndicator(slot_num, 0);
 				att_vol = c->volume;
 				att_flag=0;
@@ -453,6 +379,8 @@ void wavplayer_task(void *arg) {
 		// 		}
 		// 	}
 		// }
+
+		wav_handle_turn(c->handler);
 	}
 }
 
@@ -469,7 +397,9 @@ void wavPlayerInit(uint8_t slot_num){
 
 void wavPlayerDeinit(PWAVPLAYERCONFIG c) {
   // that'll do pig... that'll do
-  i2s_del_channel(c->audio_ch_handle); // delete the channel
+  //i2s_del_channel(c->audio_ch_handle); // delete the channel
+
+  wav_handle_deinit(c->handler);
 }
 static void trackShift(char* cmd_arg)
 {
@@ -510,43 +440,21 @@ static void setVolume_num(uint8_t vol) {
 	//i2s_alc_volume_set(i2s_stream_writer, -34 + (vol / 3));
 }
 
-static esp_err_t audioPlay(PWAVPLAYERCONFIG c, uint8_t truckNum) 
+static esp_err_t audioPlay(wav_handle_t h, uint8_t truckNum) 
 {
-	//uint32_t heapBefore = xPortGetFreeHeapSize();
-	
-	// audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
-	// if(el_state==AEL_STATE_RUNNING){
-	// 	audioStop();
-	// }
-
-	// ESP_ERROR_CHECK(audio_element_set_uri(fatfs_stream_reader, me_config.soundTracks[truckNum]));
-	// ESP_ERROR_CHECK(audio_pipeline_reset_ringbuffer(pipeline));
-	// ESP_ERROR_CHECK(audio_pipeline_reset_elements(pipeline));
-	// ESP_ERROR_CHECK(audio_pipeline_change_state(pipeline, AEL_STATE_INIT));
-	// ESP_ERROR_CHECK(audio_pipeline_run(pipeline));
-
 	ESP_LOGD(TAG, "Playing file: %s", me_config.soundTracks[truckNum]);
 
-	play_wav(c, me_config.soundTracks[truckNum]);
-
+	wav_handle_play(h, me_config.soundTracks[truckNum]);
 
 	return ESP_OK;
 }
 
-static void audioStop(void) 
+static void audioStop(wav_handle_t h) 
 {
-	//audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
-	//ESP_LOGD(TAG, "audioStop state: %d", el_state);
-	//if ((el_state != AEL_STATE_FINISHED) && (el_state != AEL_STATE_STOPPED)) {
-		// audio_pipeline_stop(pipeline);
-		// audio_pipeline_wait_for_stop(pipeline);
-	//}
-//	ESP_ERROR_CHECK(audio_pipeline_terminate(pipeline));
-
-
 	ESP_LOGD(TAG, "Stop playing. Free heap:%d", xPortGetFreeHeapSize());
-}
 
+	wav_handle_stop(h);
+}
 
 const char * get_manifest_wavPlayer()
 {

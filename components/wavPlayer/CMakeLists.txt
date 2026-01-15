@@ -6,7 +6,7 @@ include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
 endif()
 
 idf_component_register(SRCS 
-					${MODULE_FILES} 
+					${MODULE_FILES} "wav_handle.c"
 					${GENERATED_FILES}
                     INCLUDE_DIRS "include" ${CMAKE_CURRENT_BINARY_DIR}
                     REQUIRES audio_sal audio_pipeline audio_stream audio_hal fatfs stateConfig my_board esp_peripherals )
