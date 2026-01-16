@@ -196,7 +196,7 @@ void execute(char *action) {
 	if(strlen(action)>MAX_STRING_LENGTH){
 		action[MAX_STRING_LENGTH]='\0';
 	}
-	ESP_LOGD(TAG, "Execute action:%s", action);
+	//ESP_LOGD(TAG, "Execute action:%s", action);
 	exec_message_t msg;
 	strcpy(msg.str, action);
 

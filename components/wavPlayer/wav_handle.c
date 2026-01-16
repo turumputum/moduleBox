@@ -119,8 +119,6 @@ static void _stopCurrent(wav_handle_t    h)
         fclose(h->stage.fin);
 
         h->stage.fin = 0;
-
-        ESP_LOGE(h->tag, "Stopped");
     }
 
     if (h->enabled)
@@ -132,6 +130,8 @@ static void _stopCurrent(wav_handle_t    h)
     }
 
     h->stage.mode = WAVCMD_silence;
+
+    ESP_LOGD(h->tag, "stopped");
 }
 static int _openNew(wav_handle_t    h, 
                     char *             fname)
