@@ -104,7 +104,7 @@ extern configuration me_config;
 static void trackShift(char* cmd_arg);
 static esp_err_t audioPlay(wav_handle_t h, uint8_t truckNum);
 static void audioSetIndicator(uint8_t slot_num, uint32_t level);
-static void setVolume_num(uint8_t vol);
+static void setVolume_num(wav_handle_t h, uint8_t vol);
 static void audioStop(wav_handle_t h);
 
 /*
@@ -219,7 +219,6 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 
 void wavplayer_task(void *arg) {
     PWAVPLAYERCONFIG c = calloc(1, sizeof(WAVPLAYERCONFIG));
-	//esp_wav_player_config_t player_conf = ESP_WAV_PLAYER_DEFAULT_CONFIG();
 	
 	int slot_num = *(int*) arg;
 	uint32_t startTick = xTaskGetTickCount();
@@ -229,7 +228,6 @@ void wavplayer_task(void *arg) {
 	params.skipTypeChecking = true;
 
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
-	//ESP_LOGD(TAG, "Start codec chip");
 
 	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
 
@@ -237,17 +235,10 @@ void wavplayer_task(void *arg) {
 
 	configure_wavPlayer(c, slot_num);
 
-	
 	c->handler = wav_handle_init(TAG);
-	
-   	// esp_wav_player_init(&c->wav_player, &player_conf);
-    // esp_wav_player_set_volume(c->wav_player, 50);
 
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
 			xPortGetFreeHeapSize());
-
-	
-//	vTaskDelay(100);
 
 	int att_flag=0;
 	uint8_t att_vol=c->volume;
@@ -272,9 +263,11 @@ void wavplayer_task(void *arg) {
 
             case MYCMD_play:
 				ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", 0, currentTrack);
-				// if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(c->play_to_end==1)){
-				// 	ESP_LOGD(TAG, "skip restart track");
-				// }else
+				if (wav_handle_is_playing(c->handler) && (c->play_to_end==1))
+				{
+				 	ESP_LOGD(TAG, "skip restart track");
+				}
+				else
 				{
 					ESP_LOGD(TAG, "before shift:%d, cmd_arg = '%s'", me_state.currentTrack, cmd_arg);
 					trackShift(cmd_arg);
@@ -285,7 +278,7 @@ void wavplayer_task(void *arg) {
 					}else{
 						audioSetIndicator(slot_num, 0);
 					}
-					setVolume_num(c->volume);
+					setVolume_num(c->handler, c->volume);
 				}
 				break;
  
@@ -294,37 +287,41 @@ void wavplayer_task(void *arg) {
 					att_flag=1;
 					ESP_LOGD(TAG, "attenuation start");
 				}else{
-					//audioStop();
-					//audioSetIndicator(slot_num, 0);
+					audioStop(c->handler);
+					audioSetIndicator(slot_num, 0);
 				}
 				break;
 
             case MYCMD_shift:
 				trackShift(cmd_arg);
-				// if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)){
-				// 	if(c->play_to_end==0){
-				// 		if(audioPlay(me_state.currentTrack)==ESP_OK){
-				// 			audioSetIndicator(slot_num, 1);
-				// 		}else{
-				// 			audioSetIndicator(slot_num, 0);
-				// 		}
-				// 	}
-				// }
+				if (wav_handle_is_playing(c->handler))
+				{
+					if(c->play_to_end==0)
+					{
+						if(audioPlay(c->handler, me_state.currentTrack)==ESP_OK)
+						{
+							audioSetIndicator(slot_num, 1);
+						}else{
+							audioSetIndicator(slot_num, 0);
+						}
+					}
+				}
 				break;
 
             case MYCMD_setVolume:
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
-					setVolume_num(params.p[0].i);
+					setVolume_num(c->handler, params.p[0].i);
 				}
 				break;
 		}
 
+		if(att_flag==1)
+		{
+			att_vol -= (att_vol > 5) ? 5 : att_vol;
 
-		if(att_flag==1){
-			att_vol-=1;
 			//ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
-			setVolume_num(att_vol);
+			setVolume_num(c->handler, att_vol);
 			if(att_vol==0){
 				audioStop(c->handler);
 				audioSetIndicator(slot_num, 0);
@@ -332,53 +329,6 @@ void wavplayer_task(void *arg) {
 				att_flag=0;
 			}
 		}
-
-		
-
-		//listen audio event mp3_decoder
-		// el_state = audio_element_get_state(mp3_decoder);
-		// if(el_state == AEL_STATE_ERROR){
-		// 	ESP_LOGE(TAG, "mp3_decoder Error state: %d", el_state);
-		// 	esp_restart();
-		// }
-
-		// //listen audio event i2s_stream_writer
-		// ret = audio_event_iface_listen(evt, &msg, 0);
-		// if(ret == ESP_OK)
-		// {
-		//  	//ESP_LOGD(TAG, "audio_Event: %d el_state: %d", msg.cmd, el_state);
-		// 	if (msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
-		// 		el_state = audio_element_get_state(i2s_stream_writer);
-		// 		if (el_state == AEL_STATE_FINISHED) {
-		// 			audioStop();
-		// 			audioSetIndicator(slot_num, 0);
-		// 			//ESP_LOGD(TAG, "endOfTrack EVENT !!!!!!!!!!!!!!!!!");
-		// 			vTaskDelay(pdMS_TO_TICKS(10));
-		// 			memset(reportStr, 0, strlen(reportStr));
-		// 			sprintf(reportStr,"%d", me_state.currentTrack);
-		// 			//report(reportStr, slot_num);
-		// 			stdreport_s(c->ETreport, reportStr);
-		// 		}
-		// 	}
-		// 	if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) 
-		// 	{
-		// 		if (msg.source == (void *) mp3_decoder && msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) 
-		// 		{
-		// 			audio_element_info_t music_info = {0};
-		// 			audio_element_getinfo(mp3_decoder, &music_info);
-
-		// 			ESP_LOGD(TAG, "Current track: sample_rates=%d, bits=%d, ch=%d", 
-		// 					music_info.sample_rates, 
-		// 					music_info.bits, 
-		// 					music_info.channels);
-
-		// 			// ESP_LOGI(TAG, "[ * ] Received music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d",
-		// 			// 		music_info.sample_rates, music_info.bits, music_info.channels);
-		// 			audio_element_setinfo(i2s_stream_writer, &music_info);
-		// 			rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
-		// 		}
-		// 	}
-		// }
 
 		wav_handle_turn(c->handler);
 	}
@@ -397,8 +347,6 @@ void wavPlayerInit(uint8_t slot_num){
 
 void wavPlayerDeinit(PWAVPLAYERCONFIG c) {
   // that'll do pig... that'll do
-  //i2s_del_channel(c->audio_ch_handle); // delete the channel
-
   wav_handle_deinit(c->handler);
 }
 static void trackShift(char* cmd_arg)
@@ -433,11 +381,11 @@ static void audioSetIndicator(uint8_t slot_num, uint32_t level){
 	gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
 	gpio_set_level(led_pin, level);// module led light
 }
-static void setVolume_num(uint8_t vol) {
+static void setVolume_num(wav_handle_t h, uint8_t vol) {
 	if(vol>100){
 		vol=100;
 	}
-	//i2s_alc_volume_set(i2s_stream_writer, -34 + (vol / 3));
+	wav_handle_set_volume(h, vol);
 }
 
 static esp_err_t audioPlay(wav_handle_t h, uint8_t truckNum) 

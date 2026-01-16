@@ -471,6 +471,7 @@ void button_task(void *arg)
 		uint8_t msg;
 		if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, c->refreshPeriod) == pdPASS)
 		{
+			//printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
 			//debounceStat_t * st = &me_state.counters[slot_num];
 			//ESP_LOGD(TAG, "Button task is working! slotNum:%d", slot_num);
 			int _val = gpio_get_level(pin_num);
@@ -526,7 +527,6 @@ void button_task(void *arg)
 		//ESP_LOGD(TAG,"---ebola:%d", c->refreshPeriod);
 		//vTaskDelayUntil(&lastWakeTime, c->refreshPeriod);
     }
-
 }
 
 void start_button_task(int slot_num){

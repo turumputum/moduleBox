@@ -107,6 +107,7 @@ typedef struct _tag_player_stage_t
     WAVCMD          mode;
     WAVDESC         desc;
     FILE *          fin;
+    int             volume;
     size_t          left;
 } player_stage_t;
 
@@ -144,5 +145,7 @@ void wav_handle_stop(wav_handle_t h);
 void wav_handle_play(wav_handle_t h, char * fname);
 wav_handle_t wav_handle_deinit(wav_handle_t h);
 int wav_handle_turn(wav_handle_t h);
+int wav_handle_is_playing(wav_handle_t h);
+void wav_handle_set_volume(wav_handle_t h, int volume);
 
 #endif // _WAV_HANDLE_H_

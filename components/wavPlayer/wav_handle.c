@@ -32,9 +32,36 @@ typedef struct _tag_queue_message_t
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
+  static esp_err_t i2s_setup(wav_handle_t h)
+{
+  // setup a standard config and the channel
+  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &h->audio_ch_handle, NULL));
+
+  // setup the i2s config
+  i2s_std_config_t std_cfg = {
+      .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(h->stage.desc.samplerate),                                  // the wav file sample rate
+      .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(h->stage.desc.width, h->stage.desc.channels),     // the wav faile bit and channel config
+      .gpio_cfg = {
+          // refer to configuration.h for pin setup
+          .mclk = I2S_SCLK_PIN,
+          .bclk = I2S_BLK_PIN,
+          .ws = I2S_WS_PIN,
+          .dout = I2S_DATA_OUT_PIN,
+          .din = I2S_DATA_IN_PIN,
+          .invert_flags = {
+              .mclk_inv = false,
+              .bclk_inv = false,
+              .ws_inv = false,
+          },
+      },
+  };
+  return i2s_channel_init_std_mode(h->audio_ch_handle, &std_cfg);
+}
+
 static FILE * wavfile_open(wav_handle_t    h, 
-                        PWAVDESC        desc, 
-                        const char *    fname)
+                           PWAVDESC        desc, 
+                           const char *    fname)
 {
     FILE *          result      = NULL;
     wav_header_t    header;
@@ -85,36 +112,6 @@ static FILE * wavfile_open(wav_handle_t    h,
 
     return result;
 }
-
-//static uint8_t buf[WAV_BUF_SIZE];
-//i2s_del_channel(c->audio_ch_handle); // delete the channel
-
-static esp_err_t i2s_setup(wav_handle_t h)
-{
-  // setup a standard config and the channel
-  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-  ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &h->audio_ch_handle, NULL));
-
-  // setup the i2s config
-  i2s_std_config_t std_cfg = {
-      .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),                                                    // the wav file sample rate
-      .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO), // the wav faile bit and channel config
-      .gpio_cfg = {
-          // refer to configuration.h for pin setup
-          .mclk = I2S_SCLK_PIN,
-          .bclk = I2S_BLK_PIN,
-          .ws = I2S_WS_PIN,
-          .dout = I2S_DATA_OUT_PIN,
-          .din = I2S_DATA_IN_PIN,
-          .invert_flags = {
-              .mclk_inv = false,
-              .bclk_inv = false,
-              .ws_inv = false,
-          },
-      },
-  };
-  return i2s_channel_init_std_mode(h->audio_ch_handle, &std_cfg);
-}
 static void _stopCurrent(wav_handle_t    h)
 {
     if (h->stage.fin)
@@ -129,6 +126,8 @@ static void _stopCurrent(wav_handle_t    h)
     if (h->enabled)
     {
         i2s_channel_disable(h->audio_ch_handle);
+        i2s_del_channel(h->audio_ch_handle); // delete the channel
+
         h->enabled = false;
     }
 
@@ -141,15 +140,47 @@ static int _openNew(wav_handle_t    h,
     
     if ((h->stage.fin = wavfile_open(h, &h->stage.desc, fname)) != NULL)
     {
+        i2s_setup(h);
         i2s_channel_enable(h->audio_ch_handle);
-        h->stage.left   = h->stage.desc.len;
         h->enabled      = true;
+
+        h->stage.left   = h->stage.desc.len;
         result          = 1;
     }
     else
         ESP_LOGE(h->tag, "Failed to open file %s", fname);
 
     return result;
+}
+static int firstTime = 0;
+static void _setVolume(wav_handle_t    h, 
+                       int size)
+{
+    if (h->stage.volume  != 100)
+    {
+        float coef = (float)h->stage.volume / 100;
+
+        if (h->stage.desc.width == 8)
+        {
+            int8_t* on = (int8_t*)h->buf;
+
+            for (size_t i = 0; i < size; i++, on++)
+            {
+                *on *= coef;
+            }
+        }
+        else
+        {
+            int16_t* on = (int16_t*)h->buf;
+
+            for (size_t i = 0; i < (size >> 1); i++, on++)
+            {
+                *on *= coef;
+            }
+
+            firstTime++;
+        }
+    }
 }
 static int _playCurrent(wav_handle_t    h)
 {
@@ -162,6 +193,8 @@ static int _playCurrent(wav_handle_t    h)
         {
             if ((result = fread(h->buf, 1, MAC_MIN(WAV_BUF_SIZE, h->stage.left), h->stage.fin)) > 0)
             {
+                _setVolume(h, result);
+
                 i2s_channel_write(h->audio_ch_handle, h->buf, result, &bytes_written, portMAX_DELAY);
 
                 h->stage.left -= result;
@@ -184,8 +217,8 @@ wav_handle_t wav_handle_init(const char * tag)
         if (   ((result->buf = malloc(WAV_BUF_SIZE)) != nil)                            &&
                ((result->queue = xQueueCreate(5, sizeof(queue_message_t))) != nil)      )
         {
+            result->stage.volume = 100;
             result->tag = tag;
-            i2s_setup(result);
         }
         else
             result = wav_handle_deinit(result);
@@ -247,6 +280,8 @@ wav_handle_t wav_handle_deinit(wav_handle_t h)
 {
     if (h)
     {
+        _stopCurrent(h);
+
         if (h->buf)
             free(h->buf);
 
@@ -263,4 +298,19 @@ void wav_handle_play(wav_handle_t h, char * fname)
     queue_message_t msg = { WAVCMD_play, fname };
 
     xQueueSend(h->queue, &msg, portMAX_DELAY);
+}
+int wav_handle_is_playing(wav_handle_t h)
+{
+    return h->stage.mode == WAVCMD_silence ? 0 : 1;    
+}
+void wav_handle_set_volume(wav_handle_t h, 
+                           int volume)
+{
+    if (volume > 100)
+        volume = 100;
+
+    if (volume < 0)
+        volume = 0;
+
+    h->stage.volume = volume;
 }
