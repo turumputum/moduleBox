@@ -177,13 +177,13 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/player_0");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/wavplayer_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/player_0")+3];
-		sprintf(t_str, "%s/player_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/wavplayer_0")+3];
+		sprintf(t_str, "%s/wavplayer_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
