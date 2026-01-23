@@ -255,7 +255,7 @@ void executer_task(void * param){
 			}
 			if(sum==0){
 				usbprint("Action not found!!!");
-				//ESP_LOGE(TAG, "Action not found: %s", msg.str);
+				//ESP_LOGE(TAG, "Action not found: '%s'", msg.str);
 			}
 		}
 	}
