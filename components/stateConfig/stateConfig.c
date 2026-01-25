@@ -423,8 +423,8 @@ uint8_t loadContent(void) {
 		ESP_LOGI(TAG, "Load Content complete. numOfTrack:%d Duration: %ld ms. Heap usage: %lu", me_state.numOfTrack, (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
 		return ESP_OK;
 	} else {
-		ESP_LOGE(TAG, "Load content fail");
-		return ESP_FAIL;
+		ESP_LOGW(TAG, "Load content warning: No tracks found");
+		return ESP_OK;
 	}
 }
 

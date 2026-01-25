@@ -208,14 +208,18 @@ void rgb_ledc_task(void *arg){
 		ESP_LOGD(TAG, "LEDC timer inited");
 	//}
 
-	if((LEDC_CHANNEL_MAX - me_state.ledc_chennelCounter)<3){
+	int ch_r = get_next_ledc_channel();
+	int ch_g = get_next_ledc_channel();
+	int ch_b = get_next_ledc_channel();
+
+	if (ch_r < 0 || ch_g < 0 || ch_b < 0) {
 		ESP_LOGE(TAG, "LEDC channel has ended");
 		goto EXIT;
 	}
 
 	ledc_channel_config_t ledc_ch_R = {
 		.speed_mode = LEDC_MODE,
-		.channel = me_state.ledc_chennelCounter++,
+		.channel = (ledc_channel_t)ch_r,
 		.timer_sel = LEDC_TIMER,
 		.intr_type = LEDC_INTR_DISABLE,
 		.gpio_num = SLOTS_PIN_MAP[slot_num][0],
@@ -224,7 +228,7 @@ void rgb_ledc_task(void *arg){
 
 	ledc_channel_config_t ledc_ch_G = {
 		.speed_mode = LEDC_MODE,
-		.channel = me_state.ledc_chennelCounter++,
+		.channel = (ledc_channel_t)ch_g,
 		.timer_sel = LEDC_TIMER,
 		.intr_type = LEDC_INTR_DISABLE,
 		.gpio_num = SLOTS_PIN_MAP[slot_num][1],
@@ -233,7 +237,7 @@ void rgb_ledc_task(void *arg){
 
 	ledc_channel_config_t ledc_ch_B = {
 		.speed_mode = LEDC_MODE,
-		.channel = me_state.ledc_chennelCounter++,
+		.channel = (ledc_channel_t)ch_b,
 		.timer_sel = LEDC_TIMER,
 		.intr_type = LEDC_INTR_DISABLE,
 		.gpio_num = SLOTS_PIN_MAP[slot_num][2],
@@ -490,4 +494,3 @@ const char * get_manifest_3n_mosfet()
 
 // 	ESP_LOGD(TAG, "test timer started");
 // }
-

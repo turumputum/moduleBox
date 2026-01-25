@@ -96,14 +96,13 @@ void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num) {
     }
 
     //---add ledc configs---
-    distanceSens->ledc_chan.channel = me_state.ledc_chennelCounter;
-    me_state.ledc_chennelCounter++;
-    if(me_state.ledc_chennelCounter>= LEDC_CHANNEL_MAX){
+    distanceSens->ledc_chan.channel = get_next_ledc_channel();
+    if(distanceSens->ledc_chan.channel < 0){
 		//ESP_LOGE(TAG, "LEDC channel has ended");
         char errorString[50];
         sprintf(errorString,  "slot num:%d ___ LEDC channels has ended", slot_num);
         ESP_LOGE(TAG, "%s", errorString);
-        mblog(E, errorString);
+        // mblog and report are already called in get_next_ledc_channel
         vTaskDelay(20);
         vTaskDelete(NULL);
 	}

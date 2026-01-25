@@ -1,4 +1,3 @@
-
 // Дефайны для сдКарты
 // #define PIN_NUM_MISO 6
 // #define PIN_NUM_MOSI 7
@@ -59,8 +58,25 @@ int spisd_mount_fs() {
 	//ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
 	ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config,&mount_config, &card);
 	if (ret == ESP_OK) {
-		ESP_LOGD(TAG, "Filesystem mounted:");
+		//ESP_LOGD(TAG, "Filesystem mounted:");
 		//sdmmc_card_print_info(stdout, card);
+
+		// Log filesystem information
+		uint64_t total_bytes = 0, free_bytes = 0;
+		if (esp_vfs_fat_info(MOUNT_POINT, &total_bytes, &free_bytes) == ESP_OK) {
+			ESP_LOGI(TAG, "Filesystem type: FAT");
+			ESP_LOGI(TAG, "CSD Ver: %d", card->csd.csd_ver);
+			ESP_LOGI(TAG, "MMC Ver: %d", card->csd.mmc_ver);
+			ESP_LOGI(TAG, "Capacity: %d", card->csd.capacity);
+			ESP_LOGI(TAG, "Sector Size: %d", card->csd.sector_size);
+			ESP_LOGI(TAG, "Read Block Len: %d", card->csd.read_block_len);
+			ESP_LOGI(TAG, "Card Command Class: %d", card->csd.card_command_class);
+			ESP_LOGI(TAG, "TR Speed: %d", card->csd.tr_speed);
+			ESP_LOGI(TAG, "Total size: %llu MB", total_bytes / (1024 * 1024));
+			ESP_LOGI(TAG, "Free size: %llu MB", free_bytes / (1024 * 1024));
+		} else {
+			ESP_LOGE(TAG, "Failed to get filesystem info");
+		}
 
 		result = ESP_OK;
 	} else {
@@ -152,13 +168,44 @@ int spisd_get_sector_num() {
 
 int spisd_sectors_read(void *dst, uint32_t start_sector, uint32_t num) {
 	int result = -1;
-
-	if (sdmmc_read_sectors(card, dst, start_sector, num) == ESP_OK) {
+    esp_err_t ret = sdmmc_read_sectors(card, dst, start_sector, num);
+	if (ret == ESP_OK) {
 		result = 1;
+	} else {
+		ESP_LOGE(TAG, "sdmmc_read_sectors failed: 0x%x", ret);
+		// if (ret == 0x107) { // ESP_ERR_TIMEOUT
+		// 	ESP_LOGE(TAG, "Read timeout detected. Attempting to format card...");
+			
+		// 	esp_err_t format_ret = esp_vfs_fat_sdcard_format(MOUNT_POINT, card);
+			
+		// 	if (format_ret != ESP_OK) {
+		// 		ESP_LOGE(TAG, "Failed to format card (%s)", esp_err_to_name(format_ret));
+        //         // If format failed with "resources recycled", unmount was likely handled internally or resources freed.
+        //         // We should just clean our pointer and try to mount again.
+        //         card = NULL;
+
+        //         ESP_LOGI(TAG, "Attempting to remount after failed format...");
+        //         spisd_mount_fs();
+		// 	} else {
+		// 		ESP_LOGI(TAG, "Card formatted successfully.");
+                
+        //         // Unmount to ensure clean state before remounting
+        //         // Check if card is still valid before unmounting?
+        //         // Assuming success format kept card valid or we need to unmount VFS.
+		// 	    if (card) {
+        //             esp_vfs_fat_sdcard_unmount(MOUNT_POINT, card);
+        //             card = NULL;
+        //         }
+
+		// 	    ESP_LOGI(TAG, "Remounting...");
+        //         spisd_mount_fs();
+		// 	}
+		// }
 	}
 
 	return result;
 }
+
 int spisd_sectors_write(void *dst, uint32_t start_sector, uint32_t num) {
 	int result = -1;
 

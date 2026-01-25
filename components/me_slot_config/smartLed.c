@@ -27,7 +27,7 @@
 
 #include <stdcommand.h>
 
-#include <generated_files/gen_smartLed.h>
+// #include <generated_files/gen_smartLed.h>
 
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ static const char *TAG = "SMART_LED";
 
 extern const uint8_t gamma_8[256];
 
-SemaphoreHandle_t rmt_semaphore=NULL;
+extern SemaphoreHandle_t rmt_semaphore;
 
 #define MAX_CHANNELS 3
 uint8_t rmt_chan_counter = 0;
@@ -1568,7 +1568,7 @@ void start_ledBar_task(int slot_num){
     xTaskCreatePinnedToCore(ledBar_task, "ledBar_task", 1024*4, &slot_num,12, NULL,1);
 	ESP_LOGD(TAG,"ledBar_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
-const char * get_manifest_smartLed()
-{
-	return manifesto;
-}
+// const char * get_manifest_smartLed()
+// {
+// 	return manifesto;
+// }

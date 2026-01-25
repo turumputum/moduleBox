@@ -1,4 +1,4 @@
-file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "buttonLed.c" "3n_mosfet.c" "encoders.c" "smartLed.c" "virtual_slots.c" ) 
+file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "3n_mosfet.c" "encoders.c" "virtual_slots.c" ) 
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
@@ -23,7 +23,7 @@ idf_component_register(SRCS
 						${GENERATED_FILES}
 
                     INCLUDE_DIRS "include" ${CMAKE_CURRENT_BINARY_DIR}
-                    REQUIRES myCDC stepper stateConfig reporter audioPlayer driver rgbHsv myHID someUnique distanceSens accel servoDev ticketDispenser dwin VESC PPM CRSF
+                    REQUIRES myCDC stepper stateConfig reporter audioPlayer audioLAN driver rgbHsv myHID someUnique distanceSens accel servoDev ticketDispenser dwin VESC PPM CRSF
 )
 
 

@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include "executor.h"
 #include "stateConfig.h"
-#include "buttonLed.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -21,7 +20,7 @@
 #include "esp_heap_caps.h"
 #include "stepper.h"
 #include "in_out.h"
-#include "smartLed.h"
+#include "buttonLeds.h"
 #include "myMqtt.h"
 #include "sensor_2ch.h"
 #include "tenzo_button.h"
@@ -109,20 +108,15 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "audioLAN", 8)){
 			start_audioLAN_task(i); 		// W, C
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
-			start_button_task(i); 		// W, C
-			start_ledRing_task(i); 		// W, C
+			start_button_ledRing_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledBar", 13)){
-			start_button_task(i); 		// W, C
-			start_ledBar_task(i);  		// W, C
+			start_button_ledBar_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_swiperLed", 16)){
-			start_button_task(i);		// W, C
-			start_swiperLed_task(i);	// W, C
+			start_button_swiperLed_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_smartLed", 15)){
-			start_button_task(i); 		// W, C
-			start_smartLed_task(i);		// W, C
+			start_button_smartLed_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
-			start_button_task(i);		// W, C
-			start_led_task(i);			// W, C
+			start_button_led_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
 			start_in_3ch_task(i, 3);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
@@ -448,6 +442,23 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 	return result;
 }
 
+int get_next_ledc_channel(void)
+{
+	if (me_state.ledc_chennelCounter >= 8)
+	{
+		char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
+		sprintf(tmpStr, "LEDC channel limit reached: %d", me_state.ledc_chennelCounter);
+		mblog(E, tmpStr);
+		
+		sprintf(tmpStr, "%s/system/error:LEDC channel limit reached", me_config.deviceName);
+		report(tmpStr, 0);
+		heap_caps_free(tmpStr);
+		
+		return -1;
+	}
+	return me_state.ledc_chennelCounter++;
+}
+
 // char* get_option_string_val(int slot_num, char* option, char* custom_topic){
 // 	char* resault;
 
@@ -465,7 +476,3 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 // 	return (ind_of_vol+1);
 // 	// }
 // }
-
-
-
-

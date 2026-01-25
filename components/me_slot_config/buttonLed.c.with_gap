@@ -172,7 +172,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 
 		/* Флаг задаёт фильтрацию совытий при активных
 		*/
-		ch->event_filter = get_option_flag_val(slot_num, "eventfilter");
+		ch->event_filter = get_option_flag_val(slot_num, "eventFilter");
 
 		if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) 
 		{

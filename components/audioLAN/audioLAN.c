@@ -221,12 +221,14 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
 }
 
 /* 
-Модуль звук через сеть
+    Модуль звук через сеть
 */
-void configure_audioLAN(PRTPCONFIG c, int slot_num){
+void configure_audioLAN(PRTPCONFIG c, int slot_num)
+{
+    
     stdcommand_init(&c->cmds, slot_num);
 
-    /* задает значение по умолчанию
+    /* задает состояние модуля по умолчанию вкл/выкл
     */
     if ((c->defaultState = get_option_enum_val(slot_num, "defaultState", "0", "1", NULL)) < 0){
         ESP_LOGE(TAG, "defaultState: unricognized value");
@@ -252,6 +254,7 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num){
     ESP_LOGD(TAG, "[LANplayer_%d] channel:%d", slot_num, c->channel);
 
     /* порт
+    - по умолчанию 7777
 	*/
 	c->port =  get_option_int_val(slot_num, "port", "", 7777, 0, UINT16_MAX);
     ESP_LOGD(TAG, "[LANplayer_%d] port:%d", slot_num, c->port);

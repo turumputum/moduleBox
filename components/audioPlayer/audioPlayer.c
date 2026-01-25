@@ -154,7 +154,7 @@ void fill_equalizer_gains(int low_gain, int mid_gain, int high_gain, int *set_ga
 	set_gain[19] = high_gain;
 }
 /*
-    Звуковой Модуль
+    mp3 проигрыватель
     slots: 0
 */
 void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
@@ -581,6 +581,11 @@ void setVolume_str(char *cmd){
 esp_err_t audioPlay(uint8_t truckNum) {
 	//uint32_t heapBefore = xPortGetFreeHeapSize();
 	
+    if (strlen(me_config.soundTracks[truckNum]) == 0) {
+        ESP_LOGE(TAG, "audioPlay: Empty filename for track %d", truckNum);
+        return ESP_FAIL;
+    }
+
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
 	if(el_state==AEL_STATE_RUNNING){
 		audioStop();

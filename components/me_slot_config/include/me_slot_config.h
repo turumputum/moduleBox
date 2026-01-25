@@ -17,3 +17,5 @@ int get_option_enum_val(int slot_num, char* option, ...);
 int get_option_flag_val(int slot_num, char* string);
 int get_option_color_val(RgbColor * output, int slot_num, char* string, char * default_value);
 //void get_option_string_val(int num_of_slot, char* option, char* custom_topic);
+
+int get_next_ledc_channel(void);

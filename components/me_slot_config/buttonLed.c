@@ -28,7 +28,7 @@
 #include <stdcommand.h>
 #include <stdreport.h>
 
-#include <generated_files/gen_buttonLed.h>
+// #include <generated_files/gen_buttonLed.h>
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
@@ -172,7 +172,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 
 		/* Флаг задаёт фильтрацию совытий при активных
 		*/
-		ch->event_filter = get_option_flag_val(slot_num, "eventfilter");
+		ch->event_filter = get_option_flag_val(slot_num, "eventFilter");
 
 		/* Период обновления
 		*/
@@ -584,14 +584,20 @@ void led_task(void *arg){
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
     // Prepare and then apply the LEDC PWM channel configuration
-    if((LEDC_CHANNEL_MAX - me_state.ledc_chennelCounter)<1){
+    if((8 - me_state.ledc_chennelCounter)<1){
 		ESP_LOGE(TAG, "LEDC channel has ended");
+		// mblog and report are handled in get_next_ledc_channel
 		goto EXIT;
 	}
 	
-	ledc_channel_config_t ledc_channel = {
+    int channel = get_next_ledc_channel();
+    if (channel < 0) {
+        goto EXIT;
+    }
+
+    ledc_channel_config_t ledc_channel = {
         .speed_mode     = LEDC_LOW_SPEED_MODE,
-        .channel        = me_state.ledc_chennelCounter++,
+        .channel        = (ledc_channel_t)channel,
         .timer_sel      = LEDC_TIMER_0,
         .intr_type      = LEDC_INTR_DISABLE,
         .gpio_num       = pin_num,
@@ -667,8 +673,7 @@ void start_led_task(int slot_num){
     xTaskCreate(led_task, "led_task", 1024*4, &slot_num,12, NULL);
 	ESP_LOGD(TAG,"led_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
-const char * get_manifest_buttonLed()
-{
-	return manifesto;
-}
-
+// const char * get_manifest_buttonLed()
+// {
+// 	return manifesto;
+// }
