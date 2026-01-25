@@ -269,6 +269,8 @@ void load_Default_Config(void) {
 
 	me_config.startup_crosslink = strdup("");
 
+	strcpy(me_config.audioExtension, ".mp3");
+
 	ESP_LOGD(TAG, "Load default config complite. Duration:%ld ms. Heap usage:%lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
@@ -432,7 +434,6 @@ uint8_t scan_dir(const char *path) {
 	FRESULT res;
 	FF_DIR dir;
 	FILINFO fno;
-	uint8_t picIndex = 0;
 	uint8_t soundIndex = 0;
 
 	res = f_opendir(&dir, path);
@@ -447,32 +448,16 @@ uint8_t scan_dir(const char *path) {
 						scan_dir(fno.fname);
 					} else {
 						// file founded
-						if (strcasecmp(fno.fname, "config.ini") == 0) {
-							//ESP_LOGD(TAG, "{scanFileSystem} config file founded ");
-							sprintf(me_config.configFile, "/sdcard/%s", fno.fname);
-						} else if (strcasecmp(fno.fname, "intro.jpg") == 0) {
-							//ESP_LOGD(TAG, "{scanFileSystem} introIco file founded ");
-							sprintf(me_config.introIco, "/sdcard/%s", fno.fname);
-						} else {
-							char *detect = strrchr(fno.fname, '.');
-							//ESP_LOGD(TAG, "{scanFileSystem} cut extension: %s ", detect);
-							if (strcasecmp(detect, ".mp3") == 0) {
-								//ESP_LOGD(TAG, "{scanFileSystem} soundFile founded ");
-								if (strcmp(path, "/") == 0) {
-									sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s", fno.fname);
-								} else {
-									sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s/%s", path, fno.fname);
-								}
-								soundIndex++;
-							} else if (strcasecmp(detect, ".jpg") == 0) {
-								//ESP_LOGD(TAG, "{scanFileSystem} iconFile founded ");
-								if (strcmp(path, "/") == 0) {
-									sprintf(me_config.trackIcons[picIndex], "/sdcard/%s", fno.fname);
-								} else {
-									sprintf(me_config.trackIcons[picIndex], "/sdcard/%s/%s", path, fno.fname);
-								}
-								picIndex++;
+						char *detect = strrchr(fno.fname, '.');
+						//ESP_LOGD(TAG, "{scanFileSystem} cut extension: %s ", detect);
+						if (strcasecmp(detect, me_config.audioExtension) == 0) {
+							//ESP_LOGD(TAG, "{scanFileSystem} soundFile founded ");
+							if (strcmp(path, "/") == 0) {
+								sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s", fno.fname);
+							} else {
+								sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s/%s", path, fno.fname);
 							}
+							soundIndex++;
 						}
 						//ESP_LOGD(TAG, "{scanFileSystem} File found ");
 					}
@@ -487,21 +472,18 @@ uint8_t scan_dir(const char *path) {
 
 void printTrackList() {
 	for (int i = 0; i < MAX_NUM_OF_TRACKS; i++) {
-		ESP_LOGD(TAG, "{scanFileSystem} num:%d --- %s --- %s", i, (char* )me_config.soundTracks[i], (char* )me_config.trackIcons[i]);
+		ESP_LOGD(TAG, "{scanFileSystem} num:%d --- %s --- ", i, (char* )me_config.soundTracks[i]);
 	}
 }
 
-uint8_t scanFileSystem() {
+uint8_t fillSoundTrackList() {
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	ESP_LOGD(TAG, "scanFileSystem");
+	ESP_LOGD(TAG, "fillSoundTrackList: audio extension for searching '%s'", me_config.audioExtension);
 
 	me_state.numOfTrack = 0;
-	memset(me_config.configFile, 0, 254);
-	memset(me_config.introIco, 0, 254);
 	for (int i = 0; i < MAX_NUM_OF_TRACKS; i++) {
 		memset(me_config.soundTracks[i], 0, 254);
-		memset(me_config.trackIcons[i], 0, 254);
 	}
 
 	me_state.numOfTrack = scan_dir("/");
@@ -511,56 +493,11 @@ uint8_t scanFileSystem() {
 	if (me_state.numOfTrack > 1) {
 		qsort(me_config.soundTracks, me_state.numOfTrack, FILE_NAME_LEGHT, (int (*)(const void*, const void*)) strcmp);
 	}
-	ESP_LOGD(TAG, "sort end, lets associate pic");
+	ESP_LOGD(TAG, "sort end");
 	//printTrackList();
-	//---associate pic to track---
-	for (int n = 0; n < me_state.numOfTrack; n++) {
-		char *track_tmp;
-		track_tmp = strdup(me_config.soundTracks[n]);
-		if (strcmp(track_tmp, "") == 0) {
-			char *name_sound = strtok(track_tmp, ".");
-			if (strcmp(name_sound, "") == 0) {
-				ESP_LOGD(TAG, "{scanFileSystem} search icon for: %s", name_sound);
-				for (int i = 0; i < MAX_NUM_OF_TRACKS; i++) {
-
-					if (strcmp(me_config.trackIcons[i], "") == 0) {
-						char *icon_tmp;
-						icon_tmp = strdup(me_config.trackIcons[i]);
-						ESP_LOGD(TAG, "{scanFileSystem} Icon file: %s", me_config.trackIcons[i]);
-
-						char *name_pic = strtok(icon_tmp, ".");
-						if (strcmp(name_pic, "") == 0) {
-							ESP_LOGD(TAG, "{scanFileSystem} validate: %s", name_pic);
-							if (strcmp(name_sound, name_pic) == 0) {
-								char s_tmp[FILE_NAME_LEGHT];
-								sprintf(s_tmp, "%s", me_config.trackIcons[n]);
-								memset(me_config.trackIcons[n], 0, 254);
-								//sprintf(me_config.trackIcons[n], "%s", me_config.trackIcons[i]);
-								strcpy(me_config.trackIcons[n], me_config.trackIcons[i]);
-								memset(me_config.trackIcons[i], 0, 254);
-								sprintf(me_config.trackIcons[i], "%s", s_tmp);
-								//ESP_LOGD(TAG,"{scanFileSystem} name is correct");
-							}
-						}
-					}
-				}
-				//--- remove unused images from list ---
-				ESP_LOGD(TAG, "{scanFileSystem} remove unused pic ");
-				if (strcmp(me_config.trackIcons[n], "") == 0) {
-					char *icon_tmp;
-					icon_tmp = strdup(me_config.trackIcons[n]);
-					char *name_pic = strtok(icon_tmp, ".");
-					if (strcmp(name_sound, name_pic) != 0) {
-						memset(me_config.trackIcons[n], 0, 254);
-					}
-				}
-				ESP_LOGD(TAG, "{scanFileSystem} unused pic deleted from list");
-			}
-		}
-	}
 	printTrackList();
 
-	ESP_LOGI(TAG, "Filesystem scan complete. numOfTrack:%d Duration: %ld ms. Heap usage: %lu", me_state.numOfTrack, (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
+	ESP_LOGI(TAG, "Search for audio tracks on FS completed. Tracks:%d Duration: %ld ms. Heap usage: %lu", me_state.numOfTrack, (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
 	return ESP_OK;
 
 }

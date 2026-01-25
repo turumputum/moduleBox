@@ -104,7 +104,9 @@ static const char * configDescription =
 
 
 
+#define MODDEF(a) extern const char * get_manifest_##a();
 
+MODULE_FUNCTIONS_DEFS
 
 
 #define MOD(a) get_manifest_##a

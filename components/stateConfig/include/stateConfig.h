@@ -148,7 +148,6 @@ typedef struct {
 	uint8_t volume;
 
 	file_t soundTracks[MAX_NUM_OF_TRACKS];
-	file_t trackIcons[MAX_NUM_OF_TRACKS];
 
 	char *slot_mode[NUM_OF_SLOTS];
 	char *slot_options[NUM_OF_SLOTS];
@@ -157,7 +156,7 @@ typedef struct {
 	char *startup_crosslink;
 
 	char configFile[FILE_NAME_LEGHT];
-	char introIco[FILE_NAME_LEGHT];
+	char audioExtension[10];
 
 	uint8_t f_report_udp;
 	uint8_t f_report_osc;
@@ -178,7 +177,7 @@ uint8_t loadContent(void);
 int saveConfig(void);
 
 void debugTopicLists(void);
-uint8_t scanFileSystem();
+uint8_t fillSoundTrackList();
 uint8_t scan_dir(const char *path);
 
 #define EVERY_SLOT		-1

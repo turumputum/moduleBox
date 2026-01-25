@@ -31,34 +31,31 @@ extern QueueHandle_t exec_mailbox;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "myCDC";
 
-void usbprint(char *msg) {
+void usbprint(char *msg) 
+{
+#define USB_CHUNK_SZ	64 
+
+	char * 	on 	= msg;
+	int 	len = strlen(on) + 1;
 
 	if (tud_is_plugged())
 	{
-		//printf("%s --- \r\n", msg);
-		int cutLength = 63;
-		char partBuff[cutLength + 1];
-		int endPartLength = strlen(msg);
-		char *endPart = msg;
-
-		while (endPartLength > cutLength) {
-			sprintf(partBuff, "%.*s", cutLength, endPart);
-			//printf("%s --- \r\n", partBuff);
-			endPart = endPart + cutLength;
-			//printf("%s  \r\n", endPart);
-			tud_cdc_write(partBuff, strlen(partBuff));
+		while (len > USB_CHUNK_SZ) 
+		{
+			tud_cdc_write(on, USB_CHUNK_SZ);
 			tud_cdc_write_flush();
 			vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
-			endPartLength = strlen(endPart);
+
+			on += USB_CHUNK_SZ;
 		}
 
-		//printf("%d+++%s  \r\n",strlen(endPart), endPart);
-		tud_cdc_write(endPart, strlen(endPart));
+		char endBuff [ len ];
+		memcpy(endBuff, on, len);
+		endBuff[len - 1] = '\n';
+		
+		tud_cdc_write(endBuff, len);
 		tud_cdc_write_flush();
 		vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
-		tud_cdc_write("\n", 1);
-		tud_cdc_write_flush();
-		//printf("%s  \r\n", endPart);
 	}
 }
 
