@@ -294,7 +294,7 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
                         }
                         else if (params->skipTypeChecking)
                         {
-                            result = i;
+                            result = cmd->keywords[i].id;
                         }
                         else  if (cmd->keywords[i].count == params->count)
                         {
@@ -309,7 +309,7 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
 
                             if (allIsOk)
                             {
-                                result = i;
+                                result = cmd->keywords[i].id;
                             }
                         }
                     }
@@ -319,7 +319,7 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
 
                         params->p[0].type   = PARAMT_none;
                         params->count       = 1;
-                        result              = i;
+                        result              = cmd->keywords[i].id;
                     }
                 }
             }
