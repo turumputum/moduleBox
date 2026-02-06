@@ -104,7 +104,9 @@ int init_slots(void){
 			// empty
 		}else if(!memcmp(me_config.slot_mode[i], "empty", 5)){
 			// empty
-		}else if(!memcmp(me_config.slot_mode[i], "audioPlayer", 11)){
+		}else if(!memcmp(me_config.slot_mode[i], "SD_card", 5)){
+			// empty
+		}else if(!memcmp(me_config.slot_mode[i], "mp3Player", 9)){
 			audioInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "wavPlayer", 9)){
 			wavPlayerInit(i);
@@ -120,12 +122,12 @@ int init_slots(void){
 			start_button_smartLed_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
 			start_button_led_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
-			start_in_3ch_task(i, 3);	// W, NOC
+		// }else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
+		// 	start_in_3ch_task(i, 3);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
-			start_in_3ch_task(i, 2);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "in_1ch", 6)){
-			start_in_3ch_task(i, 1);	// W, NOC
+			start_in_2ch_task(i);	// W, NOC
+		// }else if(!memcmp(me_config.slot_mode[i], "in_1ch", 6)){
+		// 	start_in_3ch_task(i, 1);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
 			init_3n_mosfet(i);			// W, C
 		// }else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
@@ -136,12 +138,12 @@ int init_slots(void){
 			start_encoderAS5600_task(i); // W, C
 		}else if(!memcmp(me_config.slot_mode[i], "benewakeTOF", 12)){
 			start_benewakeTOF_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "VL53TOF", 7)){
-			start_VL53TOF_task(i);		// W, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "TOFxxxF", 7)){
+			start_tofxxxfuart_task(i);		// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
 			start_hlk2410_task(i);		// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "sr04m", 5)){
-			start_ultrasonic_task(i);	// W, NOC
+			start_sr04m_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
 			start_tachometer_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
@@ -149,12 +151,11 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);		// W, C
 		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
-			start_out_task(i);			// W, NOC
-			start_in_task(i);			// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
-			start_out_3ch_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
-			start_out_2ch_task(i);		// W, NOC
+			start_in_out_task(i);		
+		// }else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
+		// 	start_out_3ch_task(i);		// W, NOC
+		 }else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
+		 	start_out_2ch_task(i);		// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
 			start_tenzo_button_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){

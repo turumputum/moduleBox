@@ -134,7 +134,7 @@ void mblog(esp_log_level_t level, const char *msg, ...)
 
                     fclose(logFile);
 
-                    if (sz > (me_config.logMaxSize / me_config.logChapters))
+                    if (me_config.logChapters > 0 && sz > (me_config.logMaxSize / me_config.logChapters))
                     {
                         _shiftLogs();
                     }

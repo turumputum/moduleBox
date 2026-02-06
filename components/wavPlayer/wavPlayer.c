@@ -122,39 +122,39 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	if(c->volume<0){c->volume=0;}
 	ESP_LOGD(TAG, "Set volume:%d", c->volume);
 
-	/* Скорость воспроизведения
-	*/
-	c->speed = get_option_float_val(slot_num, "speed", 1.09);
-	ESP_LOGD(TAG, "Set speed:%f", c->speed);
+	// /* Скорость воспроизведения
+	// */
+	// c->speed = get_option_float_val(slot_num, "speed", 1.09);
+	// ESP_LOGD(TAG, "Set speed:%f", c->speed);
 
-	/* Сдвиг тональности
-	*/
-	c->tone = get_option_float_val(slot_num, "tone", 1.0);
-	ESP_LOGD(TAG, "Set tone:%f", c->tone);
+	// /* Сдвиг тональности
+	// */
+	// c->tone = get_option_float_val(slot_num, "tone", 1.0);
+	// ESP_LOGD(TAG, "Set tone:%f", c->tone);
 
-	/* Нижняя граница эквалайзера
-	*/
-	if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", -13, -20, 0)) != 0)
-	{
-		c->eqFlag = 1;
-		ESP_LOGD(TAG, "Set eqLow:%d", c->eqLow);
-	}
+	// /* Нижняя граница эквалайзера
+	// */
+	// if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", -13, -20, 0)) != 0)
+	// {
+	// 	c->eqFlag = 1;
+	// 	ESP_LOGD(TAG, "Set eqLow:%d", c->eqLow);
+	// }
 
-	/* Средняя граница эквалайзера
-	*/
-	if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", -13, -20, 0)) != 0)
-	{
-		c->eqFlag = 1;
-		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
-	}
+	// /* Средняя граница эквалайзера
+	// */
+	// if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", -13, -20, 0)) != 0)
+	// {
+	// 	c->eqFlag = 1;
+	// 	ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
+	// }
 
-	/* Верхняя граница эквалайзера
-	*/
-	if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", -13, -20, 0)) != 0)
-	{
-		c->eqFlag = 1;
-		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
-	}
+	// /* Верхняя граница эквалайзера
+	// */
+	// if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", -13, -20, 0)) != 0)
+	// {
+	// 	c->eqFlag = 1;
+	// 	ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
+	// }
 
 	/* Использовать затухание
 	*/
@@ -177,13 +177,13 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/wavplayer_0");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/player_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/wavplayer_0")+3];
-		sprintf(t_str, "%s/wavplayer_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/player_0")+3];
+		sprintf(t_str, "%s/player_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
@@ -234,6 +234,11 @@ void wavplayer_task(void *arg) {
 	int16_t currentTrack=0;
 
 	configure_wavPlayer(c, slot_num);
+
+	// Инициализация GPIO пина для светодиода
+	esp_rom_gpio_pad_select_gpio(led_pin);
+	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(led_pin, 0);
 
 	c->handler = wav_handle_init(TAG);
 
@@ -390,6 +395,20 @@ static void setVolume_num(wav_handle_t h, uint8_t vol) {
 
 static esp_err_t audioPlay(wav_handle_t h, uint8_t truckNum) 
 {
+	ESP_LOGI(TAG, "=== Attempting to play track #%d ===", truckNum);
+	ESP_LOGI(TAG, "File path: '%s'", me_config.soundTracks[truckNum]);
+	ESP_LOGI(TAG, "Total tracks available: %d", me_state.numOfTrack);
+	
+	// // Check if file exists
+	// FILE* test_file = fopen(me_config.soundTracks[truckNum], "rb");
+	// if (test_file != NULL) {
+	// 	fclose(test_file);
+	// 	ESP_LOGI(TAG, "File exists and is accessible");
+	// } else {
+	// 	ESP_LOGE(TAG, "File does NOT exist or cannot be accessed!");
+	// 	return ESP_FAIL;
+	// }
+
 	ESP_LOGD(TAG, "Playing file: %s", me_config.soundTracks[truckNum]);
 
 	wav_handle_play(h, me_config.soundTracks[truckNum]);

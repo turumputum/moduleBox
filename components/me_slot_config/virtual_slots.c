@@ -27,10 +27,6 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char* TAG = "VIRTUAL_SLOTS";
 
-const char * get_manifest_virtual_slots()
-{
-	return manifesto;
-}
 
 //-----------------------------------------startUp--------------------------------
 void startup_task(void *arg) {
@@ -143,6 +139,7 @@ void configure_counter(PCOUNTER_CONFIG	ch, int slot_num){
 
 
     stdcommand_init(&ch->cmds, slot_num);
+    
     /* Установка значений счетчика
        Параметр может быть задан инкрментально или обсалютно
     */
@@ -1332,4 +1329,9 @@ void start_stepper_conductor_task(int slot_num) {
     sprintf(tmpString, "stepper_conductor_task_%d", slot_num);
     xTaskCreatePinnedToCore(stepper_conductor_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "stepper_conductor_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+const char * get_manifest_virtual_slots()
+{
+	return manifesto;
 }

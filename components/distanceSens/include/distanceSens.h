@@ -4,11 +4,10 @@
 #include "freertos/FreeRTOS.h"
 
 typedef struct {
-//	uint8_t changeTrack;
     uint8_t state;
     uint8_t prevState;
 
-	uint16_t currentPos;
+    uint16_t currentPos;
     uint16_t prevPos;
 
     uint16_t maxVal;
@@ -24,8 +23,14 @@ typedef struct {
 
     TickType_t lastTick;
     TickType_t debounceGap;
+    TickType_t cooldownTime;
+    TickType_t cooldownStartTick;
+    uint8_t inCooldown;
 
     ledc_channel_config_t ledc_chan;
+    
+    // Report IDs
+    int distanceReport;
 } distanceSens_t;
 
 #define DISTANCE_SENS_DEFAULT() {\
@@ -43,12 +48,19 @@ typedef struct {
     .flag_float_output=0,\
     .lastTick=0,\
     .debounceGap=0,\
+    .cooldownTime=0,\
+    .cooldownStartTick=0,\
+    .inCooldown=0,\
+    .distanceReport=-1,\
 }
 
-void start_VL53TOF_task(int slot_num);
+// Common functions
+uint16_t crc16_modbus(uint8_t *data, uint8_t length);
+void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num);
+void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
+
+// Task start functions
+void start_tofxxxfuart_task(int slot_num);
 void start_benewakeTOF_task(int slot_num);
-
-
 void start_hlk2410_task(int slot_num);
-
-void start_ultrasonic_task(int slot_num);
+void start_sr04m_task(int slot_num);

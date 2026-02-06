@@ -34,6 +34,7 @@ typedef struct __tag_MOSFETCONFIG
     int16_t                 max_bright;
     int16_t                 min_bright;
     uint16_t                refreshPeriod;
+    uint16_t                fadeTime;
     RgbColor                targetRGB;
     uint8_t                 ledMode;
     uint8_t                 state;
@@ -48,7 +49,8 @@ typedef enum
     MYCMD_setMode,
     MYCMD_setIncrement,
     MYCMD_setMaxBright,
-    MYCMD_setMinBright
+    MYCMD_setMinBright,
+    MYCMD_setFadeTime
 } MYCMD;
 
 // ---------------------------------------------------------------------------
@@ -123,6 +125,16 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
     */
     c->refreshPeriod = 1000/get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096);
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",c->refreshPeriod, slot_num);
+    
+    /* Время затухания свечения в миллисекундах
+    */
+    c->fadeTime = get_option_int_val(slot_num, "fadeTime", "ms", 100, 10, 10000);
+    ESP_LOGD(TAG, "Set fadeTime:%d for slot:%d", c->fadeTime, slot_num);
+
+    /* Пересчитываем increment на основе fadeTime */
+    c->increment = (c->max_bright - c->min_bright) * c->refreshPeriod / c->fadeTime;
+    if (c->increment < 1) c->increment = 1;
+    ESP_LOGD(TAG, "Calculated increment:%d for slot:%d", c->increment, slot_num);
     	
     /* Начальный цвет
     */
@@ -183,6 +195,10 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
     /* Установить минимальное значение яркости
     */
     stdcommand_register(&c->cmds, MYCMD_setMinBright, "setMinBright", PARAMT_int);
+
+    /* Установить время затухания свечения
+    */
+    stdcommand_register(&c->cmds, MYCMD_setFadeTime, "setFadeTime", PARAMT_int);
 }
 
 void rgb_ledc_task(void *arg){
@@ -296,6 +312,13 @@ void rgb_ledc_task(void *arg){
 
             case MYCMD_setMinBright:
                 c.min_bright = params.p[0].i;
+                break;
+
+            case MYCMD_setFadeTime:
+                c.fadeTime = params.p[0].i;
+                c.increment = (c.max_bright - c.min_bright) * c.refreshPeriod / c.fadeTime;
+                if (c.increment < 1) c.increment = 1;
+                ESP_LOGD(TAG, "Set fadeTime:%d, recalculated increment:%d", c.fadeTime, c.increment);
                 break;
 
             default:

@@ -50,6 +50,10 @@ typedef struct __tag_RTPCONFIG{
 	uint8_t                 group;
     uint16_t                port;
     char *                  host;
+    
+    int                    stateReport;
+    int                    volumeReport;
+    int                    channelReport;
 
     STDCOMMANDS             cmds;
 
@@ -229,34 +233,36 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     stdcommand_init(&c->cmds, slot_num);
 
     /* задает состояние модуля по умолчанию вкл/выкл
+    по умолчанию 1 - включен
     */
-    if ((c->defaultState = get_option_enum_val(slot_num, "defaultState", "0", "1", NULL)) < 0){
-        ESP_LOGE(TAG, "defaultState: unricognized value");
+    c->defaultState = get_option_int_val(slot_num, "defaultState","bool", 1,0,1);
+    if(c->defaultState==0){
+        ESP_LOGE(TAG, "defaultState: %d for slot:%d", c->defaultState, slot_num);
     }
     c->state = c->defaultState;
 
     /* Громкость
-    - 0-100
+    - 0-100 по умолчанию 100
 	*/
-	c->volume =  get_option_int_val(slot_num, "volume", "", 100, 0, 100);
+	c->volume =  get_option_int_val(slot_num, "volume", "percent", 100, 0, 100);
     ESP_LOGD(TAG, "[LANplayer_%d] volume:%d", slot_num, c->volume);
     
     /* Группа
-    - 239.0.Х.0
+    - 239.0.Х.0 по умолчанию 7
 	*/
-	c->group =  get_option_int_val(slot_num, "group", "", 7, 0, 255);
+	c->group =  get_option_int_val(slot_num, "group", "num", 7, 0, 255);
     ESP_LOGD(TAG, "[LANplayer_%d] group:%d", slot_num, c->group);
 
     /* Канал
-    - 239.0.7.Х
+    - 239.0.7.Х по умолчанию 0
 	*/
-	c->channel =  get_option_int_val(slot_num, "channel", "", 0, 0, 255);
+	c->channel =  get_option_int_val(slot_num, "channel", "num", 0, 0, 255);
     ESP_LOGD(TAG, "[LANplayer_%d] channel:%d", slot_num, c->channel);
 
     /* порт
     - по умолчанию 7777
 	*/
-	c->port =  get_option_int_val(slot_num, "port", "", 7777, 0, UINT16_MAX);
+	c->port =  get_option_int_val(slot_num, "port", "num", 7777, 0, UINT16_MAX);
     ESP_LOGD(TAG, "[LANplayer_%d] port:%d", slot_num, c->port);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
@@ -274,6 +280,17 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 
+    /* Рапортует состояние модуля вкл/выкл
+	*/
+	c->stateReport = stdreport_register(RPTT_int, slot_num, "state", "state");
+
+    /* Рапортует при изменении громкости
+	*/
+	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "volume");
+    
+    /* Рапортует номер канала
+	*/
+	c->channelReport = stdreport_register(RPTT_int, slot_num, "num", "channel");
 
     /* Команда включает/выключает плеер
     */
@@ -333,15 +350,9 @@ void audioLAN_task(void *arg){
     }
 
     char init_report[32];
-    memset(init_report, 0, sizeof(init_report));
-    sprintf(init_report, "/state:%d", c->state);
-    report(init_report, slot_num);
-    memset(init_report, 0, sizeof(init_report));
-    sprintf(init_report, "/channel:%d", c->channel);
-    report(init_report, slot_num);
-    memset(init_report, 0, sizeof(init_report));
-    sprintf(init_report, "/volume:%d", c->volume);
-    report(init_report, slot_num);
+    stdreport_i(c->stateReport, c->state);
+    stdreport_i(c->channelReport, c->channel);
+    stdreport_i(c->volumeReport, c->volume);
 
     //TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -384,10 +395,7 @@ void audioLAN_task(void *arg){
                 }
                 c->state = atoi(cmd_arg);
                 ESP_LOGD(TAG, "[audioLAN_%d] lets set state:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
-                char state_str[20];
-                memset(state_str, 0, sizeof(state_str));
-                sprintf(state_str, "/state:%d", c->state);
-                report(state_str, slot_num);
+                stdreport_i(c->stateReport, c->state);
                 break;
 
             case rtpCMD_setChannel:
@@ -429,10 +437,7 @@ void audioLAN_task(void *arg){
                     }
 
                     ESP_LOGD(TAG, "[audioLAN_%d] set chan cmd state:%d host:%s group:%d channel:%d  Free heap:%d", slot_num, c->state, c->host, c->group, c->channel, xPortGetFreeHeapSize());
-                    char chan_str[20];
-                    memset(chan_str, 0, sizeof(chan_str));
-                    sprintf(chan_str, "/channel:%d", c->channel);
-                    report(chan_str, slot_num);
+                    stdreport_i(c->channelReport, c->channel);
                 }
                 break;
             
@@ -440,10 +445,7 @@ void audioLAN_task(void *arg){
                 c->volume = atoi(cmd_arg);
                 _setVolume_num(c->i2s_stream_writer, c->volume);
                 ESP_LOGD(TAG, "[audioLAN_%d] setVolume:%d. Free heap:%d", slot_num, c->volume, xPortGetFreeHeapSize());
-                char vol_str[20];
-                memset(vol_str, 0, sizeof(vol_str));
-                sprintf(vol_str, "/volume:%d", c->volume);
-                report(vol_str, slot_num);
+                stdreport_i(c->volumeReport, c->volume);
                 break;
         }
 

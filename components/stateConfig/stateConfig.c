@@ -10,6 +10,7 @@
 #include "diskio.h"
 #include "sdcard_scan.h"
 #include <errno.h>
+#include <sys/stat.h>
 #include "LAN.h"
 #include "audio_error.h"
 #include "audio_mem.h"
@@ -281,7 +282,8 @@ uint8_t loadConfig(void) {
 	ESP_LOGD(TAG, "Init config");
 	int res = ESP_OK;
 
-	if (me_config.configFile[0] != 0) {
+	struct stat st;
+	if (me_config.configFile[0] != 0 && stat(me_config.configFile, &st) == 0) {
 		res = ini_parse(me_config.configFile, handler, &me_config);
 		if (res != 0) {
 			ESP_LOGE(TAG, "Can't load 'config.ini' check line: %d, set default\n", res);

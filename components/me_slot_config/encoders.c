@@ -520,9 +520,6 @@ void configure_encoderInc(PINCCONFIG c, int slot_num)
 	
 	c->pole = (c->maxVal - c->minVal)+1;
 
-	/* Делитель*/
-	c->divider = get_option_int_val(slot_num, "divider", "", 4, 1, UINT16_MAX);
-	ESP_LOGD(TAG, "divider:%d for slotNum:%d", c->divider, slot_num);
 
 	
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
@@ -778,7 +775,8 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 	c->zeroShift = get_option_int_val(slot_num, "zeroShift", "", 0, INT16_MIN, INT16_MAX);
 	ESP_LOGD(TAG, "[encoder_%d] zero_shift: %d", slot_num, c->zeroShift);
 
-	/* Значение смещения нуля после делителя
+	/* Значение фильтра, плавающее среднее. Чем ниже значение, тем сильнее фильтрация
+		- диапазон от 0.0 до 1.0, где 1.0 - без фильтрации
 	*/
 	c->filterK = get_option_float_val(slot_num, "filterK", 1.0);
 	ESP_LOGD(TAG, "[encoder_%d] filterK: %f", slot_num, c->filterK);
@@ -799,12 +797,6 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 	c->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate","fps", 20, 1, 100));
 	ESP_LOGD(TAG, "[encoder_%d] refreshPeriod:%d", slot_num,c->refreshPeriod);
 	
-	
-
-	/* Делитель*/
-	c->divider = get_option_int_val(slot_num, "divider", "", 4, 1, UINT16_MAX);
-	ESP_LOGD(TAG, "[encoder_%d] divider:%d", slot_num, c->divider);
-
 	
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;

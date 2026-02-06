@@ -469,7 +469,7 @@ void app_main(void)
 
 	me_state.slot_init_res = init_slots();
 
-       fillSoundTrackList();
+    fillSoundTrackList();
 
 	//start_dwinUart_task(1);
 	//debugTopicLists();

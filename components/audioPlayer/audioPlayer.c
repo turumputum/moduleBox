@@ -34,6 +34,7 @@
 
 #include "reporter.h"
 #include "executor.h"
+#include <mbdebug.h>
 
 #include "stateConfig.h"
 #include "me_slot_config.h"
@@ -157,7 +158,7 @@ void fill_equalizer_gains(int low_gain, int mid_gain, int high_gain, int *set_ga
     mp3 проигрыватель
     slots: 0
 */
-void configure_audioPlayer(PAUDIOCONFIG c, int slot_num)
+void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
@@ -280,18 +281,18 @@ void audio_task(void *arg) {
 
 	//int16_t currentTrack=0;
 
-	configure_audioPlayer(c, slot_num);
+	configure_mp3Player(c, slot_num);
 
-	char init_report[32];
-	memset(init_report, 0, sizeof(init_report));
-	sprintf(init_report, "/volume:%d", c->volume);
-	report(init_report, slot_num);
-	memset(init_report, 0, sizeof(init_report));
-	sprintf(init_report, "/track:%d", me_state.currentTrack);
-	report(init_report, slot_num);
-	memset(init_report, 0, sizeof(init_report));
-	sprintf(init_report, "/state:stop");
-	report(init_report, slot_num);
+	// char init_report[32];
+	// memset(init_report, 0, sizeof(init_report));
+	// sprintf(init_report, "/volume:%d", c->volume);
+	// report(init_report, slot_num);
+	// memset(init_report, 0, sizeof(init_report));
+	// sprintf(init_report, "/track:%d", me_state.currentTrack);
+	// report(init_report, slot_num);
+	// memset(init_report, 0, sizeof(init_report));
+	// sprintf(init_report, "/state:stop");
+	// report(init_report, slot_num);
 
 	esp_rom_gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
@@ -431,13 +432,13 @@ void audio_task(void *arg) {
 						audioSetIndicator(slot_num, 0);
 					}
 					setVolume_num(c->volume);
-					char track_str[20];
-					memset(track_str, 0, sizeof(track_str));
-					sprintf(track_str, "/track:%d", me_state.currentTrack);
-					report(track_str, slot_num);
-					memset(track_str, 0, sizeof(track_str));
-					sprintf(track_str, "/state:play");
-					report(track_str, slot_num);
+					// char track_str[20];
+					// memset(track_str, 0, sizeof(track_str));
+					// sprintf(track_str, "/track:%d", me_state.currentTrack);
+					// report(track_str, slot_num);
+					// memset(track_str, 0, sizeof(track_str));
+					// sprintf(track_str, "/state:play");
+					// report(track_str, slot_num);
 				}
 				break;
  
@@ -449,10 +450,10 @@ void audio_task(void *arg) {
 					audioStop();
 					audioSetIndicator(slot_num, 0);
 				}
-				char track_str[20];
-				memset(track_str, 0, sizeof(track_str));
-				sprintf(track_str, "state:stop");
-				report(track_str, slot_num);
+				// char track_str[20];
+				// memset(track_str, 0, sizeof(track_str));
+				// sprintf(track_str, "state:stop");
+				// report(track_str, slot_num);
 				break;
 
             case MYCMD_shift:
@@ -466,10 +467,10 @@ void audio_task(void *arg) {
 						}
 					}
 				}
-				char shiftTrack_str[20];
-				memset(shiftTrack_str, 0, sizeof(shiftTrack_str));
-				sprintf(shiftTrack_str, "/track:%d", me_state.currentTrack);
-				report(shiftTrack_str, slot_num);
+				// char shiftTrack_str[20];
+				// memset(shiftTrack_str, 0, sizeof(shiftTrack_str));
+				// sprintf(shiftTrack_str, "/track:%d", me_state.currentTrack);
+				// report(shiftTrack_str, slot_num);
 				break;
 
             case MYCMD_setVolume:
@@ -477,10 +478,10 @@ void audio_task(void *arg) {
 				{
 					c->volume = params.p[0].i;
 					setVolume_num(c->volume);
-					char vol_str[20];
-					memset(vol_str, 0, sizeof(vol_str));
-					sprintf(vol_str, "/volume:%d", c->volume);
-					report(vol_str, slot_num);
+					// char vol_str[20];
+					// memset(vol_str, 0, sizeof(vol_str));
+					// sprintf(vol_str, "/volume:%d", c->volume);
+					// report(vol_str, slot_num);
 				}
 				break;
 		}
@@ -503,7 +504,8 @@ void audio_task(void *arg) {
 		//listen audio event mp3_decoder
 		el_state = audio_element_get_state(mp3_decoder);
 		if(el_state == AEL_STATE_ERROR){
-			ESP_LOGE(TAG, "mp3_decoder Error state: %d", el_state);
+			ESP_LOGE(TAG, "mp3Player Error state: %d", el_state);
+			mblog(ESP_LOG_ERROR,"mp3Player Error state: %d", el_state);
 			esp_restart();
 		}
 
@@ -582,8 +584,9 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	//uint32_t heapBefore = xPortGetFreeHeapSize();
 	
     if (strlen(me_config.soundTracks[truckNum]) == 0) {
-        ESP_LOGE(TAG, "audioPlay: Empty filename for track %d", truckNum);
-        return ESP_FAIL;
+        ESP_LOGE(TAG, "mp3Player: Empty filename for track %d", truckNum);
+        mblog(ESP_LOG_ERROR,"mp3Player: No files to play %d", truckNum);
+		return ESP_FAIL;
     }
 
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);

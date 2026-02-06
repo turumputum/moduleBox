@@ -162,68 +162,7 @@ uint8_t rmt_createAndSend(rmt_led_heap_t *rmt_slot_heap, uint8_t *led_strip_pixe
 
 void configure_led_basic(PLEDCONFIG ch, int slot_num)
 {
-    /* Флаг определяет инверсию светодиода
-    */
-    ch->inverse = get_option_flag_val(slot_num, "ledInverse");
-
-    /* Интенсивность затухание свечения
-    */
-    ch->increment = get_option_int_val(slot_num, "increment", "", 255, 1, 4096);
-    ESP_LOGD(TAG, "Set increment:%d for slot:%d",ch->increment, slot_num);
-
-    /* Максимальное свечение
-    */
-    ch->maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
-    if(ch->maxBright>255)ch->maxBright=255;
-    if(ch->maxBright<0)ch->maxBright=0;
-    ESP_LOGD(TAG, "Set maxBright:%d for slot:%d", ch->maxBright, slot_num);
-
-    /* Минимальное свечение
-    */
-    ch->minBright = get_option_int_val(slot_num, "minBright", "", 0, 1, 4096);
-    if(ch->minBright>255)ch->minBright=255;
-    if(ch->minBright<0)ch->minBright=0;
-    ESP_LOGD(TAG, "Set minBright:%d for slot:%d", ch->minBright, slot_num);
-
-    /* Период обновления
-    */
-    ch->refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096));
-    ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",ch->refreshPeriod, slot_num);
-
-    /* Время затухания свечения в миллисекундах
-    */
-    ch->fadeTime = get_option_int_val(slot_num, "fadeTime", "ms", 100, 10, 10000);
-
-    ch->increment = (ch->maxBright - ch->minBright) * ch->refreshPeriod / ch->fadeTime;
-    if (ch->increment < 1) ch->increment = 1;
-    ESP_LOGD(TAG, "Calculated increment: %d for slot %d", ch->increment, slot_num);
-
-    /* Задаёт режим анимации */
-    if ((ch->ledMode = get_option_enum_val(slot_num, "ledMode", "none", "flash", "glitch", NULL)) < 0)
-    {
-        ESP_LOGE(TAG, "animate: unricognized value");
-        ch->ledMode = 0; // NONE
-    }
-    else
-        ESP_LOGD(TAG, "Custom animate: %d", ch->ledMode);
-
-    /* Состояние по умолчанию
-    */
-    ch->state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1) ^ ch->inverse;
-
-    if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
-        char* custom_topic=NULL;
-        /* Топик для режима свечения
-        */
-        custom_topic = get_option_string_val(slot_num, "ledTopic", "/led_0");
-        me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
-        char t_str[strlen(me_config.deviceName)+strlen("/led_0")+3];
-        sprintf(t_str, "%s/led_%d",me_config.deviceName, slot_num);
-        me_state.action_topic_list[slot_num]=strdup(t_str);
-        ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
-    }
+    
 }
 
 static void checkBright(int16_t *currentBright, uint8_t targetBright, uint8_t fade_increment){

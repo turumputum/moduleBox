@@ -58,56 +58,125 @@ typedef struct _tag_queue_message_t
   };
   return i2s_channel_init_std_mode(h->audio_ch_handle, &std_cfg);
 }
-
-static FILE * wavfile_open(wav_handle_t    h, 
-                           PWAVDESC        desc, 
-                           const char *    fname)
-{
+static FILE * wavfile_open(wav_handle_t    h, PWAVDESC        desc, const char *    fname){
     FILE *          result      = NULL;
     wav_header_t    header;
     fmt_header_t    fmt;
     data_header_t   data;
 
+    ESP_LOGI(h->tag, "Attempting to open WAV file: %s", fname);
+
     if ((result = fopen(fname, "rb")) != nil)
     {
-        if (    (fread(&header, sizeof(header), 1, result) == 1)    &&
-                !memcmp(header.riff_header, "RIFF", 4)              &&
-                !memcmp(header.wave_header, "WAVE", 4)              &&
-                !memcmp(header.fmt_header, "fmt ", 4)               &&
-                (fread(&fmt, MAC_MIN(sizeof(fmt_header_t), 
-                       header.fmt_chunk_size), 1, result) == 1)     &&
-                (fread(&data, 
-                        sizeof(data_header_t), 1, result) == 1)     &&
-                !memcmp(data.data_header, "data", 4)                &&
-               (fmt.audio_format == AUDIO_FORMAT_PCM)        &&
-                   (fmt.sample_rate >= 8000)                     && 
-               (fmt.sample_rate <= 44100)                    )
-        {
-            ESP_LOGD(h->tag, "num_channels=%" PRIu16, fmt.num_channels);
-            ESP_LOGD(h->tag, "sample_rate=%" PRIu32, fmt.sample_rate);
-            ESP_LOGD(h->tag, "byte_rate=%" PRIu32, fmt.byte_rate);
-            ESP_LOGD(h->tag, "sample_alignment=%" PRIu16, fmt.sample_alignment);
-            ESP_LOGD(h->tag, "bit_depth=%" PRIu16, fmt.bit_depth);
-            ESP_LOGD(h->tag, "data_bytes=%" PRIu32, data.data_bytes);
+        ESP_LOGD(h->tag, "File opened successfully, reading header...");
 
-            // h->num_channels = header.num_channels;
-            // h->sample_rate = header.sample_rate;
-            // h->byte_rate = header.byte_rate;
-            // h->sample_alignment = header.sample_alignment;
-            // h->bit_depth = header.bit_depth;
-            // h->data_start = sizeof(wav_header_t) + 8; //8 bytes of RIFF metadata
-            // h->data_bytes = header.data_bytes;
-
-            desc->channels      = fmt.num_channels;
-            desc->samplerate    = fmt.sample_rate;
-            desc->width         = fmt.bit_depth;
-            desc->len           = data.data_bytes;
-        }
-        else
+        if (fread(&header, sizeof(header), 1, result) != 1)
         {
+            ESP_LOGE(h->tag, "Failed to read WAV header from %s", fname);
             fclose(result);
-            result = NULL;
+            return NULL;
         }
+
+        if (memcmp(header.riff_header, "RIFF", 4) != 0)
+        {
+            ESP_LOGE(h->tag, "Invalid RIFF header in %s (expected 'RIFF', got '%.4s')", fname, header.riff_header);
+            fclose(result);
+            return NULL;
+        }
+
+        if (memcmp(header.wave_header, "WAVE", 4) != 0)
+        {
+            ESP_LOGE(h->tag, "Invalid WAVE header in %s (expected 'WAVE', got '%.4s')", fname, header.wave_header);
+            fclose(result);
+            return NULL;
+        }
+
+        if (memcmp(header.fmt_header, "fmt ", 4) != 0)
+        {
+            ESP_LOGE(h->tag, "Invalid fmt header in %s (expected 'fmt ', got '%.4s')", fname, header.fmt_header);
+            fclose(result);
+            return NULL;
+        }
+
+        if (fread(&fmt, MAC_MIN(sizeof(fmt_header_t), header.fmt_chunk_size), 1, result) != 1)
+        {
+            ESP_LOGE(h->tag, "Failed to read fmt chunk from %s", fname);
+            fclose(result);
+            return NULL;
+        }
+
+        // Skip any extra bytes in fmt chunk if it's larger than expected
+        if (header.fmt_chunk_size > sizeof(fmt_header_t)){
+            long skip_bytes = header.fmt_chunk_size - sizeof(fmt_header_t);
+            fseek(result, skip_bytes, SEEK_CUR);
+            ESP_LOGD(h->tag, "Skipped %ld extra fmt bytes", skip_bytes);
+        }
+
+        // Search for 'data' chunk, skip other chunks like 'LIST', 'INFO', etc.
+        int data_found = 0;
+        int attempts = 0;
+        const int max_attempts = 10;
+
+        while (!data_found && attempts < max_attempts) {
+            if (fread(&data, sizeof(data_header_t), 1, result) != 1) {
+                ESP_LOGE(h->tag, "Failed to read chunk header from %s", fname);
+                fclose(result);
+                return NULL;
+            }
+        
+            if (memcmp(data.data_header, "data", 4) == 0){
+                // Found data chunk
+                data_found = 1;
+                ESP_LOGI(h->tag, "Found 'data' chunk, size=%lu bytes", data.data_bytes);
+            }else{  // <-- ДОБАВИТЬ ФИГУРНЫЕ СКОБКИ
+                // Skip this chunk (LIST, INFO, etc.)
+                ESP_LOGI(h->tag, "Skipping '%.4s' chunk (%lu bytes)", data.data_header, data.data_bytes);
+        
+                if (fseek(result, data.data_bytes, SEEK_CUR) != 0)  // <-- ТЕПЕРЬ ТОЛЬКО ДЛЯ НЕ-DATA ЧАНКОВ
+                {
+                    ESP_LOGE(h->tag, "Failed to skip '%.4s' chunk in %s", data.data_header, fname);
+                    fclose(result);
+                    return NULL;
+                }
+            }  // <-- ЗАКРЫТЬ БЛОК else
+        
+            attempts++;
+        }
+
+    if (!data_found){
+        ESP_LOGE(h->tag, "No 'data' chunk found in %s", fname);
+        fclose(result);
+        return NULL;
+    }
+
+    if (fmt.audio_format != AUDIO_FORMAT_PCM){
+        ESP_LOGE(h->tag, "Unsupported audio format in %s (format=%d, expected PCM=%d)", fname, fmt.audio_format, AUDIO_FORMAT_PCM);
+        fclose(result);
+        return NULL;
+    }
+
+    if (fmt.sample_rate < 8000 || fmt.sample_rate > 44100){
+        ESP_LOGE(h->tag, "Unsupported sample rate in %s (rate=%lu, must be 8000-44100)", fname, fmt.sample_rate);
+        fclose(result);
+        return NULL;
+    }
+
+    ESP_LOGI(h->tag, "WAV file %s validated successfully", fname);
+    ESP_LOGD(h->tag, "num_channels=%" PRIu16, fmt.num_channels);
+    ESP_LOGD(h->tag, "sample_rate=%" PRIu32, fmt.sample_rate);
+    ESP_LOGD(h->tag, "byte_rate=%" PRIu32, fmt.byte_rate);
+    ESP_LOGD(h->tag, "sample_alignment=%" PRIu16, fmt.sample_alignment);
+    ESP_LOGD(h->tag, "bit_depth=%" PRIu16, fmt.bit_depth);
+    ESP_LOGD(h->tag, "data_bytes=%" PRIu32, data.data_bytes);
+
+    desc->channels      = fmt.num_channels;
+    desc->samplerate    = fmt.sample_rate;
+    desc->width         = fmt.bit_depth;
+    desc->len           = data.data_bytes;
+    }
+    else
+    {
+    ESP_LOGE(h->tag, "Failed to fopen() file %s - file does not exist or cannot be accessed", fname);
     }
 
     return result;
