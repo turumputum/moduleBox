@@ -1,4 +1,3 @@
-
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
 
@@ -9,6 +8,6 @@ endif()
 
 idf_component_register(SRCS "manifest.c"
                     INCLUDE_DIRS "include"
-                    REQUIRES stateConfig arsenal)
+                    REQUIRES stateConfig arsenal wavPlayer)
 
 

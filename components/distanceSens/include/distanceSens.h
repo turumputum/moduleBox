@@ -31,6 +31,8 @@ typedef struct {
     
     // Report IDs
     int distanceReport;
+    int distanceFloatReport;
+    int stateReport;
 } distanceSens_t;
 
 #define DISTANCE_SENS_DEFAULT() {\
@@ -52,6 +54,8 @@ typedef struct {
     .cooldownStartTick=0,\
     .inCooldown=0,\
     .distanceReport=-1,\
+    .distanceFloatReport=-1,\
+    .stateReport=-1,\
 }
 
 // Common functions

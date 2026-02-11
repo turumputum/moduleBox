@@ -26,7 +26,7 @@
 #include "sensor_2ch.h"
 #include "tenzo_button.h"
 #include "flywheel.h"
-#include "virtual_slots.h"
+#include "virtualSlots.h"
 #include "myHID.h"
 #include "swiper.h"
 #include "rfid.h"

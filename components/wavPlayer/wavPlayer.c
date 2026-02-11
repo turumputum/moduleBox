@@ -122,39 +122,39 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	if(c->volume<0){c->volume=0;}
 	ESP_LOGD(TAG, "Set volume:%d", c->volume);
 
-	// /* Скорость воспроизведения
-	// */
-	// c->speed = get_option_float_val(slot_num, "speed", 1.09);
-	// ESP_LOGD(TAG, "Set speed:%f", c->speed);
+	/* Скорость воспроизведения
+	*/
+	c->speed = get_option_float_val(slot_num, "speed", 1.09);
+	ESP_LOGD(TAG, "Set speed:%f", c->speed);
 
-	// /* Сдвиг тональности
-	// */
-	// c->tone = get_option_float_val(slot_num, "tone", 1.0);
-	// ESP_LOGD(TAG, "Set tone:%f", c->tone);
+	/* Сдвиг тональности
+	*/
+	c->tone = get_option_float_val(slot_num, "tone", 1.0);
+	ESP_LOGD(TAG, "Set tone:%f", c->tone);
 
-	// /* Нижняя граница эквалайзера
-	// */
-	// if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", -13, -20, 0)) != 0)
-	// {
-	// 	c->eqFlag = 1;
-	// 	ESP_LOGD(TAG, "Set eqLow:%d", c->eqLow);
-	// }
+	/* Нижняя граница эквалайзера
+	*/
+	if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", -13, -20, 0)) != 0)
+	{
+		c->eqFlag = 1;
+		ESP_LOGD(TAG, "Set eqLow:%d", c->eqLow);
+	}
 
-	// /* Средняя граница эквалайзера
-	// */
-	// if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", -13, -20, 0)) != 0)
-	// {
-	// 	c->eqFlag = 1;
-	// 	ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
-	// }
+	/* Средняя граница эквалайзера
+	*/
+	if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", -13, -20, 0)) != 0)
+	{
+		c->eqFlag = 1;
+		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
+	}
 
-	// /* Верхняя граница эквалайзера
-	// */
-	// if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", -13, -20, 0)) != 0)
-	// {
-	// 	c->eqFlag = 1;
-	// 	ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
-	// }
+	/* Верхняя граница эквалайзера
+	*/
+	if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", -13, -20, 0)) != 0)
+	{
+		c->eqFlag = 1;
+		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
+	}
 
 	/* Использовать затухание
 	*/

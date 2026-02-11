@@ -88,7 +88,7 @@ void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
             
             // Не в cooldown - проверяем изменение состояния
             if (newState != distanceSens->prevState) {
-                stdreport_i(distanceSens->distanceReport, newState);
+                stdreport_i(distanceSens->stateReport, newState);
 
                 ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, 254 * newState);
                 ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
@@ -111,7 +111,7 @@ void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
                 if(f_res < 0) f_res = 0;
                 
                 if (distanceSens->flag_float_output == 1) {     
-                    stdreport_f(distanceSens->distanceReport, f_res);
+                    stdreport_f(distanceSens->distanceFloatReport, f_res);
                 }else{
                     stdreport_i(distanceSens->distanceReport, distanceSens->currentPos);
                 }
