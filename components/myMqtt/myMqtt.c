@@ -198,10 +198,7 @@ int mqtt_app_start(void)
     esp_mqtt_client_config_t mqtt_cfg = {
     	.credentials.client_id = me_config.deviceName,
 		.broker.address.uri = brokerUri,
-        //.broker.address.uri = "mqtt://192.168.88.99:1883"
-		//.broker.address.hostname = me_config.mqttBrokerAdress,
-		//TODO write will msg
-		.session.keepalive = 15,
+		.session.keepalive = 60,  // Увеличено с 15 — даёт больше запаса при нагрузке на CPU
 		.session.last_will.topic = willTopic,
 		.session.last_will.msg = "0",
     };

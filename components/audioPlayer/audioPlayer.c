@@ -312,7 +312,7 @@ void audio_task(void *arg) {
 	}
 	//ESP_LOGD(TAG, "Create i2s stream to write data to codec chip");
 	i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
-	i2s_cfg.out_rb_size = 12 * 1024;
+	i2s_cfg.out_rb_size = 8 * 1024;  // Уменьшено с 12 КБ — экономия 4 КБ
 	i2s_cfg.task_core = 1;
 	// i2s_cfg.i2s_config.sample_rate = 48000;
 	// i2s_cfg.i2s_config.dma_buf_count = 3; //3
@@ -329,20 +329,19 @@ void audio_task(void *arg) {
 	fatfs_cfg.type = AUDIO_STREAM_READER;
 	fatfs_cfg.ext_stack = false;
 	fatfs_cfg.task_stack = 4096; // Increase stack size
-	//fatfs_cfg.task_prio = 22; //22
+	fatfs_cfg.task_core = 1;    // Перенести чтение SD на Core 1, освободить Core 0 для WiFi/LWIP
 	fatfs_stream_reader = fatfs_stream_init(&fatfs_cfg);
 
 	//ESP_LOGD(TAG, "Create mp3 decoder to decode mp3 file");
 	mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
 	mp3_cfg.stack_in_ext = false;
-	//mp3_cfg.task_prio = 22; //22
-	//mp3_cfg.out_rb_size = 3 * 1024;
+	mp3_cfg.task_core = 1;      // MP3 декодирование — самая тяжёлая задача, перенести на Core 1
 	mp3_decoder = mp3_decoder_init(&mp3_cfg);
 
 	//ESP_LOGD(TAG, "Create resample filter");
 	rsp_filter_cfg_t rsp_cfg = DEFAULT_RESAMPLE_FILTER_CONFIG();
 	rsp_cfg.stack_in_ext = false;
-	//rsp_cfg.task_prio = 22; //22
+	rsp_cfg.task_core = 1;      // Ресемплинг на Core 1
 	rsp_cfg.prefer_flag = 1;
 	rsp_handle = rsp_filter_init(&rsp_cfg);
 
@@ -350,6 +349,8 @@ void audio_task(void *arg) {
     sonic_cfg.sonic_info.samplerate = 48000;
     sonic_cfg.sonic_info.channel = 2;
     sonic_cfg.sonic_info.resample_linear_interpolate = 1;
+	sonic_cfg.task_core = 1;            // Перенести sonic на Core 1
+	sonic_cfg.out_rb_size = 4 * 1024;   // Уменьшено с 8 КБ — экономия 4 КБ
     audio_element_handle_t sonic_el = sonic_init(&sonic_cfg);
 	sonic_set_pitch_and_speed_info(sonic_el, c->tone, c->speed);
 
@@ -357,7 +358,9 @@ void audio_task(void *arg) {
     int set_gain[] = { -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13};
     fill_equalizer_gains(c->eqLow, c->eqMid, c->eqHigh, set_gain);
 	eq_cfg.channel = 2;
-	eq_cfg.set_gain = set_gain; // The size of gain array should be the multiplication of NUMBER_BAND and number channels of audio stream data. The minimum of gain is -13 dB.
+	eq_cfg.set_gain = set_gain;
+	eq_cfg.task_core = 1;               // Перенести equalizer на Core 1
+	eq_cfg.out_rb_size = 4 * 1024;      // Уменьшено с 8 КБ — экономия 4 КБ
     equalizer = equalizer_init(&eq_cfg);
 
 	//ESP_LOGD(TAG, "Register all elements to audio pipeline");
@@ -371,7 +374,7 @@ void audio_task(void *arg) {
 	//ESP_LOGD(TAG, "Link it together [sdcard]-->fatfs_stream-->mp3_decoder-->resample-->i2s_stream-->[codec_chip]");
 	//const char *link_tag[4] = { "file", "mp3", "filter", "i2s" };
 	//const char *link_tag[5] = { "file", "mp3", "filter", "sonic", "i2s" };
-	const char *link_tag[6] = { "file", "mp3", "sonic", "equalizer", "i2s"};
+	const char *link_tag[5] = { "file", "mp3", "sonic", "equalizer", "i2s"};
 	//const char *link_tag[6] = { "file", "mp3", "filter", "sonic", "equalizer", "i2s"};
 	//audio_pipeline_link(pipeline, &link_tag[0], 4);
 	audio_pipeline_link(pipeline, &link_tag[0], 5);
@@ -381,9 +384,9 @@ void audio_task(void *arg) {
 
 	//ESP_LOGD(TAG, "Set up  event listener");
 	audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
-	evt_cfg.external_queue_size = 40;//5
-	evt_cfg.internal_queue_size = 40;//5
-	evt_cfg.queue_set_size = 40;//5
+	evt_cfg.external_queue_size = 10; // Уменьшено с 40 — экономия ~960 байт RAM
+	evt_cfg.internal_queue_size = 10; // Уменьшено с 40
+	evt_cfg.queue_set_size = 10;      // Уменьшено с 40
 	evt = audio_event_iface_init(&evt_cfg);
 
 	//xTaskCreatePinnedToCore(listenListener, "audio_listener", 1024 * 4, NULL, 1, NULL, 0);

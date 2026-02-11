@@ -131,6 +131,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->LAN_gateWay = strdup(value);
 	} else if (MATCH("LAN", "DHCP")) {
 		pconfig->LAN_DHCP = _yesno(value);
+	} else if (MATCH("LAN", "speed")) {
+		pconfig->LAN_speed = strdup(value);
 	} else if (MATCH("WIFI", "WIFI_enable")) {//-----------------------------------------------
 		pconfig->WIFI_enable = _yesno(value);
 	} else if (MATCH("WIFI", "SSID")) {
@@ -218,6 +220,7 @@ void load_Default_Config(void) {
 	me_config.LAN_ipAdress = strdup("192.168.88.33");
 	me_config.LAN_netMask = strdup("255.255.255.0");
 	me_config.LAN_gateWay = strdup("192.168.88.1");
+	me_config.LAN_speed = strdup("auto");
 	me_state.LAN_init_res = ESP_FAIL;
 
 	me_config.MDNS_enable=1;
@@ -346,6 +349,9 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "gateWay = %s \r\n", me_config.LAN_gateWay);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "speed = %s ;auto, 100M, 10M \r\n", me_config.LAN_speed);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 

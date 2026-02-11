@@ -330,6 +330,28 @@ int LAN_init(void) {
 		}
     }
 
+	// Configure speed/duplex based on LAN_speed setting
+	if (strcasecmp(me_config.LAN_speed, "100M") == 0 || strcasecmp(me_config.LAN_speed, "10M") == 0) {
+		bool autonego_en = false;
+		ret = esp_eth_ioctl(eth_handle, ETH_CMD_S_AUTONEGO, &autonego_en);
+		if (ret != ESP_OK) {
+			ESP_LOGW(TAG, "Failed to disable auto-negotiation, ret:%d", ret);
+		}
+		eth_speed_t speed = (strcasecmp(me_config.LAN_speed, "10M") == 0) ? ETH_SPEED_10M : ETH_SPEED_100M;
+		ret = esp_eth_ioctl(eth_handle, ETH_CMD_S_SPEED, &speed);
+		if (ret != ESP_OK) {
+			ESP_LOGW(TAG, "Failed to set speed, ret:%d", ret);
+		}
+		eth_duplex_t duplex = ETH_DUPLEX_FULL;
+		ret = esp_eth_ioctl(eth_handle, ETH_CMD_S_DUPLEX_MODE, &duplex);
+		if (ret != ESP_OK) {
+			ESP_LOGW(TAG, "Failed to set duplex mode, ret:%d", ret);
+		}
+		ESP_LOGI(TAG, "Ethernet speed set to %s Full Duplex (auto-negotiation disabled)", me_config.LAN_speed);
+	} else {
+		ESP_LOGI(TAG, "Ethernet auto-negotiation enabled");
+	}
+
 	// Initialize TCP/IP network interface aka the esp-netif (should be called only once in application)
     ESP_ERROR_CHECK(esp_netif_init());
     // Create default event loop that running in background

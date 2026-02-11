@@ -112,6 +112,7 @@ typedef struct {
 	char *LAN_ipAdress;
 	char *LAN_netMask;
 	char *LAN_gateWay;
+	char *LAN_speed; // "auto", "100M", "10M"
 
 	char *deviceName;
 	int logLevel;
