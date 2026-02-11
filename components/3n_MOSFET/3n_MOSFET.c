@@ -21,7 +21,7 @@
 
 #include "rgbHsv.h"
 
-#include <generated_files/gen_3n_mosfet.h>
+#include <generated_files/gen_3n_MOSFET.h>
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
@@ -49,6 +49,9 @@ typedef enum
     MYCMD_setMode,
     MYCMD_setIncrement,
     MYCMD_setMaxBright,
+    MYCMD_setBright_ch_0,
+    MYCMD_setBright_ch_1,
+    MYCMD_setBright_ch_2,
     MYCMD_setMinBright,
     MYCMD_setFadeTime
 } MYCMD;
@@ -91,7 +94,7 @@ void set_pwm_channels(ledc_channel_config_t ch_r, ledc_channel_config_t ch_g, le
 /*
     Модуль управляет RGB-лентой
 */
-void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
+void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
@@ -160,12 +163,12 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "topic", "/pwmRGB_0");
+    	custom_topic = get_option_string_val(slot_num, "topic", "/pwmLeds_0");
 		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/pwmRGB_0")+3];
-		sprintf(t_str, "%s/pwmRGB_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/pwmLeds_0")+3];
+		sprintf(t_str, "%s/pwmLeds_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
@@ -188,9 +191,21 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
     */
     stdcommand_register(&c->cmds, MYCMD_setIncrement, "setIncrement", PARAMT_int);
 
-    /* Установить максимальное значение яркости
+    /* Установить максимальное значение яркости для всех каналов
     */
     stdcommand_register(&c->cmds, MYCMD_setMaxBright, "setMaxBright", PARAMT_int);
+
+    /* Установить значение яркости для ch_0
+    */
+   stdcommand_register(&c->cmds, MYCMD_setBright_ch_0, "ch_0/setBright", PARAMT_int);
+
+   /* Установить значение яркости для ch_1
+    */
+   stdcommand_register(&c->cmds, MYCMD_setBright_ch_1, "ch_1/setBright", PARAMT_int);
+
+   /* Установить значение яркости для ch_2
+    */
+   stdcommand_register(&c->cmds, MYCMD_setBright_ch_2, "ch_2/setBright", PARAMT_int);
 
     /* Установить минимальное значение яркости
     */
@@ -201,7 +216,7 @@ void configure_pwmRGB(PMOSFETCONFIG c, int slot_num)
     stdcommand_register(&c->cmds, MYCMD_setFadeTime, "setFadeTime", PARAMT_int);
 }
 
-void rgb_ledc_task(void *arg){
+void pwmLeds_task(void *arg){
     //PMOSFETCONFIG c = calloc(1, sizeof(MOSFETCONFIG));
     MOSFETCONFIG c = {0};
     uint32_t startTick = xTaskGetTickCount();
@@ -211,7 +226,7 @@ void rgb_ledc_task(void *arg){
 
 	me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
 
-    configure_pwmRGB(&c, slot_num);
+    configure_pwmLeds(&c, slot_num);
 
 	//if(chennelCounter<2){
 		ledc_timer_config_t ledc_timer = {
@@ -310,6 +325,18 @@ void rgb_ledc_task(void *arg){
                 c.max_bright = params.p[0].i;
                 break;
 
+            case MYCMD_setBright_ch_0:
+                c.targetRGB.r = params.p[0].i;
+                break;
+
+            case MYCMD_setBright_ch_1:
+                c.targetRGB.g = params.p[0].i;
+                break;
+
+            case MYCMD_setBright_ch_2:
+                c.targetRGB.b = params.p[0].i;
+                break;
+
             case MYCMD_setMinBright:
                 c.min_bright = params.p[0].i;
                 break;
@@ -369,151 +396,16 @@ void rgb_ledc_task(void *arg){
     vTaskDelete(NULL);
 }
 
-void init_3n_mosfet(int slot_num) {
+void init_pwmLeds(int slot_num) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
-    xTaskCreate(rgb_ledc_task, "pwmRGB_task", 1024*4, &slot_num,12, NULL);
+    xTaskCreate(pwmLeds_task, "pwmLeds_task", 1024*4, &slot_num,12, NULL);
 
-	ESP_LOGD(TAG,"pwmRGB_led task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+	ESP_LOGD(TAG,"pwmLeds task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
-const char * get_manifest_3n_mosfet()
+const char * get_manifest_3n_MOSFET()
 {
 	return manifesto;
 }
 
-
-// void setRGB(int slot_num, char* payload){
-// 	ESP_LOGD(TAG, "Set RGB for slot:%d val:%s",slot_num, payload);
-// 	char *rest;
-// 	char *tok;
-// 	if(strstr(payload, " ")!=NULL){
-// 		tok = strtok_r(payload, " ", &rest);
-// 		R = atoi(tok);
-// 		tok = strtok_r(NULL, " ", &rest);
-// 		G = atoi(tok);
-// 		B = atoi(rest);
-
-// 		if (R > 255) {
-// 			do {
-// 				R -= 255;
-// 			} while (R > 255);
-// 		}
-// 		if (G > 255) {
-// 			do {
-// 				G -= 255;
-// 			} while (G > 255);
-// 		}
-// 		if (B > 255) {
-// 			do {
-// 				B -= 255;
-// 			} while (B > 255);
-// 		}
-// 		set_pwm_channels(slot_num, R, G, B);
-// 	}
-
-// 	channelDebug();
-// }
-
-// void glitch_task(){
-// 	flag_glitch_task=1;
-// 	int state=0;
-// 	int delay=rand()%(glitchVal*2) +10;
-// 	while(1){
-// 		if(state==0){
-// 			set_pwm_channels(0, 0, 0, 0);
-// 		}else{
-// 			set_pwm_channels(0, R, G, B);
-// 		}
-// 		delay=rand()%glitchVal +glitchVal;
-// 		state=!state;
-// 		vTaskDelay(pdMS_TO_TICKS(delay));
-
-// 		if(flag_glitch_task==0){
-// 			vTaskDelete(NULL);
-// 		}
-// 	}
-// }
-
-// void setGlitch(int slot_num, char* payload){
-// 	int val = atoi(payload);
-// 	if(val==0){
-// 		flag_glitch_task=0;
-// 	}else if(flag_glitch_task!=1){
-// 		xTaskCreate(glitch_task, "glitch", 1024 * 2, NULL, configMAX_PRIORITIES - 8, NULL);
-// 	}
-// 	glitchVal=val;
-// }
-
-
-//IRAM_ATTR
-// static bool IRAM_ATTR pwm_ISR(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void* user_data){
-    
-// 	BaseType_t high_task_awoken = pdFALSE;
-
-// 	pwm_ch_t pwm_ch_data = *((pwm_ch_t*)user_data);
-//     // stop timer immediately
-//     //gptimer_stop(timer);
-
-// 	int duty = pwm_ch_data.duty;
-// 	int16_t alarmCount=1;
-// 	if(state==1){
-// 		//gpio_set_level(4, 1);
-// 		GPIO.out_w1ts = ((uint32_t)1 << 4);
-// 		alarmCount = duty;
-// 	}else{
-// 		//gpio_set_level(4, 0);
-// 		GPIO.out_w1tc = ((uint32_t)1 << 4);
-// 		alarmCount = 255 - duty;
-// 	}
-// 	if(alarmCount>254)alarmCount=254;
-// 	if(alarmCount<1)alarmCount=1;
-
-// 	gptimer_alarm_config_t alarm_config = {
-//         .alarm_count =edata->alarm_value+alarmCount, // period = 1s
-//     };
-// 	gptimer_set_alarm_action(timer, &alarm_config);
-// 	//gptimer_set_raw_count(timer, 0);
-// 	//gptimer_start(timer);
-
-// 	//ESP_LOGD(TAG, "tick");
-
-// 	state =!state;
-
-// 	return high_task_awoken == pdTRUE;
-// }
-
-// void start_pwm_ch(void){
-
-// 	esp_rom_gpio_pad_select_gpio(4);
-// 	gpio_set_direction(4, GPIO_MODE_OUTPUT);
-
-// 	gptimer_config_t timer_config = {
-//         .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-//         .direction = GPTIMER_COUNT_UP,
-//         .resolution_hz = 125000,//125000, //125khz 1tick = 8us //1000000, // 1MHz, 1 tick=1us
-//     };
-// 	gptimer_new_timer(&timer_config, &timer);
-	
-// 	gptimer_event_callbacks_t cbs = {
-//         .on_alarm = pwm_ISR,
-//     };
-
-// 	pwm_ch_test.duty = 250;
-
-// 	gptimer_register_event_callbacks(timer, &cbs, &pwm_ch_test);
-// 	gptimer_enable(timer);
-
-// 	gptimer_alarm_config_t alarm_config = {
-// 		.reload_count = 0,
-//         .alarm_count = pwm_ch_test.duty, // 
-// 		.flags.auto_reload_on_alarm = 1,
-//     };
-// 	gptimer_set_alarm_action(timer, &alarm_config);
-// 	gptimer_start(timer);
-
-
-// 	gpio_set_level(4, 1);
-
-// 	ESP_LOGD(TAG, "test timer started");
-// }

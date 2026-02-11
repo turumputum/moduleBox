@@ -1,4 +1,4 @@
-file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "3n_mosfet.c" "encoders.c" ) 
+file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "encoders.c" ) 
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
@@ -11,7 +11,6 @@ idf_component_register(SRCS
                         "stdcommand.c"
 						"flywheel.c"
                        
-                        "virtual_slots.c" 
 						${MODULE_FILES}
 
                         "tenzo_button.c"
@@ -21,7 +20,26 @@ idf_component_register(SRCS
 						${GENERATED_FILES}
 
                     INCLUDE_DIRS "include" ${CMAKE_CURRENT_BINARY_DIR}
-                    REQUIRES in_out myCDC stepper stateConfig reporter audioPlayer audioLAN driver rgbHsv myHID someUnique distanceSens accel servoDev ticketDispenser dwin VESC PPM CRSF virtualSlots
+                    REQUIRES 
+                        in_out 
+                        myCDC 
+                        stepper 
+                        stateConfig 
+                        reporter 
+                        audioPlayer 
+                        audioLAN 
+                        driver 
+                        rgbHsv 
+                        myHID 
+                        someUnique 
+                        distanceSens 
+                        accel 
+                        servoDev 
+                        dwin 
+                        PPM 
+                        virtualSlots 
+                        3n_MOSFET 
+                        esp_peripherals
 )
 
 

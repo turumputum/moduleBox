@@ -124,12 +124,16 @@ int init_slots(void){
 			start_button_led_task(i);
 		// }else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
 		// 	start_in_3ch_task(i, 3);	// W, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
+		start_in_out_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
 			start_in_2ch_task(i);	// W, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
+			start_out_2ch_task(i);		// W, NOC
 		// }else if(!memcmp(me_config.slot_mode[i], "in_1ch", 6)){
 		// 	start_in_3ch_task(i, 1);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "pwmRGB", 6)){
-			init_3n_mosfet(i);			// W, C
+		}else if(!memcmp(me_config.slot_mode[i], "pwmLeds", 7)){
+			init_pwmLeds(i);			// W, C
 		// }else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
 		// 	start_encoderPPM_task(i);	// W
 		}else if(!memcmp(me_config.slot_mode[i], "encoderInc", 10)){
@@ -150,12 +154,10 @@ int init_slots(void){
 			start_analog_task(i); // W, C
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);		// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
-			start_in_out_task(i);		
+		
 		// }else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
 		// 	start_out_3ch_task(i);		// W, NOC
-		 }else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
-		 	start_out_2ch_task(i);		// W, NOC
+		
 		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
 			start_tenzo_button_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){
@@ -192,14 +194,8 @@ int init_slots(void){
 			start_random_task(i);	// W, C
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
 			start_ds18b20_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "servoRod", 9)){
-			start_servoRod_task(i);		// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "steadywinGIM", 12)){
 			start_GIM_motor_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "ticketDispenser", 15)){
-			start_ticketDispenser_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "volnaKolya", 10)){
-			start_volnaKolya_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "CRSF", 4)){
 			start_crsf_rx_task(i);		// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "VESC", 4)){
