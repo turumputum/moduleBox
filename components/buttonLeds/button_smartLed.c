@@ -153,7 +153,7 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->led.fadeTime= get_option_int_val(slot_num, "fadeTime", "ms", 1000, 10, 10000);
 
-    ctx->led.increment = (ctx->led.maxBright - ctx->led.minBright) * ctx->led.refreshPeriod / ctx->led.fadeTime;
+    ctx->led.increment = 255 * ctx->led.refreshPeriod / ctx->led.fadeTime;
     if (ctx->led.increment < 1) ctx->led.increment = 1;
     ESP_LOGD(TAG, "Calculated increment: %d for slot %d", ctx->led.increment, slot_num);
 

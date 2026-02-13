@@ -135,7 +135,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     ESP_LOGD(TAG, "Set fadeTime:%d for slot:%d", c->fadeTime, slot_num);
 
     /* Пересчитываем increment на основе fadeTime */
-    c->increment = (c->max_bright - c->min_bright) * c->refreshPeriod / c->fadeTime;
+    c->increment = 255 * c->refreshPeriod / c->fadeTime;
     if (c->increment < 1) c->increment = 1;
     ESP_LOGD(TAG, "Calculated increment:%d for slot:%d", c->increment, slot_num);
     	
