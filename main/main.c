@@ -75,7 +75,7 @@
 
 #include "p9813.h"
 
-#include "3n_mosfet.h"
+#include "3n_MOSFET.h"
 #include "swiper.h"
 //#include "smartLed.h"
 #include "someUnique.h"
