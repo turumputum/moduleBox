@@ -390,9 +390,24 @@ void makeStatusReport(bool spread)
 	mblog(I, str);
 }
 
+void setVolumeLabel()
+{
+	char label[11] = "           ";
 
+	int sz = strlen(me_config.deviceName);
 
+	if (sz)
+	{
+		if (sz > 11)
+			sz = 11;
 
+		memcpy(label, me_config.deviceName, sz);
+	}
+	else
+		memcpy(label, "MODULEBOX", 9);
+
+	f_setlabel(label); 
+}
 
 void app_main(void)	
 {
@@ -460,6 +475,8 @@ void app_main(void)
 		sprintf(tmpString, "Load config FAIL in line: %d", me_state.config_init_res);
 		mblog(E, tmpString);
 	}
+
+	setVolumeLabel();
 
 	mblog(I, "Log session begin");
 	
