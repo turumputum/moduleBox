@@ -406,6 +406,28 @@ void setVolumeLabel()
 	else
 		memcpy(label, "MODULEBOX", 9);
 
+	char * on = label;
+
+	for (int i = 0; i < 11; i++, on++)
+	{
+	    switch (*on)
+	    {
+		case '/':
+		case '\\':
+		case ':':
+		case '*':
+		case '?':
+		case '\"':
+		case '<':
+		case '>':
+		case '|':
+		    *on = '_';
+		    break;
+		default:
+		    break;
+	    }
+	}
+
 	f_setlabel(label); 
 }
 
