@@ -75,7 +75,7 @@
 
 #include "p9813.h"
 
-#include "3n_mosfet.h"
+#include "3n_MOSFET.h"
 #include "swiper.h"
 //#include "smartLed.h"
 #include "someUnique.h"
@@ -391,9 +391,46 @@ void makeStatusReport(bool spread)
 	mblog(I, str);
 }
 
+void setVolumeLabel()
+{
+	char label[11] = "           ";
 
+	int sz = strlen(me_config.deviceName);
 
+	if (sz)
+	{
+		if (sz > 11)
+			sz = 11;
 
+		memcpy(label, me_config.deviceName, sz);
+	}
+	else
+		memcpy(label, "MODULEBOX", 9);
+
+	char * on = label;
+
+	for (int i = 0; i < 11; i++, on++)
+	{
+	    switch (*on)
+	    {
+		case '/':
+		case '\\':
+		case ':':
+		case '*':
+		case '?':
+		case '\"':
+		case '<':
+		case '>':
+		case '|':
+		    *on = '_';
+		    break;
+		default:
+		    break;
+	    }
+	}
+
+	f_setlabel(label); 
+}
 
 void app_main(void)	
 {
@@ -461,6 +498,8 @@ void app_main(void)
 		sprintf(tmpString, "Load config FAIL in line: %d", me_state.config_init_res);
 		mblog(E, tmpString);
 	}
+
+	setVolumeLabel();
 
 	mblog(I, "Log session begin");
 	

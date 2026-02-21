@@ -14,7 +14,7 @@
 #include "reporter.h"
 #include "audioPlayer.h"
 #include "wavPlayer.h"
-#include "3n_mosfet.h"
+#include "3n_MOSFET.h"
 #include "encoders.h"
 #include "tachometer.h"
 #include "analog.h"

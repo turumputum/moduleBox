@@ -11,7 +11,7 @@
 #include "esp_log.h"
 
 #include "executor.h"
-#include "3n_mosfet.h"
+#include "3n_MOSFET.h"
 #include "me_slot_config.h"
 #include "stateConfig.h"
 

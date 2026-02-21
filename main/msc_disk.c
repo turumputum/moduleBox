@@ -44,7 +44,7 @@ extern stateStruct me_state;
 extern wl_handle_t s_wl_handle;
 uint8_t s_pdrv;
 
-static const char *TAG = "MSD";
+//static const char *TAG = "MSD";
 
 uint8_t FLAG_PC_AVAILEBLE = 0;
 uint8_t FLAG_PC_EJECT=0;
@@ -126,6 +126,30 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
   return true;
 }
 
+void set_mbr_label(void* buffer, int lba)
+{
+  unsigned char* on = ((unsigned char*)buffer);
+
+  if ((0xEB == *(on + 0)) && (0x58 == *(on + 1)))
+  {
+      printf("setting label on LBA %d\n", lba);
+
+    memcpy(on + 0x47, "TEST_LABEL1", 11);
+
+    //printf("SETTING LEABEL!!\n");
+
+    // on = (unsigned char*)buffer;
+    // for (int i = 0; i < 512; i++, on++)
+    // {
+    //     printf("%.2x ", *on);
+
+    //     if (!(i % 16))
+    //       printf("\n");
+    // }
+    // printf("\n");
+  }
+}
+
 // Callback invoked when received READ10 command.
 // Copy disk's data to buffer (up to bufsize) and return number of copied bytes.
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize)
@@ -139,10 +163,18 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void* buff
       if(me_state.sd_init_res!=ESP_OK){
         const uint32_t block_count = bufsize / wl_sector_size(s_wl_handle);
         if (disk_read(s_pdrv,buffer,lba,block_count)==ESP_OK){
+
+          //if (1 == lba)
+            //set_mbr_label(buffer, lba);
+
           result = bufsize;
         }
       }else{
         if (spisd_sectors_read(buffer, lba, bufsize / spisd_get_sector_size()) > 0){
+
+          //if (0 == lba)
+            //set_mbr_label(buffer, lba);
+
           result = bufsize;
         }
       }

@@ -13,7 +13,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-#include "3n_mosfet.h"
+#include "3n_MOSFET.h"
 #include "stepper.h"
 #include "in_out.h"
 #include "reporter.h"
