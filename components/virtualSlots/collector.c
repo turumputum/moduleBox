@@ -28,9 +28,16 @@ static const char* TAG = "COLLECTOR";
 extern configuration me_config;
 extern stateStruct me_state;
 
+typedef enum{
+    COLLECTORCMD_add = 0,
+    COLLECTORCMD_clear = 1,
+} COLLECTORCMD;
+
 typedef struct __tag_COLLECTOR_CONFIG{
     uint8_t stringMaxLenght;
     uint16_t waitingTime;
+    int report;
+    STDCOMMANDS cmds;
 } COLLECTOR_CONFIG, * PCOLLECTOR_CONFIG;
 
 /* 
@@ -67,6 +74,20 @@ void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
     }
+
+    stdcommand_init(&ch->cmds, slot_num);
+
+    /* Добавить данные в строку коллектора
+    */
+    stdcommand_register(&ch->cmds, COLLECTORCMD_add, "add", PARAMT_string);
+
+    /* Очистить строку коллектора
+    */
+    stdcommand_register(&ch->cmds, COLLECTORCMD_clear, "clear", PARAMT_none);
+
+    /* Отчёт собранной строки
+    */
+    ch->report = stdreport_register(RPTT_string, slot_num, "", "");
 }
 
 void collector_task(void *arg) {
@@ -76,6 +97,7 @@ void collector_task(void *arg) {
 
     COLLECTOR_CONFIG c = {0};
     configure_collector(&c, slot_num);
+    STDCOMMAND_PARAMS params = {0};
 
     uint16_t string_lenght = 0;
     char str[c.stringMaxLenght + 1];
@@ -86,40 +108,40 @@ void collector_task(void *arg) {
     waitForWorkPermit(slot_num);
 
     while(1){
-        vTaskDelay(15 / portTICK_PERIOD_MS);
-        command_message_t msg;
-        if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-            char* payload = NULL;
-            char* cmd = msg.str + strlen(me_state.action_topic_list[slot_num]) + 1;
-            if(strstr(cmd, ":") != NULL){
-                cmd = strtok_r(cmd, ":", &payload);
-            }
-            
-            if(strstr(cmd, "clear") != NULL){
+        int cmd = stdcommand_receive(&c.cmds, &params, pdMS_TO_TICKS(15));
+        char * cmd_arg = (params.count > 0) ? params.p[0].p : NULL;
+
+        switch (cmd){
+            case -1: // none
+                break;
+
+            case COLLECTORCMD_clear:
                 memset(str, 0, sizeof(str));
                 string_lenght = 0;
                 state_flag = 0;
                 ESP_LOGD(TAG, "strUpdate:%s", str);
-            } else if(strstr(cmd, "add") != NULL){
-                if(payload != NULL){
-                    uint8_t len = strlen(payload);
+                break;
+
+            case COLLECTORCMD_add:
+                if(cmd_arg != NULL){
+                    uint8_t len = strlen(cmd_arg);
                     if(len + string_lenght > c.stringMaxLenght){
                         len = c.stringMaxLenght - string_lenght;
                     }
-                    strncat(str, payload, len);
-                    string_lenght += strlen(payload);
+                    strncat(str, cmd_arg, len);
+                    string_lenght += strlen(cmd_arg);
                     
                     if(state_flag == 0){
                         state_flag = 1;
                     }
                     dial_start_time = pdTICKS_TO_MS(xTaskGetTickCount());
                 }
-            }  
+                break;
         }
 
         if(state_flag == 1){
             if(((pdTICKS_TO_MS(xTaskGetTickCount()) - dial_start_time) >= c.waitingTime) || (string_lenght >= c.stringMaxLenght)){
-                report(str, slot_num);
+                stdreport_s(c.report, str);
                 memset(str, 0, c.stringMaxLenght);
                 state_flag = 0;
                 string_lenght = 0;

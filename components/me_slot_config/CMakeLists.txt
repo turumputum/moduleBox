@@ -40,6 +40,7 @@ idf_component_register(SRCS
                         virtualSlots 
                         3n_MOSFET 
                         esp_peripherals
+                        phoneDialer
 )
 
 

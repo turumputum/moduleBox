@@ -44,6 +44,6 @@ void start_scaler_task(int slot_num);
 void start_tankControl_task(int slot_num);
 
 // Stepper Conductor module
-void start_stepper_conductor_task(int slot_num);
+void start_conductor_task(int slot_num);
 
 #endif // VIRTUALSLOTS_H

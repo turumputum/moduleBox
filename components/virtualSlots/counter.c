@@ -37,6 +37,7 @@ typedef struct __tag_COUNTER_CONFIG{
     int32_t maxVal;
     int32_t threshold;
     int circularCounter;
+    int report;
     STDCOMMANDS cmds;
 } COUNTER_CONFIG, * PCOUNTER_CONFIG;
 
@@ -92,6 +93,10 @@ void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
        Параметр может быть задан инкрементально или абсолютно
     */
     stdcommand_register(&ch->cmds, COUNTERCMD_set, "set", PARAMT_string);
+
+    /* Отчёт значения счетчика
+    */
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "");
 }
 
 void counter_task(void *arg) {
@@ -121,10 +126,8 @@ void counter_task(void *arg) {
 
         if(state != prevState){
             prevState = state;
-            char tmpString[60];
-            sprintf(tmpString, "%ld", state);
-            report(tmpString, slot_num);
-            ESP_LOGD(TAG, "Counter report:%s", tmpString);
+            stdreport_i(c.report, state);
+            ESP_LOGD(TAG, "Counter report:%ld", state);
         }
 
         int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);

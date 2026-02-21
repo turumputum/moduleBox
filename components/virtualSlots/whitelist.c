@@ -144,7 +144,7 @@ void whitelist_task(void *arg) {
                     fclose(file);
                     
                     if(count == 0){
-                        report("/noMatches", slot_num);
+                        stdreport_i(c.report, 1);
                     }
                 }
                 break;

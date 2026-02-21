@@ -164,7 +164,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 
     /* Уровень громкости
     */
-	c->volume = get_option_int_val(slot_num, "volume", "", 70, 1, 4096);
+	c->volume = get_option_int_val(slot_num, "volume", "", 70, 0, 100);
 	if(c->volume>100){c->volume=100;}
 	if(c->volume<0){c->volume=0;}
 	ESP_LOGD(TAG, "Set volume:%d", c->volume);
@@ -446,12 +446,16 @@ void audio_task(void *arg) {
 				break;
  
             case MYCMD_stop:
-				if(c->attenuation!=0){
-					att_flag=1;
-					//ESP_LOGD(TAG, "attenuation start");
+				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(c->play_to_end==1)){
+					ESP_LOGD(TAG, "skip stop track");
 				}else{
-					audioStop();
-					audioSetIndicator(slot_num, 0);
+					if(c->attenuation!=0){
+						att_flag=1;
+						//ESP_LOGD(TAG, "attenuation start");
+					}else{
+						audioStop();
+						audioSetIndicator(slot_num, 0);
+					}
 				}
 				// char track_str[20];
 				// memset(track_str, 0, sizeof(track_str));

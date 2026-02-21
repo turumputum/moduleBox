@@ -241,6 +241,7 @@ void wavplayer_task(void *arg) {
 	gpio_set_level(led_pin, 0);
 
 	c->handler = wav_handle_init(TAG);
+	setVolume_num(c->handler, c->volume);
 
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
 			xPortGetFreeHeapSize());
@@ -278,22 +279,27 @@ void wavplayer_task(void *arg) {
 					trackShift(cmd_arg);
 					ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
 					vTaskDelay(pdMS_TO_TICKS(c->play_delay));
+					setVolume_num(c->handler, c->volume);
 					if(audioPlay(c->handler, me_state.currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);
 					}else{
 						audioSetIndicator(slot_num, 0);
-					}
-					setVolume_num(c->handler, c->volume);
+						}
 				}
 				break;
  
             case MYCMD_stop:
-				if(c->attenuation!=0){
-					att_flag=1;
-					ESP_LOGD(TAG, "attenuation start");
+			if (wav_handle_is_playing(c->handler) && (c->play_to_end==1))
+				{
+				 	ESP_LOGD(TAG, "skip restart track");
 				}else{
-					audioStop(c->handler);
-					audioSetIndicator(slot_num, 0);
+					if(c->attenuation!=0){
+						att_flag=1;
+						ESP_LOGD(TAG, "attenuation start");
+					}else{
+						audioStop(c->handler);
+						audioSetIndicator(slot_num, 0);
+					}
 				}
 				break;
 
@@ -316,7 +322,8 @@ void wavplayer_task(void *arg) {
             case MYCMD_setVolume:
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
-					setVolume_num(c->handler, params.p[0].i);
+					c->volume = params.p[0].i;
+					setVolume_num(c->handler, c->volume);
 				}
 				break;
 		}

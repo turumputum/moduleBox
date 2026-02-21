@@ -27,12 +27,18 @@ static const char* TAG = "SCALER";
 extern configuration me_config;
 extern stateStruct me_state;
 
+typedef enum{
+    SCALERCMD_set = 0,
+} SCALERCMD;
+
 typedef struct __tag_SCALER_CONFIG{
     int16_t zeroDeadZone;
     int32_t inputMinVal;
     int32_t inputMaxVal;
     int32_t outputMinVal;
     int32_t outputMaxVal;
+    int report;
+    STDCOMMANDS cmds;
 } SCALER_CONFIG, * PSCALER_CONFIG;
 
 /* 
@@ -85,6 +91,16 @@ void configure_scaler(PSCALER_CONFIG ch, int slot_num)
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
     }
+
+    stdcommand_init(&ch->cmds, slot_num);
+
+    /* Установить входное значение для масштабирования
+    */
+    stdcommand_register(&ch->cmds, SCALERCMD_set, NULL, PARAMT_int);
+
+    /* Отчёт масштабированного значения
+    */
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "");
 }
 
 void scaler_task(void* arg) {
@@ -94,18 +110,20 @@ void scaler_task(void* arg) {
 
     SCALER_CONFIG c = {0};
     configure_scaler(&c, slot_num);
+    STDCOMMAND_PARAMS params = {0};
 
     waitForWorkPermit(slot_num);
 
     while(1){
-        command_message_t cmd;
-        if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
-            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]);
-            if(strstr(command, ":") == NULL){
-                ESP_LOGE(TAG, "No arguments found. EXIT"); 
-            } else {
-                char *cmd_arg = strstr(command, ":") + 1;
-                int32_t inputVal = atoi(cmd_arg);
+        int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);
+
+        switch (cmd){
+            case -1: // none
+                break;
+
+            case SCALERCMD_set:
+            {
+                int32_t inputVal = params.p[0].i;
                 
                 if(inputVal < c.inputMinVal){
                     inputVal = c.inputMinVal;
@@ -126,10 +144,8 @@ void scaler_task(void* arg) {
                     outputVal = 0;
                 }
                 
-                char str[50];
-                memset(str, 0, sizeof(str));
-                sprintf(str, "%ld", (int32_t)outputVal);
-                report(str, slot_num);
+                stdreport_i(c.report, (int32_t)outputVal);
+                break;
             }
         }
     }

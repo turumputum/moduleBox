@@ -30,6 +30,7 @@ extern stateStruct me_state;
 
 typedef struct __tag_TIMER_CONFIG{
     uint32_t time;
+    int timerEndReport;
     STDCOMMANDS cmds;
 } TIMER_CONFIG, * PTIMER_CONFIG;
 
@@ -76,6 +77,10 @@ void configure_timer(PTIMER_CONFIG ch, int slot_num){
     /* Остановить таймер
     */
     stdcommand_register(&ch->cmds, TIMERCMD_stop, "stop", PARAMT_none);
+
+    /* Отчёт о срабатывании таймера
+    */
+    ch->timerEndReport = stdreport_register(RPTT_string, slot_num, "", "timerEnd");
 }
 
 static void IRAM_ATTR timer_isr_handler(void* arg){
@@ -108,7 +113,7 @@ void timer_task(void *arg) {
     while(1){
         uint8_t tmp;
         if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 10) == pdPASS){
-            report("/timerEnd", slot_num);
+            stdreport_s(c.timerEndReport, "");
         }
 
         int cmd = stdcommand_receive(&c.cmds, &params, 5);

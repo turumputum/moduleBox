@@ -27,11 +27,21 @@ static const char* TAG = "CONDUCTOR";
 extern configuration me_config;
 extern stateStruct me_state;
 
+typedef enum{
+    CONDUCTORCMD_currentPos = 0,
+    CONDUCTORCMD_targetPos,
+    CONDUCTORCMD_stop,
+} CONDUCTORCMD;
+
 typedef struct __tag_CONDUCTOR_CONFIG{
     int32_t minVal;
     int32_t maxVal;
     uint8_t multiTurnKinematics;
     uint32_t timeout;
+    STDCOMMANDS cmds;
+    int stopReport;
+    int runUpReport;
+    int runDownReport;
 } CONDUCTOR_CONFIG, * PCONDUCTOR_CONFIG;
 
 /* 
@@ -80,15 +90,42 @@ void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
         me_state.action_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard topic:%s", me_state.trigger_topic_list[slot_num]);
     }
+
+    stdcommand_init(&ch->cmds, slot_num);
+
+    /* Обновление текущей позиции от энкодера
+    */
+    stdcommand_register(&ch->cmds, CONDUCTORCMD_currentPos, "currentPos", PARAMT_int);
+
+    /* Задать целевую позицию
+    */
+    stdcommand_register(&ch->cmds, CONDUCTORCMD_targetPos, "targetPos", PARAMT_int);
+
+    /* Остановить двигатель
+    */
+    stdcommand_register(&ch->cmds, CONDUCTORCMD_stop, "stop", PARAMT_none);
+
+    /* Отчёт остановки двигателя
+    */
+    ch->stopReport = stdreport_register(RPTT_string, slot_num, "", "stop");
+
+    /* Отчёт движения вверх
+    */
+    ch->runUpReport = stdreport_register(RPTT_string, slot_num, "", "runUp");
+
+    /* Отчёт движения вниз
+    */
+    ch->runDownReport = stdreport_register(RPTT_string, slot_num, "", "runDown");
 }
 
-void stepper_conductor_task(void *arg) {
+void conductor_task(void *arg) {
     int slot_num = *(int*) arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
     CONDUCTOR_CONFIG c = {0};
     configure_conductor(&c, slot_num);
+    STDCOMMAND_PARAMS params = {0};
 
     int32_t turnSize = c.maxVal - c.minVal;
 
@@ -100,40 +137,38 @@ void stepper_conductor_task(void *arg) {
     waitForWorkPermit(slot_num);
 
     while (1) {
-        command_message_t cmd;
-        
         // Проверка таймаута
         if (isMoving && c.timeout > 0) {
             int64_t currentTime = esp_timer_get_time() / 1000;
             if (currentTime - lastCommandTime > c.timeout) {
                 ESP_LOGD(TAG, "Timeout reached, stopping motor");
-                report("/stop", slot_num);
+                stdreport_s(c.stopReport, "");
                 lastCommandTime = esp_timer_get_time() / 1000;
                 isMoving = 0;
             }
         }
         
-        // Обработка команд
-        if (xQueueReceive(me_state.command_queue[slot_num], &cmd, isMoving ? 10 : portMAX_DELAY) == pdPASS) {
-            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]) + 1;
-            
-            // Обновление текущей позиции от энкодера
-            if (strstr(command, "currentPos:") != NULL) {
-                char *posStr = strstr(command, "currentPos:") + 11;
-                currentPosition = atoi(posStr);
+        int cmd = stdcommand_receive(&c.cmds, &params, isMoving ? 10 : portMAX_DELAY);
+
+        switch (cmd) {
+            case -1: // none
+                break;
+
+            case CONDUCTORCMD_currentPos:
+                currentPosition = params.p[0].i;
                 
                 // Проверка достижения целевой позиции
                 if (isMoving && currentPosition == targetPosition) {
-                    report("/stop", slot_num);
+                    stdreport_s(c.stopReport, "");
                     lastCommandTime = esp_timer_get_time() / 1000;
                     isMoving = 0;
                     ESP_LOGD(TAG, "Target position reached: %ld", currentPosition);
                 }
-            }
-            // Обработка команды целевой позиции
-            else if (strstr(command, "targetPos:") != NULL) {
-                char *targetStr = strstr(command, "targetPos:") + 10;
-                int32_t newTargetPos = atoi(targetStr);
+                break;
+
+            case CONDUCTORCMD_targetPos:
+            {
+                int32_t newTargetPos = params.p[0].i;
                 
                 // Ограничение целевой позиции
                 if (newTargetPos < c.minVal) {
@@ -177,35 +212,36 @@ void stepper_conductor_task(void *arg) {
                     
                     // Отправка команды движения
                     if (direction > 0) {
-                        report("/runUp", slot_num);
+                        stdreport_s(c.runUpReport, "");
                         ESP_LOGD(TAG, "Moving up to target: %ld from current: %ld", targetPosition, currentPosition);
                     } else {
-                        report("/runDown", slot_num);
+                        stdreport_s(c.runDownReport, "");
                         ESP_LOGD(TAG, "Moving down to target: %ld from current: %ld", targetPosition, currentPosition);
                     }
                     
                     isMoving = 1;
                     lastCommandTime = esp_timer_get_time() / 1000;
                 }
+                break;
             }
-            // Обработка команды остановки
-            else if (strstr(command, "stop") != NULL) {
-                report("/stop", slot_num);
+
+            case CONDUCTORCMD_stop:
+                stdreport_s(c.stopReport, "");
                 lastCommandTime = esp_timer_get_time() / 1000;
                 isMoving = 0;
                 ESP_LOGD(TAG, "Stop command received");
-            }
+                break;
         }
     }
 }
 
-void start_stepper_conductor_task(int slot_num) {
+void start_conductor_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
     int t_slot_num = slot_num;
     char tmpString[60];
-    sprintf(tmpString, "stepper_conductor_task_%d", slot_num);
-    xTaskCreatePinnedToCore(stepper_conductor_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
-    ESP_LOGD(TAG, "stepper_conductor_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+    sprintf(tmpString, "conductor_task_%d", slot_num);
+    xTaskCreatePinnedToCore(conductor_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    ESP_LOGD(TAG, "conductor_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 const char * get_manifest_conductor()

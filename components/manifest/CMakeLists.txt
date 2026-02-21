@@ -8,6 +8,6 @@ endif()
 
 idf_component_register(SRCS "manifest.c"
                     INCLUDE_DIRS "include"
-                    REQUIRES stateConfig arsenal wavPlayer)
+                    REQUIRES stateConfig arsenal )
 
 

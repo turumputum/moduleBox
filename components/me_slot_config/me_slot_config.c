@@ -46,6 +46,7 @@
 #include <rgbHsv.h>
 #include <stdreport.h>
 #include "audioLAN.h"
+#include "dialer.h"
 #include <mbdebug.h>
 
 
@@ -207,7 +208,7 @@ int init_slots(void){
 		}else if(!memcmp(me_config.slot_mode[i], "furbyEye", 8)){
 			start_furbyEye_task(i); // W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
-			start_stepper_conductor_task(i); // NOW, NOC
+			start_conductor_task(i); // NOW, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "st7789", 6)){
 			start_st7789_task(i); 
 		}

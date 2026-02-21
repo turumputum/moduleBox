@@ -104,10 +104,7 @@ void random_task(void *arg) {
             case RNDCMD_gen: 
                 int16_t val = (rand() % (c.maxVal - c.minVal + 1)) + c.minVal;
                 ESP_LOGD(TAG, "Gen:%d max:%ld min:%ld", val, c.maxVal, c.minVal);
-                
-                char tmpString[60];
-                sprintf(tmpString, "%d", val);
-                report(tmpString, slot_num);
+                stdreport_i(c.report, val);
                 break;
         }
     }
