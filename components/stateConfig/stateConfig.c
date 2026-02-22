@@ -20,6 +20,7 @@
 #include "help.h"
 #include <axstring.h>
 #include <mbdebug.h>
+#include "esp_heap_caps.h"
 
 #define TAG "stateConfig"
 
@@ -246,6 +247,7 @@ void load_Default_Config(void) {
 	me_state.OSC_init_res = ESP_FAIL;
 
 	me_state.numOfTrack = 0;
+	me_config.soundTracks = NULL;
 	
 	me_state.MQTT_init_res = ESP_FAIL;
 
@@ -272,8 +274,6 @@ void load_Default_Config(void) {
 	}
 
 	me_config.startup_crosslink = strdup("");
-
-	strcpy(me_config.audioExtension, ".mp3");
 
 	ESP_LOGD(TAG, "Load default config complite. Duration:%ld ms. Heap usage:%lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -439,6 +439,10 @@ uint8_t loadContent(void) {
 }
 
 uint8_t scan_dir(const char *path) {
+	if (me_config.soundTracks == NULL) {
+		ESP_LOGW(TAG, "scan_dir: soundTracks not allocated, use scanSoundTracks() instead");
+		return 0;
+	}
 	FRESULT res;
 	FF_DIR dir;
 	FILINFO fno;
@@ -457,57 +461,152 @@ uint8_t scan_dir(const char *path) {
 					} else {
 						// file founded
 						char *detect = strrchr(fno.fname, '.');
-						//ESP_LOGD(TAG, "{scanFileSystem} cut extension: %s ", detect);
-						if (strcasecmp(detect, me_config.audioExtension) == 0) {
-							//ESP_LOGD(TAG, "{scanFileSystem} soundFile founded ");
+						if (detect != NULL && strcasecmp(detect, ".mp3") == 0) {
 							if (strcmp(path, "/") == 0) {
 								sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s", fno.fname);
 							} else {
 								sprintf(me_config.soundTracks[soundIndex], "/sdcard/%s/%s", path, fno.fname);
 							}
 							soundIndex++;
+							}
 						}
-						//ESP_LOGD(TAG, "{scanFileSystem} File found ");
 					}
+				} else {
+					break;
 				}
-			} else {
-				break;
 			}
 		}
-	}
 	return soundIndex;
 }
 
 void printTrackList() {
-	for (int i = 0; i < MAX_NUM_OF_TRACKS; i++) {
+	if (me_config.soundTracks == NULL) return;
+	for (int i = 0; i < me_state.numOfTrack; i++) {
 		ESP_LOGD(TAG, "{scanFileSystem} num:%d --- %s --- ", i, (char* )me_config.soundTracks[i]);
 	}
 }
 
 uint8_t fillSoundTrackList() {
-	uint32_t startTick = xTaskGetTickCount();
-	uint32_t heapBefore = xPortGetFreeHeapSize();
-	ESP_LOGD(TAG, "fillSoundTrackList: audio extension for searching '%s'", me_config.audioExtension);
+	ESP_LOGW(TAG, "fillSoundTrackList: deprecated, use scanSoundTracks() instead");
+	return scanSoundTracks(".mp3");
+}
 
-	me_state.numOfTrack = 0;
-	for (int i = 0; i < MAX_NUM_OF_TRACKS; i++) {
-		memset(me_config.soundTracks[i], 0, 254);
-	}
+//-----------------------------------------------------------------------
+// scanSoundTracks — рекурсивное сканирование SD-карты, список в PSRAM
+//-----------------------------------------------------------------------
 
-	me_state.numOfTrack = scan_dir("/");
-	ESP_LOGD(TAG, "scan end, lets sort");
+static uint8_t _scanDir_psram(const char *fatfs_path, const char *vfs_prefix,
+                               const char *extension, file_t *tracks, uint8_t count)
+{
+    FF_DIR dir;
+    FILINFO fno;
 
-	//---sorting sound trucks---
-	if (me_state.numOfTrack > 1) {
-		qsort(me_config.soundTracks, me_state.numOfTrack, FILE_NAME_LEGHT, (int (*)(const void*, const void*)) strcmp);
-	}
-	ESP_LOGD(TAG, "sort end");
-	//printTrackList();
-	printTrackList();
+    if (f_opendir(&dir, fatfs_path) != FR_OK) {
+        ESP_LOGW(TAG, "scanSoundTracks: cannot open dir '%s'", fatfs_path);
+        return count;
+    }
 
-	ESP_LOGI(TAG, "Search for audio tracks on FS completed. Tracks:%d Duration: %ld ms. Heap usage: %lu", me_state.numOfTrack, (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
-	return ESP_OK;
+    while (count < MAX_NUM_OF_TRACKS) {
+        if (f_readdir(&dir, &fno) != FR_OK || fno.fname[0] == 0) {
+            break;
+        }
+        // Пропускаем скрытые файлы/папки
+        if (fno.fattrib & AM_HID) {
+            continue;
+        }
 
+        // Промежуточные буферы с запасом для склейки путей
+        char sub_fatfs[512];
+        char sub_vfs[512];
+
+        if (strcmp(fatfs_path, "/") == 0) {
+            snprintf(sub_fatfs, sizeof(sub_fatfs), "/%s", fno.fname);
+            snprintf(sub_vfs, sizeof(sub_vfs), "%s/%s", vfs_prefix, fno.fname);
+        } else {
+            snprintf(sub_fatfs, sizeof(sub_fatfs), "%s/%s", fatfs_path, fno.fname);
+            snprintf(sub_vfs, sizeof(sub_vfs), "%s/%s", vfs_prefix, fno.fname);
+        }
+
+        if (fno.fattrib & AM_DIR) {
+            // Рекурсия в подпапку
+            count = _scanDir_psram(sub_fatfs, sub_vfs, extension, tracks, count);
+        } else {
+            // Проверяем расширение
+            char *dot = strrchr(fno.fname, '.');
+            if (dot != NULL && strcasecmp(dot, extension) == 0) {
+                // Пропускаем файлы с путём длиннее лимита
+                if (strlen(sub_vfs) >= FILE_NAME_LEGHT) {
+                    ESP_LOGW(TAG, "scanSoundTracks: path too long, skipped: %s", sub_vfs);
+                    continue;
+                }
+                strncpy(tracks[count], sub_vfs, FILE_NAME_LEGHT - 1);
+                tracks[count][FILE_NAME_LEGHT - 1] = '\0';
+                count++;
+                //ESP_LOGD(TAG, "scanSoundTracks: [%d] %s", count - 1, tracks[count - 1]);
+            }
+        }
+    }
+
+    f_closedir(&dir);
+    return count;
+}
+
+uint8_t scanSoundTracks(const char *extension)
+{
+    uint32_t startTick = xTaskGetTickCount();
+    ESP_LOGI(TAG, "scanSoundTracks: searching for '%s' files...", extension);
+
+    // Если массив уже выделен ранее — освобождаем
+    if (me_config.soundTracks != NULL) {
+        heap_caps_free(me_config.soundTracks);
+        me_config.soundTracks = NULL;
+    }
+    me_state.numOfTrack = 0;
+
+    // Выделяем массив MAX_NUM_OF_TRACKS записей в PSRAM
+    size_t alloc_size = (size_t)MAX_NUM_OF_TRACKS * sizeof(file_t);
+    me_config.soundTracks = (file_t *)heap_caps_calloc(MAX_NUM_OF_TRACKS, sizeof(file_t), MALLOC_CAP_SPIRAM);
+    if (me_config.soundTracks == NULL) {
+        ESP_LOGE(TAG, "scanSoundTracks: PSRAM alloc failed (%u bytes)", (unsigned)alloc_size);
+        return ESP_FAIL;
+    }
+    ESP_LOGD(TAG, "scanSoundTracks: allocated %u bytes in PSRAM", (unsigned)alloc_size);
+
+    // Рекурсивное сканирование корня SD-карты
+    uint8_t found = _scanDir_psram("/", "/sdcard", extension, me_config.soundTracks, 0);
+    me_state.numOfTrack = found;
+
+    // Сортировка по алфавиту
+    if (found > 1) {
+        qsort(me_config.soundTracks, found, sizeof(file_t),
+              (int (*)(const void *, const void *))strcmp);
+    }
+
+    // Если треков мало — ужимаем блок в PSRAM до реального размера
+    if (found == 0) {
+        heap_caps_free(me_config.soundTracks);
+        me_config.soundTracks = NULL;
+        ESP_LOGW(TAG, "scanSoundTracks: no tracks found");
+    } else if (found < MAX_NUM_OF_TRACKS) {
+        file_t *shrunk = (file_t *)heap_caps_realloc(me_config.soundTracks,
+                                                      (size_t)found * sizeof(file_t),
+                                                      MALLOC_CAP_SPIRAM);
+        if (shrunk != NULL) {
+            me_config.soundTracks = shrunk;
+        }
+    }
+
+    // // Логируем результат
+    // for (int i = 0; i < found; i++) {
+    //     ESP_LOGI(TAG, "  track[%d]: %s", i, me_config.soundTracks[i]);
+    // }
+
+    ESP_LOGI(TAG, "scanSoundTracks: found %d tracks in %ld ms",
+             found, (xTaskGetTickCount() - startTick) * portTICK_RATE_MS);
+
+    me_state.content_search_res = (found > 0) ? ESP_OK : ESP_FAIL;
+
+    return (found > 0) ? ESP_OK : ESP_FAIL;
 }
 
 void debugTopicLists(void){

@@ -283,6 +283,9 @@ void audio_task(void *arg) {
 
 	configure_mp3Player(c, slot_num);
 
+	// Сканируем SD-карту на MP3-файлы (список в PSRAM)
+	scanSoundTracks(".mp3");
+
 	// char init_report[32];
 	// memset(init_report, 0, sizeof(init_report));
 	// sprintf(init_report, "/volume:%d", c->volume);
@@ -588,13 +591,25 @@ void setVolume_str(char *cmd){
 }
 
 esp_err_t audioPlay(uint8_t truckNum) {
-	//uint32_t heapBefore = xPortGetFreeHeapSize();
-	
+	if (me_config.soundTracks == NULL || truckNum >= me_state.numOfTrack) {
+		ESP_LOGE(TAG, "No tracks available or invalid track index %d (total: %d)", truckNum, me_state.numOfTrack);
+		mblog(E, "mp3Player: no tracks or invalid index %d", truckNum);
+		return ESP_FAIL;
+	}
+
     if (strlen(me_config.soundTracks[truckNum]) == 0) {
-        ESP_LOGE(TAG, "mp3Player: Empty filename for track %d", truckNum);
-        mblog(ESP_LOG_ERROR,"mp3Player: No files to play %d", truckNum);
+        ESP_LOGE(TAG, "Empty filename for track %d", truckNum);
+        mblog(E, "mp3Player: empty filename for track %d", truckNum);
 		return ESP_FAIL;
     }
+
+	FILE *test = fopen(me_config.soundTracks[truckNum], "rb");
+	if (test == NULL) {
+		ESP_LOGE(TAG, "File not found: %s", me_config.soundTracks[truckNum]);
+		mblog(E, "mp3Player: file not found: %s", me_config.soundTracks[truckNum]);
+		return ESP_FAIL;
+	}
+	fclose(test);
 
 	audio_element_state_t el_state = audio_element_get_state(i2s_stream_writer);
 	if(el_state==AEL_STATE_RUNNING){
@@ -608,7 +623,6 @@ esp_err_t audioPlay(uint8_t truckNum) {
 	ESP_ERROR_CHECK(audio_pipeline_run(pipeline));
 
 	ESP_LOGD(TAG, "Playing file: %s", me_config.soundTracks[truckNum]);
-
 
 	return ESP_OK;
 }

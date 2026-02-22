@@ -509,21 +509,9 @@ void app_main(void)
 
 	me_state.slot_init_res = init_slots();
 
-    fillSoundTrackList();
-
 	//start_dwinUart_task(1);
 	//debugTopicLists();
 	
-	if (strstr(me_config.slot_mode[0], "audioPlayer") != NULL) {
-		me_state.content_search_res = loadContent();
-		if (me_state.content_search_res != ESP_OK)	{
-			ESP_LOGD(TAG, "Load Content FAIL");
-			mblog(E, "Load content FAIL");
-		}
-	}else{
-		me_state.content_search_res = ESP_FAIL;
-	}
-
 	start_scheduler_task();
 
 	startNetworkServices();

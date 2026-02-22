@@ -34,6 +34,7 @@
 
 #include "reporter.h"
 #include "executor.h"
+#include <mbdebug.h>
 
 #include "stateConfig.h"
 #include "me_slot_config.h"
@@ -235,6 +236,9 @@ void wavplayer_task(void *arg) {
 
 	configure_wavPlayer(c, slot_num);
 
+	// Сканируем SD-карту на WAV-файлы (список в PSRAM)
+	scanSoundTracks(".wav");
+
 	// Инициализация GPIO пина для светодиода
 	esp_rom_gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
@@ -351,8 +355,6 @@ void wavPlayerInit(uint8_t slot_num){
 	int t_slot_num = slot_num;
 	char tmpString[60];
 
-	strcpy(me_config.audioExtension, ".wav");
-
 	sprintf(tmpString, "task_wavplayer_%d", slot_num);
 	xTaskCreatePinnedToCore(wavplayer_task, tmpString, 1024*8, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
 }
@@ -402,22 +404,27 @@ static void setVolume_num(wav_handle_t h, uint8_t vol) {
 
 static esp_err_t audioPlay(wav_handle_t h, uint8_t truckNum) 
 {
-	ESP_LOGI(TAG, "=== Attempting to play track #%d ===", truckNum);
-	ESP_LOGI(TAG, "File path: '%s'", me_config.soundTracks[truckNum]);
-	ESP_LOGI(TAG, "Total tracks available: %d", me_state.numOfTrack);
-	
-	// // Check if file exists
-	// FILE* test_file = fopen(me_config.soundTracks[truckNum], "rb");
-	// if (test_file != NULL) {
-	// 	fclose(test_file);
-	// 	ESP_LOGI(TAG, "File exists and is accessible");
-	// } else {
-	// 	ESP_LOGE(TAG, "File does NOT exist or cannot be accessed!");
-	// 	return ESP_FAIL;
-	// }
+	if (me_config.soundTracks == NULL || truckNum >= me_state.numOfTrack) {
+		ESP_LOGE(TAG, "No tracks available or invalid track index %d (total: %d)", truckNum, me_state.numOfTrack);
+		mblog(E, "wavPlayer: no tracks or invalid index %d", truckNum);
+		return ESP_FAIL;
+	}
+
+	if (strlen(me_config.soundTracks[truckNum]) == 0) {
+		ESP_LOGE(TAG, "Empty filename for track %d", truckNum);
+		mblog(E, "wavPlayer: empty filename for track %d", truckNum);
+		return ESP_FAIL;
+	}
+
+	FILE *test = fopen(me_config.soundTracks[truckNum], "rb");
+	if (test == NULL) {
+		ESP_LOGE(TAG, "File not found: %s", me_config.soundTracks[truckNum]);
+		mblog(E, "wavPlayer: file not found: %s", me_config.soundTracks[truckNum]);
+		return ESP_FAIL;
+	}
+	fclose(test);
 
 	ESP_LOGD(TAG, "Playing file: %s", me_config.soundTracks[truckNum]);
-
 	wav_handle_play(h, me_config.soundTracks[truckNum]);
 
 	return ESP_OK;

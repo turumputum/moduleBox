@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <schedule_parser.h>
 
-#define MAX_NUM_OF_TRACKS 10
-#define FILE_NAME_LEGHT 300
+#define MAX_NUM_OF_TRACKS 254
+#define FILE_NAME_LEGHT 254
 #define INIT_OK 0
 #define INIT_FAIL -1
 
@@ -148,7 +148,7 @@ typedef struct {
 	uint8_t loop;
 	uint8_t volume;
 
-	file_t soundTracks[MAX_NUM_OF_TRACKS];
+	file_t *soundTracks;  // Указатель на массив в PSRAM, выделяется в scanSoundTracks()
 
 	char *slot_mode[NUM_OF_SLOTS];
 	char *slot_options[NUM_OF_SLOTS];
@@ -157,7 +157,6 @@ typedef struct {
 	char *startup_crosslink;
 
 	char configFile[FILE_NAME_LEGHT];
-	char audioExtension[10];
 
 	uint8_t f_report_udp;
 	uint8_t f_report_osc;
@@ -180,6 +179,7 @@ int saveConfig(void);
 void debugTopicLists(void);
 uint8_t fillSoundTrackList();
 uint8_t scan_dir(const char *path);
+uint8_t scanSoundTracks(const char *extension);
 
 #define EVERY_SLOT		-1
 #define waitForWorkPermit(a) waitForWorkPermit_((a), __FUNCTION__)
