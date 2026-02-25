@@ -2,6 +2,19 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
+echo Увеличиваю версию на 0.01 в stateConfig.h...
+set "HEADER=components\stateConfig\include\stateConfig.h"
+for /f "tokens=2 delims=	 " %%A in ('findstr /C:"#define VERSION" "%HEADER%"') do set "OLD_VER=%%~A"
+for /f "tokens=1,2 delims=." %%A in ("%OLD_VER%") do (
+    set /a MINOR=%%B+1
+    set "MAJOR=%%A"
+)
+setlocal enabledelayedexpansion
+set "NEW_VER=%MAJOR%.!MINOR!"
+echo Версия: %OLD_VER% -^> !NEW_VER!
+powershell -Command "(Get-Content '%HEADER%') -replace '#define VERSION\s+\"%OLD_VER%\"', '#define VERSION \t\"!NEW_VER!\"' | Set-Content '%HEADER%'"
+endlocal
+
 echo Удаляю старый moduleBox.bin из bootldsd...
 del /f "bootldsd\moduleBox.bin" 2>nul
 

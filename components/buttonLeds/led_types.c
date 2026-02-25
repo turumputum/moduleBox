@@ -193,10 +193,7 @@ void update_led_basic(PLEDCONFIG c, ledc_channel_config_t *ledc_channel, int16_t
         }
     }
 
-    uint8_t fade_increment = (uint8_t)((c->maxBright - c->minBright) * c->refreshPeriod / c->fadeTime);
-    if (fade_increment < 1) fade_increment = 1;
-
-    checkBright(currentBright, *targetBright, fade_increment);
+    checkBright(currentBright, *targetBright, c->increment);
 
     if (*currentBright != *appliedBright)
     {
