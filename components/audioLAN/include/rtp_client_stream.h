@@ -62,6 +62,9 @@ typedef struct {
     int                         task_core;          /*!< Task running in core (0 or 1) */
     int                         task_prio;          /*!< Task priority (based on freeRTOS priority) */
     bool                        ext_stack;          /*!< Allocate stack on extern ram */
+    int                         buf_size;           /*!< Audio element buffer size (0 = default RTP_STREAM_BUF_SIZE) */
+    int                         sample_rate;        /*!< Audio sample rate in Hz (e.g. 8000, 16000, 44100, 48000) */
+    int                         bits_per_sample;    /*!< Bits per audio sample (e.g. 8, 16, 24, 32) */
     rtp_stream_event_handle_cb  event_handler;      /*!< TCP stream event callback*/
     void                        *event_ctx;         /*!< User context*/
 } rtp_stream_cfg_t;
@@ -78,17 +81,23 @@ typedef struct {
 
 #define RTP_SERVER_DEFAULT_RESPONSE_LENGTH  (512)
 
+#define RTP_STREAM_DEFAULT_SAMPLE_RATE       (48000)
+#define RTP_STREAM_DEFAULT_BITS_PER_SAMPLE   (16)
+
 #define RTP_STREAM_CFG_DEFAULT() {              \
-    .type          = AUDIO_STREAM_READER,       \
-    .timeout_ms    = 30 *1000,                  \
-    .port          = RTP_STREAM_DEFAULT_PORT,   \
-    .host          = NULL,                      \
-    .task_stack    = RTP_STREAM_TASK_STACK,     \
-    .task_core     = RTP_STREAM_TASK_CORE,      \
-    .task_prio     = RTP_STREAM_TASK_PRIO,      \
-    .ext_stack     = true,                      \
-    .event_handler = NULL,                      \
-    .event_ctx     = NULL,                      \
+    .type            = AUDIO_STREAM_READER,     \
+    .timeout_ms      = 30 *1000,                \
+    .port            = RTP_STREAM_DEFAULT_PORT, \
+    .host            = NULL,                    \
+    .task_stack      = RTP_STREAM_TASK_STACK,   \
+    .task_core       = RTP_STREAM_TASK_CORE,    \
+    .task_prio       = RTP_STREAM_TASK_PRIO,    \
+    .ext_stack       = true,                    \
+    .buf_size        = RTP_STREAM_BUF_SIZE,     \
+    .sample_rate     = RTP_STREAM_DEFAULT_SAMPLE_RATE,     \
+    .bits_per_sample = RTP_STREAM_DEFAULT_BITS_PER_SAMPLE, \
+    .event_handler   = NULL,                    \
+    .event_ctx       = NULL,                    \
 }
 
 /**

@@ -75,6 +75,8 @@ typedef struct rtp_stream {
     bool                          is_multicast;  // Flag to indicate if this is a multicast stream
     char                          prev_host[16]; // Store previous host for leaving multicast group
     int64_t                       last_packet_time;
+    int                           sample_rate;
+    int                           bits_per_sample;
 } rtp_stream_t;
 
 struct rtp_header {
@@ -604,9 +606,7 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
     cfg.task_core = config->task_core;
     cfg.stack_in_ext = config->ext_stack;
     cfg.tag = "rtp_client";
-    if (cfg.buffer_len == 0) {
-        cfg.buffer_len = RTP_STREAM_BUF_SIZE;
-    }
+    cfg.buffer_len = (config->buf_size > 0) ? config->buf_size : RTP_STREAM_BUF_SIZE;
 
     rtp_stream_t *rtp = audio_calloc(1, sizeof(rtp_stream_t));
     AUDIO_MEM_CHECK(TAG, rtp, return NULL);
@@ -614,6 +614,8 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
     rtp->type = config->type;
     rtp->port = config->port;
     rtp->host = config->host;
+    rtp->sample_rate = (config->sample_rate > 0) ? config->sample_rate : RTP_STREAM_DEFAULT_SAMPLE_RATE;
+    rtp->bits_per_sample = (config->bits_per_sample > 0) ? config->bits_per_sample : RTP_STREAM_DEFAULT_BITS_PER_SAMPLE;
     rtp->is_multicast = (config->host != NULL && strlen(config->host) > 0) ? true : false;  // Check if this is a multicast address
     if (config->host) {
         strncpy(rtp->prev_host, config->host, sizeof(rtp->prev_host) - 1);

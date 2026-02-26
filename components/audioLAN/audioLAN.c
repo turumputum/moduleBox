@@ -50,6 +50,9 @@ typedef struct __tag_RTPCONFIG{
 	uint8_t                 group;
     uint16_t                port;
     char *                  host;
+    int                     sample_rate;
+    int                     bits_per_sample;
+    int                     buf_size;
     
     int                    stateReport;
     int                    volumeReport;
@@ -189,10 +192,11 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
     rtp_stream_cfg_t rtp_cfg = RTP_STREAM_CFG_DEFAULT();
     rtp_cfg.type = AUDIO_STREAM_READER;
     rtp_cfg.port = c->port;
-    //rtp_cfg.port = 7777;
     rtp_cfg.host = c->host;
-    //rtp_cfg.host = "239.0.7.1";
-    rtp_cfg.task_core=0;
+    rtp_cfg.task_core = 0;
+    rtp_cfg.buf_size = c->buf_size;
+    rtp_cfg.sample_rate = c->sample_rate;
+    rtp_cfg.bits_per_sample = c->bits_per_sample;
     c->rtp_stream_reader = rtp_stream_init(&rtp_cfg);
     AUDIO_NULL_CHECK(TAG, c->rtp_stream_reader, return ESP_FAIL);
 
@@ -219,7 +223,7 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
     ESP_LOGI(TAG, "[ 5 ] Start audio_pipeline");
     audio_pipeline_run(c->pipeline);
 
-    i2s_stream_set_clk(c->i2s_stream_writer, 48000, 16, 2);
+    i2s_stream_set_clk(c->i2s_stream_writer, c->sample_rate, c->bits_per_sample, 2);
 
 	return ESP_OK;
 }
@@ -264,6 +268,24 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 	*/
 	c->port =  get_option_int_val(slot_num, "port", "num", 7777, 0, UINT16_MAX);
     ESP_LOGD(TAG, "[LANplayer_%d] port:%d", slot_num, c->port);
+
+    /* Sample rate
+    - по умолчанию 48000
+	*/
+	c->sample_rate = get_option_int_val(slot_num, "sampleRate", "num", 48000, 8000, 96000);
+    ESP_LOGD(TAG, "[LANplayer_%d] sampleRate:%d", slot_num, c->sample_rate);
+
+    /* Bits per sample
+    - по умолчанию 16
+	*/
+	c->bits_per_sample = get_option_int_val(slot_num, "bitsPerSample", "num", 16, 8, 32);
+    ESP_LOGD(TAG, "[LANplayer_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
+
+    /* Размер буфера
+    - по умолчанию 1024
+	*/
+	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 1024, 256, 8192);
+    ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d", slot_num, c->buf_size);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         /* Топик 
