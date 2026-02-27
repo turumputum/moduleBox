@@ -46,6 +46,7 @@
 #include <rgbHsv.h>
 #include <stdreport.h>
 #include "audioLAN.h"
+#include "opusLAN.h"
 #include "dialer.h"
 #include <mbdebug.h>
 
@@ -113,6 +114,8 @@ int init_slots(void){
 			wavPlayerInit(i);
 		}else if(!memcmp(me_config.slot_mode[i], "audioLAN", 8)){
 			start_audioLAN_task(i); 		// W, C
+		}else if(!memcmp(me_config.slot_mode[i], "opusLAN", 7)){
+			start_opusLAN_task(i); 		// W, C (Opus codec)
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
 			start_button_ledRing_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledBar", 13)){

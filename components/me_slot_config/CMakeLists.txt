@@ -28,6 +28,7 @@ idf_component_register(SRCS
                         reporter 
                         audioPlayer 
                         audioLAN 
+                        opusLAN
                         driver 
                         rgbHsv 
                         myHID 

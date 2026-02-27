@@ -259,6 +259,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("SWIPER", level);
 	esp_log_level_set("SOME_UNIQUE", level);
 	esp_log_level_set("AUDIO_LAN", level);
+	esp_log_level_set("OPUS_LAN", level);
 	esp_log_level_set("RTP_STREAM", level);
 	esp_log_level_set("ONE_WIRE", level);
 	esp_log_level_set("ACCEL", level);
