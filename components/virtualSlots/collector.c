@@ -43,7 +43,7 @@ typedef struct __tag_COLLECTOR_CONFIG{
 /* 
     Виртуальный модуль collector
     Собирает строку из поступающих сообщений
-    slots: 6-9
+    slots: 0-9
 */
 void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
 {

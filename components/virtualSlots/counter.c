@@ -43,7 +43,7 @@ typedef struct __tag_COUNTER_CONFIG{
 
 /* 
     Виртуальный модуль счетчик
-    slots: 6-9
+    slots: 0-9
 */
 void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
     

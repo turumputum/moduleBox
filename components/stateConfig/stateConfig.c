@@ -160,11 +160,11 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->FTP_login = strdup(value);
 	} else if (MATCH("FTP", "FTP_pass")) {
 		pconfig->FTP_pass = strdup(value);
-    } else if (MATCH("UDP", "server_adress")){//-----------------------------------------------
+    } else if (MATCH("UDP", "serverAdress")){//-----------------------------------------------
         pconfig->udpServerAdress = strdup(value);
-    } else if (MATCH("UDP", "server_port")) {
+    } else if (MATCH("UDP", "serverPort")) {
         pconfig->udpServerPort = atoi(value);
-    } else if (MATCH("UDP", "my_port")) {
+    } else if (MATCH("UDP", "myPort")) {
         pconfig->udpMyPort = atoi(value);
 	} else if (MATCH("UDP", "crosslink")) {
 		pconfig->udp_crosslink = strdup(value);

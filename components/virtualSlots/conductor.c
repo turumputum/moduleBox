@@ -47,7 +47,7 @@ typedef struct __tag_CONDUCTOR_CONFIG{
 /* 
     Виртуальный модуль stepper_conductor
     Управляет шаговым двигателем с позиционированием
-    slots: 6-9
+    slots: 0-9
 */
 void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
 {

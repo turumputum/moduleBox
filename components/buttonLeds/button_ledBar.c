@@ -54,6 +54,7 @@ typedef enum
 
 /* 
     Модуль кнопка со шкалой заполнения
+    slots: 0-5
 */
 void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
 {

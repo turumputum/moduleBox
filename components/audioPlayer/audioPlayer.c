@@ -249,7 +249,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
     /* Остановить проигрывание
        
     */
-    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_none);
+    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_string);
 
     /* Переключить трек
        

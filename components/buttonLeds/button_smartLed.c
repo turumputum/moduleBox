@@ -64,6 +64,7 @@ typedef enum
 
 /* 
     Модуль кнопка со смарт-светодиодами
+    slots: 0-5
 */
 void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
 {

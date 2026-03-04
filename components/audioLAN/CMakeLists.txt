@@ -6,6 +6,7 @@ endif()
 
 
 idf_component_register(SRCS 
+                    
 					${MODULE_FILES}
 					${GENERATED_FILES} "rtp_client_stream.c"
                     INCLUDE_DIRS "include" ${CMAKE_CURRENT_BINARY_DIR}

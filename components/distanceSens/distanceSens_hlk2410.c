@@ -43,6 +43,7 @@ extern void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
 /* 
     Модуль радарного датчика HLK-LD2410 через UART
     Поддерживает измерение расстояния до 800см
+    slots: 0-5
 */
 void configure_hlk2410(distanceSens_t *distanceSens, uint8_t slot_num)
 {

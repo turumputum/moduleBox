@@ -44,7 +44,7 @@ typedef struct __tag_SCALER_CONFIG{
 /* 
     Виртуальный модуль scaler
     Масштабирует входные значения в заданный диапазон
-    slots: 6-9
+    slots: 0-9
 */
 void configure_scaler(PSCALER_CONFIG ch, int slot_num)
 {

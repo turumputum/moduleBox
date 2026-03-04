@@ -44,7 +44,7 @@ typedef struct __tag_FLYWHEEL_CONFIG{
 /* 
     Виртуальный модуль flywheel
     Счетчик с постепенным уменьшением значения
-    slots: 6-9
+    slots: 0-9
 */
 void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
 {

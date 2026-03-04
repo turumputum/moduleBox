@@ -93,6 +93,7 @@ void set_pwm_channels(ledc_channel_config_t ch_r, ledc_channel_config_t ch_g, le
 }
 /*
     Модуль управляет RGB-лентой
+    slots: 0-5
 */
 void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 {

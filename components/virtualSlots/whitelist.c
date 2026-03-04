@@ -41,7 +41,7 @@ typedef struct __tag_WHITELIST_CONFIG{
 
 /*
     Программный модуль для размещения связей во внешнем файле. Виртуальный слот, не взаимодействует с аппаратной частью.
-    slots: 6-9
+    slots: 0-9
 */
 void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
     

@@ -41,7 +41,7 @@ typedef struct __tag_RND_CONFIG{
 
 /*
     Модуль для генерации случайных чисел
-    slots: 6-9
+    slots: 0-9
 */
 void configure_random(PRND_CONFIG ch, int slot_num){
     

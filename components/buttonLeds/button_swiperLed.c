@@ -67,6 +67,7 @@ typedef enum
 
 /* 
     Модуль кнопка со свайп-подсветкой
+    slots: 0-5
 */
 void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
 {

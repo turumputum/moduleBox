@@ -41,7 +41,7 @@ typedef enum{
 
 /* 
     Виртуальный модуль таймер
-    slots: 6-9
+    slots: 0-9
 */
 void configure_timer(PTIMER_CONFIG ch, int slot_num){
     

@@ -58,6 +58,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 /* 
     Модуль ультразвукового датчика расстояния sr04m
     Поддерживает измерение расстояния до 400см
+    slots: 0-5
 */
 void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 {

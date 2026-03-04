@@ -141,6 +141,7 @@ static void IRAM_ATTR gpio_isr_handler_in_2ch(void* arg) {
 
 /* 
     Модуль двухканальный вход с поддержкой логических операций
+    slots: 0-5
 */
 static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     ctx->slot_num = slot_num;
@@ -304,6 +305,7 @@ static void IRAM_ATTR gpio_isr_handler_in_3ch(void* arg) {
 
 /* 
     Модуль трехканальный вход с поддержкой логических операций
+    slots: 0-5
 */
 static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
     ctx->slot_num = slot_num;

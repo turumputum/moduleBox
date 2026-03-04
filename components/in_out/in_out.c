@@ -102,7 +102,9 @@ void impulse_fall(void* arg){
 }
 
 
-/* Слот конфигурируется как цифровой вход/выход
+/* 
+    Слот конфигурируется как цифровой вход/выход
+    slots: 0-5
 */
 void configure_in_out(in_out_context_t *ctx, int slot_num) {
 

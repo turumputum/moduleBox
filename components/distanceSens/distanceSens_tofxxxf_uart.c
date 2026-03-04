@@ -32,6 +32,7 @@ extern void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
     Модель TOF050F измеряет расстояния в миллиметрах до 500мм
     Модель TOF200F измеряет расстояния в миллиметрах до 2000мм
     Модель TOF400F измеряет расстояния в миллиметрах до 4000мм
+    slots: 0-5
 */
 void configure_TOFxxxF(distanceSens_t *distanceSens, uint8_t slot_num)
 {

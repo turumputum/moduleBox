@@ -42,6 +42,7 @@ extern void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
 /* 
     Модуль датчика расстояния Benewake TOF через UART
     Поддерживает измерение расстояния до 12м
+    slots: 0-5
 */
 void configure_benewakeTOF(distanceSens_t *distanceSens, uint8_t slot_num)
 {

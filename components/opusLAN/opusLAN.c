@@ -238,6 +238,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
 
 /* 
     Модуль звук через сеть с кодеком Opus
+    slots: 0-0
 */
 void configure_opusLAN(POPUSCONFIG c, int slot_num)
 {

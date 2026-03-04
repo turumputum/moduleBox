@@ -55,6 +55,7 @@ typedef enum
 
 /* 
     Модуль кнопка с обычным светодиодом
+    slots: 0-5
 */
 void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
 {

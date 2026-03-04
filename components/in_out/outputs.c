@@ -90,7 +90,9 @@ void _impulse_fall_2(void* arg){
 }
 
 
-/* Слот конфигурируется как два цифровых выхода
+/* 
+    Слот конфигурируется как два цифровых выхода
+    slots: 0-5
 */
 void configure_out_2ch(out_context_t *ctx, int slot_num) {
     ctx->numOfCh = 2;
@@ -263,10 +265,10 @@ void start_out_2ch_task(int slot_num) {
 
 
 
-/**
- * @brief Configure 3-channel output module
- * @manifest configure 3-channel output parameters from slot options
- */
+/* 
+    Слот конфигурируется как три цифровых выхода
+    slots: 0-5
+*/
 void configure_out_3ch(out_context_t *ctx, int slot_num) {
     ctx->numOfCh = 3;
 

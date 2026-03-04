@@ -43,6 +43,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
 /*
     Модуль дискового телефонного номеронабирателя
     Считывает импульсы с дискового набирателя и собирает номер
+    slots: 0-5
 */
 void configure_dialer(PDIALER_CONFIG ch, int slot_num)
 {

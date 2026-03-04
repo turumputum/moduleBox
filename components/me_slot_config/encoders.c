@@ -459,6 +459,7 @@ typedef struct __tag_INCCONFIG
 
 /* 
 	Модуль для работы с инкрементальными энкодерами, обычно оптический.
+	slots: 0-5
 */
 void configure_encoderInc(PINCCONFIG c, int slot_num)
 {
@@ -743,7 +744,8 @@ typedef struct __tag_AS5600CONFIG
 } AS5600CONFIG, * PAS5600CONFIG; 
 
 /* 
-	Модуль для работы с инкрементальными энкодерами, обычно оптический.
+	Модуль для работы с энкодером AS5600 по I2C, абсолютный энкодер с разрешающей способностью 12 бит, 4096 позиций на окружности.
+	slots: 0-5
 */
 void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 {

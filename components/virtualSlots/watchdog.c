@@ -40,7 +40,7 @@ typedef struct __tag_WATCHDOG_CONFIG{
 /* 
     Виртуальный модуль watchdog
     Перезагружает устройство по таймауту
-    slots: 6-9
+    slots: 0-9
 */
 void configure_watchdog(PWATCHDOG_CONFIG ch, int slot_num)
 {

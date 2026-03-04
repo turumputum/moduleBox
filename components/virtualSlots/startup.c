@@ -32,6 +32,7 @@ typedef struct __tag_STARTUP_CONFIG{
 
 /* 
     Модуль отправки сообщения при запуске
+    slots: 0-9
 */
 void configure_startup(PSTARTUP_CONFIG ch, int slot_num)
 {
