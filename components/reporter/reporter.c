@@ -322,6 +322,7 @@ void send_report(reporter_message_t * msg)
 		}
 	}
 }
+
 void spread_the_word_task(void)
 {
 	//char tmpStr[555];
@@ -400,6 +401,10 @@ void report(char *msg, int slot_num){
 	//send_message.str = strdup(msg);
 
 	char *copy = heap_caps_malloc(strlen(msg)+1, MALLOC_CAP_8BIT);
+	if(!copy){
+		ESP_LOGE(TAG, "malloc fail in report");
+		return;
+	}
 	strcpy(copy, msg);
 	send_message.str = copy;
 
@@ -419,59 +424,64 @@ void report(char *msg, int slot_num){
 
 void reportFreeRAM(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
-    sprintf(tmpStr, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
-	report(tmpStr, 0);
+	if(!tmpStr) return;
+	snprintf(tmpStr, 128, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
+	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
 
 void reportVersion(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
-    sprintf(tmpStr, "%s/system/version:%s",me_config.deviceName, VERSION);
-	report(tmpStr, 0);
+	if(!tmpStr) return;
+	snprintf(tmpStr, 128, "%s/system/version:%s",me_config.deviceName, VERSION);
+	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
 
 void reportNETstatus(){
-	char * tmpStr = heap_caps_malloc(512, MALLOC_CAP_8BIT);
-	sprintf(tmpStr, "%s/system/NETstatus:{",me_config.deviceName);
-    sprintf(tmpStr+ strlen(tmpStr), "\"WIFI_init_res\":%d," , me_state.WIFI_init_res);
+	int bufSize = 768;
+	char * tmpStr = heap_caps_malloc(bufSize, MALLOC_CAP_8BIT);
+	if(!tmpStr) return;
+	int pos = snprintf(tmpStr, bufSize, "%s/system/NETstatus:{",me_config.deviceName);
+	pos += snprintf(tmpStr + pos, bufSize - pos, "\"WIFI_init_res\":%d," , me_state.WIFI_init_res);
 	if (me_state.WIFI_init_res == ESP_OK) {
-        sprintf(tmpStr + strlen(tmpStr), 
-            "\"WIFI_SSID\":\"%s\",\"WIFI_ipAdress\":\"%s\",\"WIFI_netMask\":\"%s\",\"WIFI_gateWay\":\"%s\",",
+		pos += snprintf(tmpStr + pos, bufSize - pos,
+			"\"WIFI_SSID\":\"%s\",\"WIFI_ipAdress\":\"%s\",\"WIFI_netMask\":\"%s\",\"WIFI_gateWay\":\"%s\",",
 			me_config.WIFI_ssid,
-            me_config.WIFI_ipAdress,
-            me_config.WIFI_netMask, 
-            me_config.WIFI_gateWay
-        );
-    }
+			me_config.WIFI_ipAdress,
+			me_config.WIFI_netMask,
+			me_config.WIFI_gateWay
+		);
+	}
 
-	sprintf(tmpStr+ strlen(tmpStr), "\"LAN_init_res\":%d," , me_state.LAN_init_res);
+	pos += snprintf(tmpStr + pos, bufSize - pos, "\"LAN_init_res\":%d," , me_state.LAN_init_res);
 	if (me_state.LAN_init_res == ESP_OK) {
-        sprintf(tmpStr + strlen(tmpStr), 
-            "\"LAN_ipAdress\":\"%s\",\"LAN_netMask\":\"%s\",\"LAN_gateWay\":\"%s\",",
-            me_config.LAN_ipAdress,
-            me_config.LAN_netMask, 
-            me_config.LAN_gateWay
-        );
-    }
-    sprintf(tmpStr + strlen(tmpStr),
-        "\"MQTT_init_res\":%d,"
-        "\"UDP_init_res\":%d,"
-        "\"OSC_init_res\":%d,"
-        "\"FTP_init_res\":%d}",
-        me_state.MQTT_init_res,
-        me_state.UDP_init_res,
-        me_state.OSC_init_res,
-        me_state.FTP_init_res
-    );
-	report(tmpStr, 0);
+		pos += snprintf(tmpStr + pos, bufSize - pos,
+			"\"LAN_ipAdress\":\"%s\",\"LAN_netMask\":\"%s\",\"LAN_gateWay\":\"%s\",",
+			me_config.LAN_ipAdress,
+			me_config.LAN_netMask,
+			me_config.LAN_gateWay
+		);
+	}
+	snprintf(tmpStr + pos, bufSize - pos,
+		"\"MQTT_init_res\":%d,"
+		"\"UDP_init_res\":%d,"
+		"\"OSC_init_res\":%d,"
+		"\"FTP_init_res\":%d}",
+		me_state.MQTT_init_res,
+		me_state.UDP_init_res,
+		me_state.OSC_init_res,
+		me_state.FTP_init_res
+	);
+	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
 
 void reportTaskList(){
-	char * tmpStr = heap_caps_malloc(1024, MALLOC_CAP_8BIT);
-	sprintf(tmpStr, "%s/system/TaskList:",me_config.deviceName);
-	vTaskList(tmpStr+ strlen(tmpStr));
-	report(tmpStr, 0);
+	char * tmpStr = heap_caps_malloc(2048, MALLOC_CAP_8BIT);
+	if(!tmpStr) return;
+	int pos = snprintf(tmpStr, 2048, "%s/system/TaskList:",me_config.deviceName);
+	vTaskList(tmpStr + pos);
+	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }

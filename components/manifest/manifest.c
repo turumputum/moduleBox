@@ -14,6 +14,7 @@
 
 #include <manifest.h>
 #include <string.h>
+#include <sys/stat.h>
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
@@ -144,7 +145,12 @@ bool checkExistent()
                 {
                     if (!strcasecmp(fno.fname, MANIFESTO_FNAME))
                     {
-                        result = true;
+                        struct stat st;
+                        if (stat(MANIFESTO_FULL_FNAME, &st) == 0 && st.st_size >= 1024) {
+                            result = true;
+                        } else {
+                            ESP_LOGW(TAG, "manifest file too small (%ld bytes), will recreate", (long)st.st_size);
+                        }
                     }
                     else
                     {

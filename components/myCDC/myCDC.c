@@ -46,7 +46,8 @@ void usbprint(char *msg)
 			tud_cdc_write_flush();
 			vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
 
-			on += USB_CHUNK_SZ;
+			on  += USB_CHUNK_SZ;
+			len -= USB_CHUNK_SZ;
 		}
 
 		char endBuff [ len ];

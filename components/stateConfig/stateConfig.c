@@ -287,6 +287,11 @@ uint8_t loadConfig(void) {
 
 	struct stat st;
 	if (me_config.configFile[0] != 0 && stat(me_config.configFile, &st) == 0) {
+		if (st.st_size < 102) {
+			ESP_LOGW(TAG, "config file too small (%ld bytes), create default config", (long)st.st_size);
+			saveConfig();
+			return res;
+		}
 		res = ini_parse(me_config.configFile, handler, &me_config);
 		if (res != 0) {
 			ESP_LOGE(TAG, "Can't load 'config.ini' check line: %d, set default\n", res);
