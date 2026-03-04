@@ -22,6 +22,7 @@
 
 #define EXAMPLE_ESP_MAXIMUM_RETRY 50
 #define WIFI_CONNECT_TIMEOUT_MS   (EXAMPLE_ESP_MAXIMUM_RETRY * 2000) // таймаут подключения
+#define WIFI_RECONNECT_DELAY_MS   5000  // задержка между попытками переподключения
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -40,19 +41,27 @@ extern stateStruct me_state;
 extern configuration me_config;
 
 static int s_retry_num = 0;
+static bool wifi_was_connected = false;  // флаг: было ли успешное первое подключение
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
 	if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
 		esp_wifi_connect();
 	} else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-		if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
+		me_state.WIFI_init_res = ESP_FAIL;
+		if (wifi_was_connected) {
+			// После первого успешного подключения — всегда пытаемся переподключиться
+			ESP_LOGW(TAG, "WiFi disconnected, reconnecting in %d ms...", WIFI_RECONNECT_DELAY_MS);
+			vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECT_DELAY_MS));
+			s_retry_num = 0;
+			esp_wifi_connect();
+		} else if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
 			esp_wifi_connect();
 			s_retry_num++;
 			ESP_LOGD(TAG, "retry to connect to the AP (%d/%d)", s_retry_num, EXAMPLE_ESP_MAXIMUM_RETRY);
 		} else {
 			xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+			ESP_LOGD(TAG, "connect to the AP fail");
 		}
-		ESP_LOGD(TAG, "connect to the AP fail");
 	} else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
 		ip_event_got_ip_t *event = (ip_event_got_ip_t*) event_data;
 		ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
@@ -60,6 +69,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 		snprintf(me_config.WIFI_netMask, 16, IPSTR, IP2STR(&event->ip_info.netmask));
 		snprintf(me_config.WIFI_gateWay, 16, IPSTR, IP2STR(&event->ip_info.gw));
 		s_retry_num = 0;
+		wifi_was_connected = true;
 		xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 		me_state.WIFI_init_res = ESP_OK;
 	}
@@ -176,6 +186,7 @@ uint8_t wifiInit() {
 
 		if (bits & WIFI_CONNECTED_BIT) {
 			ESP_LOGI(TAG, "connected to ap SSID:%s", wifi_config.sta.ssid);
+			// Обработчики остаются зарегистрированными для автоматического переподключения
 		} else if (bits & WIFI_FAIL_BIT) {
 			ESP_LOGE(TAG, "Failed to connect to SSID:%s", wifi_config.sta.ssid);
 			mblog(E, "Failed to connect to SSID:%s", wifi_config.sta.ssid);
@@ -201,9 +212,7 @@ uint8_t wifiInit() {
 			vEventGroupDelete(s_wifi_event_group);
 			return ESP_FAIL;
 		}
-		ESP_ERROR_CHECK(esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler));
-		ESP_ERROR_CHECK(esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler));
-		vEventGroupDelete(s_wifi_event_group);
+		// Event group больше не удаляем — он нужен для отслеживания переподключений
 	} else {
 		ESP_LOGD(TAG, "WIFI disable");
 		return ESP_OK;
