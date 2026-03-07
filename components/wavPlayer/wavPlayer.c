@@ -70,10 +70,12 @@ typedef struct __tag_WAVPLAYERCONFIG
 	int 					attenuation;
 	uint16_t 				play_delay;
 	uint8_t 				play_to_end;
+	uint8_t 				active_state;
 
     STDCOMMANDS             cmds;
 
 	int						ETreport;
+	int						stateReport;
 
 	wav_handle_t 			handler;
 } WAVPLAYERCONFIG, * PWAVPLAYERCONFIG; 
@@ -83,7 +85,8 @@ typedef enum
 	MYCMD_play = 0,
 	MYCMD_stop,
 	MYCMD_shift,
-	MYCMD_setVolume
+	MYCMD_setVolume,
+	MYCMD_setState
 } MYCMD;
 
 // ---------------------------------------------------------------------------
@@ -175,6 +178,12 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	c->play_to_end = get_option_flag_val(slot_num, "playToEnd");
 	ESP_LOGD(TAG, "Set play_to_end:%d", c->play_to_end);
 
+	/* Состояние модуля по умолчанию (0 - выключен, 1 - включен)
+	По умолчанию включен
+	*/
+	c->active_state = get_option_int_val(slot_num, "defaultState", "", 1, 0, 1);
+	ESP_LOGD(TAG, "Set defaultState:%d", c->active_state);
+
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -194,6 +203,10 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	*/
 	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
 
+	/* Рапортует состояние модуля (0 - выключен, 1 - включен)
+	*/
+	c->stateReport = stdreport_register(RPTT_int, slot_num, "", "state");
+
 
     /* Проиграть трек
        Опционально - номер трека
@@ -203,7 +216,7 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
     /* Остановить проигрывание
        
     */
-    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_string);
+    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_none);
 
     /* Переключить трек
        
@@ -214,6 +227,11 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
        
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
+
+    /* Установить состояние модуля (0 - выключен, 1 - включен)
+       После включения модуль в режиме стоп
+    */
+	stdcommand_register(&c->cmds, MYCMD_setState, "setState", PARAMT_int);
 
 
 }
@@ -272,6 +290,10 @@ void wavplayer_task(void *arg) {
                 break;
 
             case MYCMD_play:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring play");
+					break;
+				}
 				ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", 0, currentTrack);
 				if (wav_handle_is_playing(c->handler) && (c->play_to_end==1))
 				{
@@ -293,6 +315,10 @@ void wavplayer_task(void *arg) {
 				break;
  
             case MYCMD_stop:
+			if(c->active_state == 0){
+				ESP_LOGD(TAG, "Module disabled, ignoring stop");
+				break;
+			}
 			if (wav_handle_is_playing(c->handler) && (c->play_to_end==1))
 				{
 				 	ESP_LOGD(TAG, "skip restart track");
@@ -308,6 +334,10 @@ void wavplayer_task(void *arg) {
 				break;
 
             case MYCMD_shift:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring shift");
+					break;
+				}
 				trackShift(cmd_arg);
 				if (wav_handle_is_playing(c->handler))
 				{
@@ -324,10 +354,31 @@ void wavplayer_task(void *arg) {
 				break;
 
             case MYCMD_setVolume:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring setVolume");
+					break;
+				}
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
 					c->volume = params.p[0].i;
 					setVolume_num(c->handler, c->volume);
+				}
+				break;
+
+			case MYCMD_setState:
+				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
+				{
+					uint8_t new_state = params.p[0].i ? 1 : 0;
+					if(new_state != c->active_state){
+						c->active_state = new_state;
+						ESP_LOGD(TAG, "setState:%d", c->active_state);
+						if(c->active_state == 0){
+							// При выключении - останавливаем воспроизведение
+							audioStop(c->handler);
+							audioSetIndicator(slot_num, 0);
+						}
+						// stdreport_i(c->stateReport, c->active_state);
+					}
 				}
 				break;
 		}

@@ -70,10 +70,12 @@ typedef struct __tag_AUDIOCONFIG
 	int 					attenuation;
 	uint16_t 				play_delay;
 	uint8_t 				play_to_end;
+	uint8_t 				active_state;
 
     STDCOMMANDS             cmds;
 
 	int						ETreport;
+	int						stateReport;
 } AUDIOCONFIG, * PAUDIOCONFIG; 
 
 typedef enum
@@ -81,7 +83,8 @@ typedef enum
 	MYCMD_play = 0,
 	MYCMD_stop,
 	MYCMD_shift,
-	MYCMD_setVolume
+	MYCMD_setVolume,
+	MYCMD_setState
 } MYCMD;
 
 static const char *TAG = "AUDIO";
@@ -221,6 +224,11 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 	c->play_to_end = get_option_flag_val(slot_num, "playToEnd");
 	ESP_LOGD(TAG, "Set play_to_end:%d", c->play_to_end);
 
+	/* Состояние модуля по умолчанию (0 - выключен, 1 - включен)
+	*/
+	c->active_state = get_option_int_val(slot_num, "defaultState", "", 1, 0, 1);
+	ESP_LOGD(TAG, "Set defaultState:%d", c->active_state);
+
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -240,6 +248,10 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 	*/
 	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
 
+	/* Рапортует состояние модуля (0 - выключен, 1 - включен)
+	*/
+	c->stateReport = stdreport_register(RPTT_int, slot_num, "", "state");
+
 
     /* Проиграть трек
        Опционально - номер трека
@@ -249,7 +261,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
     /* Остановить проигрывание
        
     */
-    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_string);
+    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_none);
 
     /* Переключить трек
        
@@ -260,6 +272,11 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
        
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
+
+    /* Установить состояние модуля (0 - выключен, 1 - включен)
+       После включения модуль в режиме стоп
+    */
+	stdcommand_register(&c->cmds, MYCMD_setState, "setState", PARAMT_int);
 
 
 }
@@ -285,17 +302,6 @@ void audio_task(void *arg) {
 
 	// Сканируем SD-карту на MP3-файлы (список в PSRAM)
 	scanSoundTracks(".mp3");
-
-	// char init_report[32];
-	// memset(init_report, 0, sizeof(init_report));
-	// sprintf(init_report, "/volume:%d", c->volume);
-	// report(init_report, slot_num);
-	// memset(init_report, 0, sizeof(init_report));
-	// sprintf(init_report, "/track:%d", me_state.currentTrack);
-	// report(init_report, slot_num);
-	// memset(init_report, 0, sizeof(init_report));
-	// sprintf(init_report, "/state:stop");
-	// report(init_report, slot_num);
 
 	esp_rom_gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
@@ -424,6 +430,10 @@ void audio_task(void *arg) {
                 break;
 
             case MYCMD_play:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring play");
+					break;
+				}
 				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), c->currentTrack);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(c->play_to_end==1)){
 					ESP_LOGD(TAG, "skip restart track");
@@ -449,6 +459,10 @@ void audio_task(void *arg) {
 				break;
  
             case MYCMD_stop:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring stop");
+					break;
+				}
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(c->play_to_end==1)){
 					ESP_LOGD(TAG, "skip stop track");
 				}else{
@@ -467,6 +481,10 @@ void audio_task(void *arg) {
 				break;
 
             case MYCMD_shift:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring shift");
+					break;
+				}
 				trackShift(cmd_arg);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)){
 					if(c->play_to_end==0){
@@ -484,6 +502,10 @@ void audio_task(void *arg) {
 				break;
 
             case MYCMD_setVolume:
+				if(c->active_state == 0){
+					ESP_LOGD(TAG, "Module disabled, ignoring setVolume");
+					break;
+				}
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
 					c->volume = params.p[0].i;
@@ -492,6 +514,27 @@ void audio_task(void *arg) {
 					// memset(vol_str, 0, sizeof(vol_str));
 					// sprintf(vol_str, "/volume:%d", c->volume);
 					// report(vol_str, slot_num);
+				}
+				break;
+
+			case MYCMD_setState:
+				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
+				{
+					uint8_t new_state = params.p[0].i ? 1 : 0;
+					if(new_state != c->active_state){
+						c->active_state = new_state;
+						ESP_LOGD(TAG, "setState:%d", c->active_state);
+						if(c->active_state == 1){
+							// При включении - останавливаем воспроизведение
+							audioStop();
+							audioSetIndicator(slot_num, 0);
+						}else{
+							// При выключении - останавливаем воспроизведение
+							audioStop();
+							audioSetIndicator(slot_num, 0);
+						}
+						//stdreport_i(c->stateReport, c->active_state);
+					}
 				}
 				break;
 		}
