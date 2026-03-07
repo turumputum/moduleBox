@@ -118,6 +118,8 @@ int init_slots(void){
 			start_opusLAN_task(i); 		// W, C (Opus codec)
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
 			start_button_ledRing_task(i);
+		}else if(!memcmp(me_config.slot_mode[i], "button_runFire", 14)){
+			start_button_runFire_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_ledBar", 13)){
 			start_button_ledBar_task(i);
 		}else if(!memcmp(me_config.slot_mode[i], "button_swiperLed", 16)){

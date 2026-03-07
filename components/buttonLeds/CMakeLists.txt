@@ -1,4 +1,4 @@
-file(GLOB_RECURSE MODULE_FILES "button_led.c" "button_ledBar.c" "button_ledRing.c" "button_smartLed.c" "button_swiperLed.c")
+file(GLOB_RECURSE MODULE_FILES "button_led.c" "button_ledBar.c" "button_ledRing.c" "button_runFire.c" "button_smartLed.c" "button_swiperLed.c")
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)

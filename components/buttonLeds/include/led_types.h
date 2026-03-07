@@ -26,6 +26,7 @@ typedef struct __tag_LEDCONFIG
     int                     dir;
     int16_t                 offset;
     int16_t                 increment;
+    uint16_t                ledsPerPixel;
     STDCOMMANDS             cmds;
 } LEDCONFIG, * PLEDCONFIG;
 
