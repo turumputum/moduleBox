@@ -125,6 +125,10 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->led.num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
 
+    /* Флаг задает отправку буфера каждый цикл
+    */
+    ctx->led.periodicUpdate = get_option_flag_val(slot_num, "periodicUpdate");
+
     /* Величина приращения
     Скорость анимации
     */
@@ -221,7 +225,7 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
     
 }
 
-static void ledUpdate(uint8_t *currentMass, uint8_t *targetMass, uint16_t size, uint8_t increment, rmt_led_heap_t *rmt_heap, uint8_t slot_num) {
+static void ledUpdate(uint8_t *currentMass, uint8_t *targetMass, uint16_t size, uint8_t increment, bool periodicUpdate, rmt_led_heap_t *rmt_heap, uint8_t slot_num) {
     uint16_t sum = 0;
     for(int i=0; i<size; i++){
         if(currentMass[i] != targetMass[i]){
@@ -243,7 +247,7 @@ static void ledUpdate(uint8_t *currentMass, uint8_t *targetMass, uint16_t size, 
             }
         }
     }
-    if(sum != 0){
+    if(sum != 0 || periodicUpdate){
         //ESP_LOG_BUFFER_HEX(TAG, currentMass, size);
         rmt_createAndSend(rmt_heap, currentMass, size, slot_num);
     }
@@ -320,7 +324,7 @@ void update_led_ring(PLEDCONFIG c, uint8_t *current_pixels, uint8_t *target_pixe
             calcRingBrightness(target_pixels, c->targetRGB, c->num_of_led, *currentPos, c->effectLen, c->numOfPos, c->maxBright, c->minBright);
         }
     }
-    ledUpdate(current_pixels, target_pixels, c->num_of_led*3, c->increment, rmt_heap, slot_num);
+    ledUpdate(current_pixels, target_pixels, c->num_of_led*3, c->increment, c->periodicUpdate, rmt_heap, slot_num);
 }
 
 void button_ledRing_task(void *arg)
@@ -347,8 +351,8 @@ void button_ledRing_task(void *arg)
     rmt_new_led_strip_encoder(&rmt_heap.encoder_config, &rmt_heap.led_encoder);
 
     int prev_button_state = -1;
-    float currentPos = ctx->led.numOfPos - 1 + ctx->led.offset;
-    float targetPos = ctx->led.offset;
+    float currentPos = 0;
+    float targetPos = 0;
     uint8_t prevState = 255;
 
     waitForWorkPermit(slot_num);

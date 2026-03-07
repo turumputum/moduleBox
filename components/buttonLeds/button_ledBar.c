@@ -114,6 +114,10 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->led.num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
 
+    /* Флаг задает отправку буфера каждый цикл
+    */
+    ctx->led.periodicUpdate = get_option_flag_val(slot_num, "periodicUpdate");
+
     /* Величина приращения
     */
     ctx->led.increment = get_option_int_val(slot_num, "increment", "", 255, 0, 255);
@@ -135,7 +139,7 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     /* Период обновления 
     */
     ctx->led.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 1000/30, 1, 4096));
-    	
+    ESP_LOGD(TAG, "Calculated refresh period: %d ms for slot %d", ctx->led.refreshPeriod, slot_num); 	
     /* Количество позиций
     */        
     ctx->led.numOfPos = get_option_int_val(slot_num, "numOfPos", "", ctx->led.num_of_led, 1, 4096);
@@ -145,8 +149,10 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     ctx->led.state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1) ^ ctx->led.inverse;
 
     /* Инверсия направления эффекта
+    - если флаг не поднят заполнение идёт от 0 к numOfLed
+    - если поднят — от конца к началу
     */
-    ctx->led.dir = ctx->led.inverse = get_option_flag_val(slot_num, "dirInverse") ? 1 : -1;
+    ctx->led.dir = get_option_flag_val(slot_num, "dirInverse") ? -1 : 1;
 
     /* Смещение эффекта
     */
@@ -200,56 +206,97 @@ static uint8_t colorChek(uint8_t currentColor, uint8_t targetColor, uint8_t incr
     }else return targetColor;
 }
 
-void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass, uint8_t *target_bright_mass, rmt_led_heap_t *rmt_heap, int slot_num, RgbColor *currentRGB, float *currentPos, int *targetPos)
+void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass, uint8_t *target_bright_mass, rmt_led_heap_t *rmt_heap, int slot_num, RgbColor *currentRGB, int *targetPos, uint8_t *prevState)
 {
     bool flag_ledUpdate = false;
-    float ledToPosRatio = (float)c->num_of_led/c->numOfPos;
-    if(*targetPos!=*currentPos){
-        *currentPos=*targetPos;
-        float ledPos = (ledToPosRatio * (*currentPos));
-        for(int i=0;i<c->num_of_led;i++){
-            int curentLedPos = i + c->offset;
-            if(curentLedPos>c->num_of_led-1) curentLedPos = curentLedPos - c->num_of_led;
-            if((i == (int)ledPos)&&(i>0)){
-                float ratio = ledPos - (int)ledPos;
-                target_bright_mass[curentLedPos]=(int)(c->maxBright*ratio);
-                if(target_bright_mass[curentLedPos]<c->minBright) target_bright_mass[curentLedPos]=c->minBright;
-            }else if(i>(int)ledPos-1) target_bright_mass[curentLedPos]=c->minBright;
-            else target_bright_mass[curentLedPos]=c->maxBright;
+    bool needRecalc = false;
+
+    // Пересчёт target_bright_mass при изменении state или targetPos
+    if (c->state != *prevState) {
+        *prevState = c->state;
+        needRecalc = true;
+        ESP_LOGD(TAG, "slot%d state changed to %d", slot_num, c->state);
+    }
+
+    if (c->state == 0) {
+        // state=0: все светодиоды на minBright
+        if (needRecalc) {
+            for (int i = 0; i < c->num_of_led; i++) {
+                target_bright_mass[i] = c->minBright;
+            }
+        }
+    } else {
+        // state=1: шкала заполнена от начала до targetPos
+        static int prevTargetPos[10] = {[0 ... 9] = -1};
+        if (needRecalc || *targetPos != prevTargetPos[slot_num]) {
+            prevTargetPos[slot_num] = *targetPos;
+            float ledToPosRatio = (float)c->num_of_led / c->numOfPos;
+            float ledPos = ledToPosRatio * (*targetPos);
+            ESP_LOGD(TAG, "slot%d recalc targetPos=%d ledPos=%.2f numLed=%d numPos=%d",
+                     slot_num, *targetPos, ledPos, c->num_of_led, c->numOfPos);
+            for (int i = 0; i < c->num_of_led; i++) {
+                if (i < (int)ledPos) {
+                    target_bright_mass[i] = c->maxBright;
+                } else if (i == (int)ledPos && i > 0) {
+                    float ratio = ledPos - (int)ledPos;
+                    target_bright_mass[i] = (uint8_t)(c->maxBright * ratio);
+                    if (target_bright_mass[i] < c->minBright) target_bright_mass[i] = c->minBright;
+                } else {
+                    target_bright_mass[i] = c->minBright;
+                }
+            }
+            //ESP_LOG_BUFFER_HEX_LEVEL(TAG, target_bright_mass, c->num_of_led, ESP_LOG_DEBUG);
         }
     }
-    if(memcmp(currentRGB, &c->targetRGB, sizeof(RgbColor))){
+
+    // Плавное изменение цвета
+    if (memcmp(currentRGB, &c->targetRGB, sizeof(RgbColor))) {
         currentRGB->r = colorChek(currentRGB->r, c->targetRGB.r, c->increment);
         currentRGB->g = colorChek(currentRGB->g, c->targetRGB.g, c->increment);
         currentRGB->b = colorChek(currentRGB->b, c->targetRGB.b, c->increment);
-        flag_ledUpdate=true;
+        flag_ledUpdate = true;
     }
-    for(int i=0;i<c->num_of_led;i++){
-        if(target_bright_mass[i]!=current_bright_mass[i]){
-            flag_ledUpdate=true;
-            if(target_bright_mass[i]>current_bright_mass[i]){
-                if(i>0 && current_bright_mass[i-1]!=target_bright_mass[i-1]) break;
-                if(abs(target_bright_mass[i]-current_bright_mass[i])<c->increment) current_bright_mass[i] = target_bright_mass[i];
-                else current_bright_mass[i] = current_bright_mass[i] + c->increment;
-                break;
-            }else{
-                if(i<c->num_of_led-1 && current_bright_mass[i+1]!=target_bright_mass[i+1]) break;
-                if(abs(target_bright_mass[i]-current_bright_mass[i])<c->increment) current_bright_mass[i] = target_bright_mass[i];
-                else current_bright_mass[i] = current_bright_mass[i] - c->increment;
-                break;
-            }
+
+    // Прямой проход: плавное нарастание яркости от начала к targetPos
+    for (int i = 0; i < c->num_of_led; i++) {
+        if (target_bright_mass[i] > current_bright_mass[i]) {
+            flag_ledUpdate = true;
+            if (i > 0 && current_bright_mass[i-1] != target_bright_mass[i-1]) break;
+            if (abs(target_bright_mass[i] - current_bright_mass[i]) < c->increment)
+                current_bright_mass[i] = target_bright_mass[i];
+            else
+                current_bright_mass[i] += c->increment;
+            break;
         }
     }
-    if(flag_ledUpdate){
-        for(int i=0;i<c->num_of_led;i++){
-            int index = i;
-            if(c->dir<0) index = c->num_of_led - i - 1;
-            float  tmpBright = (float)current_bright_mass[i]/255;
-            pixels[index*3] = gamma_8[(uint8_t)(currentRGB->r * tmpBright)];
-            pixels[index*3+1] = gamma_8[(uint8_t)(currentRGB->g * tmpBright)];
-            pixels[index*3+2] = gamma_8[(uint8_t)(currentRGB->b * tmpBright)];
+
+    // Обратный проход: плавное уменьшение яркости от конца к targetPos
+    for (int i = c->num_of_led - 1; i >= 0; i--) {
+        if (target_bright_mass[i] < current_bright_mass[i]) {
+            flag_ledUpdate = true;
+            if (i < c->num_of_led - 1 && current_bright_mass[i+1] != target_bright_mass[i+1]) break;
+            if (abs(target_bright_mass[i] - current_bright_mass[i]) < c->increment)
+                current_bright_mass[i] = target_bright_mass[i];
+            else
+                current_bright_mass[i] -= c->increment;
+            break;
         }
-        rmt_createAndSend(rmt_heap, pixels, c->num_of_led * 3,  slot_num);
+    }
+
+    // Рендеринг пикселей с учётом offset и dirInverse
+    if (flag_ledUpdate || c->periodicUpdate) {
+        for (int i = 0; i < c->num_of_led; i++) {
+            int index;
+            if (c->dir < 0)
+                index = (c->num_of_led - 1 - i + c->offset) % c->num_of_led;
+            else
+                index = (i + c->offset) % c->num_of_led;
+            float tmpBright = (float)current_bright_mass[i] / 255;
+            pixels[index * 3]     = gamma_8[(uint8_t)(currentRGB->r * tmpBright)];
+            pixels[index * 3 + 1] = gamma_8[(uint8_t)(currentRGB->g * tmpBright)];
+            pixels[index * 3 + 2] = gamma_8[(uint8_t)(currentRGB->b * tmpBright)];
+        }
+        rmt_createAndSend(rmt_heap, pixels, c->num_of_led * 3, slot_num);
     }
 }
 
@@ -282,8 +329,8 @@ void button_ledBar_task(void *arg)
 
     int prev_button_state = -1;
     RgbColor currentRGB = {0, 0, 0};
-    float currentPos = -1;
     int targetPos = 0;
+    uint8_t prevState = 255; // force recalc on first cycle
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -292,7 +339,7 @@ void button_ledBar_task(void *arg)
         STDCOMMAND_PARAMS params = {0};
         switch (stdcommand_receive(&ctx->led.cmds, &params, 0)) {
             case LEDBAR_default:
-                ctx->led.state = params.p[0].i ^ ctx->led.inverse;
+                ctx->led.state = params.p[0].i;
                 break;
             case LEDBAR_toggleLedState:
                 ctx->led.state = !ctx->led.state;
@@ -303,7 +350,8 @@ void button_ledBar_task(void *arg)
                 ctx->led.targetRGB.b = params.p[2].i;
                 break;
             case LEDBAR_setPos:
-                targetPos += params.p[0].i;
+                targetPos = params.p[0].i;
+                if(targetPos < 0) targetPos = 0;
                 if(targetPos > ctx->led.numOfPos) targetPos = ctx->led.numOfPos;
                 break;
         }
@@ -317,7 +365,7 @@ void button_ledBar_task(void *arg)
         int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
         button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
-        update_led_bar(&ctx->led, pixels, current_bright_mass, target_bright_mass, &rmt_heap, slot_num, &currentRGB, &currentPos, &targetPos);
+        update_led_bar(&ctx->led, pixels, current_bright_mass, target_bright_mass, &rmt_heap, slot_num, &currentRGB, &targetPos, &prevState);
 
         vTaskDelayUntil(&lastWakeTime, ctx->led.refreshPeriod);
     }
@@ -326,7 +374,7 @@ void button_ledBar_task(void *arg)
 void start_button_ledBar_task(int slot_num) {
     char tmpString[60];
     sprintf(tmpString, "task_button_ledBar_%d", slot_num);
-    xTaskCreate(button_ledBar_task, tmpString, 1024*4, &slot_num, configMAX_PRIORITIES-5, NULL);
+    xTaskCreate(button_ledBar_task, tmpString, 1024*6, &slot_num, configMAX_PRIORITIES-5, NULL);
 }
 
 const char * get_manifest_button_ledBar()

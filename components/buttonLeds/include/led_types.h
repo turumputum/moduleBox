@@ -12,6 +12,7 @@
 typedef struct __tag_LEDCONFIG
 {
     uint16_t                num_of_led;
+    uint8_t                 periodicUpdate;
     uint8_t                 inverse;
     uint8_t                 state;
     int16_t                 fadeTime;

@@ -125,6 +125,10 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->led.num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
 
+    /* Флаг задает отправку буфера каждый цикл
+    */
+    ctx->led.periodicUpdate = get_option_flag_val(slot_num, "periodicUpdate");
+
     /* Флаг инвертирует значение яркости 
     */
     ctx->led.inverse = get_option_flag_val(slot_num, "ledInverse");
@@ -254,7 +258,7 @@ void update_led_smart(PLEDCONFIG c, uint8_t *pixels, rmt_led_heap_t *rmt_heap, i
         }
     }
 
-    if(flag_ledUpdate){
+    if(flag_ledUpdate || c->periodicUpdate){
         rmt_createAndSend(rmt_heap, pixels, c->num_of_led * 3,  slot_num);
     }
 }
