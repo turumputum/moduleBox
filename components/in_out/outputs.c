@@ -1,5 +1,5 @@
 // ***************************************************************************
-// TITLE: Multi-Channel Output Modules (out_2ch, out_3ch)
+// TITLE: Multi-Channel Output Modules (out_2ch, out_3ch, relay)
 //
 // PROJECT: moduleBox
 // ***************************************************************************
@@ -474,6 +474,152 @@ void start_out_3ch_task(int slot_num) {
     xTaskCreatePinnedToCore(out_3ch_task, tmpString, 1024 * 5, &slot_num, 12, NULL, 1);
 
     ESP_LOGD(TAG, "Out_3ch task created for slot: %d Heap usage: %lu free heap:%u",
+             slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+
+// =============================================================================
+// RELAY MODULE (single-channel output on pin [1])
+// =============================================================================
+
+typedef struct {
+    STDCOMMANDS cmds;
+    int out_pin;
+    int inverse;
+    int defaultState;
+    int state;
+} relay_context_t;
+
+typedef enum {
+    RELAY_CMD_set = 0,
+    RELAY_CMD_toggle,
+    RELAY_CMD_impulse,
+} RELAY_CMD;
+
+static void _relay_impulse_fall(void* arg) {
+    relay_context_t *ctx = (relay_context_t*)arg;
+    ctx->state = !ctx->state;
+    gpio_set_level(ctx->out_pin, ctx->inverse ? !ctx->state : ctx->state);
+}
+
+/* 
+    Слот конфигурируется как одно реле на пине SLOTS_PIN_MAP[slot_num][1]
+    slots: 0-5
+*/
+void configure_relay(relay_context_t *ctx, int slot_num) {
+
+    // Initialize stdcommand
+    stdcommand_init(&ctx->cmds, slot_num);
+
+    /* Настраивает инверсию выходного сигнала
+    0-1 по умолчанию 0
+    */
+    ctx->inverse = get_option_int_val(slot_num, "inverse", "bool", 0, 0, 1);
+
+    /* Настраивает значение по умолчанию
+    0-1 по умолчанию 0
+    */
+    ctx->defaultState = get_option_int_val(slot_num, "defState", "bool", 0, 0, 1);
+
+    // Setup topic
+    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
+        /* Пользовательский топик для реле
+        */
+        char* custom_topic = get_option_string_val(slot_num, "topic", "/relay_0");
+        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        ESP_LOGD(TAG, "Custom action_topic:%s", me_state.action_topic_list[slot_num]);
+    } else {
+        char t_str[strlen(me_config.deviceName) + strlen("/relay_0") + 3];
+        sprintf(t_str, "%s/relay_%d", me_config.deviceName, slot_num);
+        me_state.action_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
+    }
+
+    // Register commands
+    /* Команда для установки состояния реле
+    */
+    stdcommand_register(&ctx->cmds, RELAY_CMD_set, NULL, PARAMT_int);
+
+    /* Команда для переключения состояния реле
+    */
+    stdcommand_register(&ctx->cmds, RELAY_CMD_toggle, "toggle", PARAMT_none);
+
+    /* Команда для импульсного включения реле (длительность в мс)
+    */
+    stdcommand_register(&ctx->cmds, RELAY_CMD_impulse, "impulse", PARAMT_int);
+}
+
+static void relay_task(void *arg) {
+
+    int slot_num = *(int*)arg;
+
+    relay_context_t ctx;
+    configure_relay(&ctx, slot_num);
+
+    // Configure GPIO pin (pin index 1)
+    ctx.out_pin = SLOTS_PIN_MAP[slot_num][1];
+    esp_rom_gpio_pad_select_gpio(ctx.out_pin);
+    gpio_set_direction(ctx.out_pin, GPIO_MODE_OUTPUT);
+    ESP_LOGD(TAG, "SETUP RELAY pin_%d Slot:%d", ctx.out_pin, slot_num);
+
+    // Set default state
+    vTaskDelay(pdMS_TO_TICKS(100));
+    ctx.state = ctx.defaultState;
+    gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
+
+    // Create command queue
+    me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
+
+    // Create impulse timer
+    esp_timer_handle_t impulse_timer;
+    const esp_timer_create_args_t impulse_timer_args = {
+        .callback = &_relay_impulse_fall,
+        .arg = &ctx,
+        .name = "relay_impulse"
+    };
+    esp_timer_create(&impulse_timer_args, &impulse_timer);
+
+    waitForWorkPermit(slot_num);
+
+    while (1) {
+        STDCOMMAND_PARAMS params = {0};
+        int cmd = stdcommand_receive(&ctx.cmds, &params, portMAX_DELAY);
+        if (cmd >= 0) {
+            ESP_LOGD(TAG, "Slot_%d relay cmd_num:%d val:%ld", slot_num, cmd, params.p[0].i);
+        }
+
+        switch (cmd) {
+            case RELAY_CMD_set:
+                ctx.state = params.p[0].i;
+                gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
+                break;
+
+            case RELAY_CMD_toggle:
+                ctx.state = !ctx.state;
+                gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
+                break;
+
+            case RELAY_CMD_impulse: {
+                int length = params.p[0].i;
+                ctx.state = !ctx.state;
+                gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
+                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (length) * 1000));
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+}
+
+void start_relay_task(int slot_num) {
+    uint32_t heapBefore = xPortGetFreeHeapSize();
+    char tmpString[60];
+    sprintf(tmpString, "task_relay_%d", slot_num);
+    xTaskCreatePinnedToCore(relay_task, tmpString, 1024 * 4, &slot_num, 12, NULL, 1);
+
+    ESP_LOGD(TAG, "Relay task created for slot: %d Heap usage: %lu free heap:%u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

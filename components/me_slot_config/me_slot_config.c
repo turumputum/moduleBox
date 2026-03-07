@@ -134,6 +134,8 @@ int init_slots(void){
 			start_in_2ch_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
 			start_out_2ch_task(i);		// W, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "relay", 5)){
+			start_relay_task(i);		// W, NOC
 		// }else if(!memcmp(me_config.slot_mode[i], "in_1ch", 6)){
 		// 	start_in_3ch_task(i, 1);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "pwmLeds", 7)){

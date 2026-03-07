@@ -33,6 +33,8 @@ void start_in_out_task(int slot_num);
 void start_in_2ch_task(int slot_num);
 void start_in_3ch_task(int slot_num);
 void start_out_2ch_task(int slot_num);
+void start_out_3ch_task(int slot_num);
+void start_relay_task(int slot_num);
 
 
 
