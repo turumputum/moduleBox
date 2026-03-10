@@ -363,13 +363,13 @@ int saveConfig(void) {
     sprintf(tmp, "\r\n[UDP] \r\n");
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "server_adress = %s \r\n", me_config.udpServerAdress);
+    sprintf(tmp, "serverAdress = %s \r\n", me_config.udpServerAdress);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "server_port = %d \r\n", me_config.udpServerPort);
+    sprintf(tmp, "serverPport = %d \r\n", me_config.udpServerPort);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "my_port = %d \r\n", me_config.udpMyPort);
+    sprintf(tmp, "myPort = %d \r\n", me_config.udpMyPort);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "crosslink = %s \r\n", me_config.udp_crosslink);

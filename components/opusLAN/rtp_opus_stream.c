@@ -156,6 +156,10 @@ static int create_multicast_ipv4_socket(char* host, int port)
         return -1;
     }
 
+    // Increase socket receive buffer to reduce packet loss
+    int rcvbuf_size = 16384;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf_size, sizeof(rcvbuf_size));
+
     saddr.sin_family = PF_INET;
     saddr.sin_port = htons(port);
     saddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -182,6 +186,36 @@ static int create_multicast_ipv4_socket(char* host, int port)
 err:
     close(sock);
     return -1;
+}
+
+static int create_unicast_ipv4_socket(int port)
+{
+    struct sockaddr_in saddr = { 0 };
+    int sock = -1;
+    int err = 0;
+
+    sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Failed to create unicast socket. Error %d", errno);
+        return -1;
+    }
+
+    // Increase socket receive buffer to reduce packet loss
+    int rcvbuf_size = 16384;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf_size, sizeof(rcvbuf_size));
+
+    saddr.sin_family = PF_INET;
+    saddr.sin_port = htons(port);
+    saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    err = bind(sock, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
+    if (err < 0) {
+        ESP_LOGE(TAG, "Failed to bind unicast socket. Error %d", errno);
+        close(sock);
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "Unicast socket created and bound to port %d", port);
+    return sock;
 }
 
 static int socket_switch_multicast_group(int sock, char* old_host, char* new_host)
@@ -329,11 +363,22 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
         ESP_LOGE(TAG, "Already opened");
         return ESP_FAIL;
     }
-    ESP_LOGI(TAG, "Host is %s, port is %d\n", rtp->host, rtp->port);
-    int msock = create_multicast_ipv4_socket(rtp->host, rtp->port);
-    if (msock < 0) {
-        ESP_LOGE(TAG, "Failed to create IPv4 multicast socket");
-        return ESP_FAIL;
+
+    int msock;
+    if (rtp->is_multicast) {
+        ESP_LOGI(TAG, "Opening multicast stream: host=%s, port=%d", rtp->host, rtp->port);
+        msock = create_multicast_ipv4_socket(rtp->host, rtp->port);
+        if (msock < 0) {
+            ESP_LOGE(TAG, "Failed to create IPv4 multicast socket");
+            return ESP_FAIL;
+        }
+    } else {
+        ESP_LOGI(TAG, "Opening unicast stream: port=%d", rtp->port);
+        msock = create_unicast_ipv4_socket(rtp->port);
+        if (msock < 0) {
+            ESP_LOGE(TAG, "Failed to create IPv4 unicast socket");
+            return ESP_FAIL;
+        }
     }
 
     int flags = fcntl(msock, F_GETFL, 0);
