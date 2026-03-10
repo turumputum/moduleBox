@@ -1192,6 +1192,10 @@ static void ftp_process_cmd (PCLIENT cl) {
 				cl->ftp_data.loggin.uservalid = true && (strlen(ftp_user) == strlen(cl->ftp_scratch_buffer));
 				ftp_send_reply(cl, 331, "Please specify the password.");
 			}
+			else
+			{
+				ftp_send_reply(cl, 530, "ftp is not allowed for this user account.");
+			}
 			break;
 		case E_FTP_CMD_PASS:
 			ftp_pop_param (&bufptr, cl->ftp_scratch_buffer, true, true, false);
@@ -1213,7 +1217,7 @@ static void ftp_process_cmd (PCLIENT cl) {
 					break;
 				}
 			}
-			ftp_send_reply(cl, 530, NULL);
+			ftp_send_reply(cl, 530, "Login or password incorrect!");
 			break;
 		case E_FTP_CMD_PASV:
 			{
