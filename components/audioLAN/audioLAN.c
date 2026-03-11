@@ -236,8 +236,11 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
 	return ESP_OK;
 }
 
-/* 
-    Модуль звук через сеть
+/* Модуль звук через сеть. 
+- Поддерживает как unicast, так и multicast режимы (настраивается через конфиг)
+- Читает аудио данные из RTP потока и выводит на I2S
+- Поддерживает горячее переключение multicast адреса на лету через команду setMulticastAddress
+- задержка порядка 70мс
 */
 void configure_audioLAN(PRTPCONFIG c, int slot_num)
 {
@@ -296,7 +299,7 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     /* Размер буфера
     - по умолчанию 1024
 	*/
-	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 2048, 256, 8192);
+	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 5124, 256, 8192);
     ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d", slot_num, c->buf_size);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {

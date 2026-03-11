@@ -435,7 +435,7 @@ static esp_err_t _rtp_opus_destroy(audio_element_handle_t self)
 }
 
 static uint8_t *opus_packet_buf = NULL;
-#define OPUS_PACKET_BUF_SIZE 1024
+#define OPUS_PACKET_BUF_SIZE 1500  /* Must fit max Opus frame + 12-byte RTP header within MTU */
 
 static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
 {

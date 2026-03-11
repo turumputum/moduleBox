@@ -301,7 +301,7 @@ c->bits_per_sample = 16; /* Opus decoder always outputs 16-bit PCM, not configur
     /* Размер буфера
     - по умолчанию 2048
 	*/
-	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 2048, 1024, 8192);
+	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 5124, 1024, 8192);
     ESP_LOGD(TAG, "[opusLAN_%d] bufSize:%d", slot_num, c->buf_size);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
