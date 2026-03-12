@@ -262,7 +262,10 @@ void wavplayer_task(void *arg) {
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
 	gpio_set_level(led_pin, 0);
 
-	c->handler = wav_handle_init(TAG);
+	gpio_num_t pin_bclk = (gpio_num_t)SLOTS_PIN_MAP[slot_num][0];
+	gpio_num_t pin_ws   = (gpio_num_t)SLOTS_PIN_MAP[slot_num][1];
+	gpio_num_t pin_dout = (gpio_num_t)SLOTS_PIN_MAP[slot_num][2];
+	c->handler = wav_handle_init(TAG, pin_bclk, pin_ws, pin_dout);
 	setVolume_num(c->handler, c->volume);
 
 	ESP_LOGD(TAG, "Audio init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(),
@@ -271,11 +274,7 @@ void wavplayer_task(void *arg) {
 	int att_flag=0;
 	uint8_t att_vol=c->volume;
 
-	char reportStr[strlen("/endOfTrack")+10];
 	//listen audio event
-	audio_event_iface_msg_t msg;
-	esp_err_t ret;
-	audio_element_state_t el_state;
 
 	waitForWorkPermit(slot_num);
 

@@ -366,7 +366,7 @@ int saveConfig(void) {
     sprintf(tmp, "serverAdress = %s \r\n", me_config.udpServerAdress);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "serverPport = %d \r\n", me_config.udpServerPort);
+    sprintf(tmp, "serverPort = %d \r\n", me_config.udpServerPort);
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));
     sprintf(tmp, "myPort = %d \r\n", me_config.udpMyPort);

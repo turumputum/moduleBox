@@ -13,7 +13,6 @@
 #include <string.h>
 
 #include "driver/gpio.h"
-#include "driver/timer.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 #include "esp_timer.h"

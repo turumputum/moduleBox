@@ -44,12 +44,11 @@ typedef struct _tag_queue_message_t
       .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(h->stage.desc.samplerate),                                  // the wav file sample rate
       .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(h->stage.desc.width, h->stage.desc.channels),     // the wav faile bit and channel config
       .gpio_cfg = {
-          // refer to configuration.h for pin setup
-          .mclk = I2S_SCLK_PIN,
-          .bclk = I2S_BLK_PIN,
-          .ws = I2S_WS_PIN,
-          .dout = I2S_DATA_OUT_PIN,
-          .din = I2S_DATA_IN_PIN,
+          .mclk = I2S_GPIO_UNUSED,
+          .bclk = h->pin_bclk,
+          .ws   = h->pin_ws,
+          .dout = h->pin_dout,
+          .din  = I2S_GPIO_UNUSED,
           .invert_flags = {
               .mclk_inv = false,
               .bclk_inv = false,
@@ -278,7 +277,7 @@ static int _playCurrent(wav_handle_t    h)
 
     return result;
 }
-wav_handle_t wav_handle_init(const char * tag)
+wav_handle_t wav_handle_init(const char * tag, gpio_num_t bclk, gpio_num_t ws, gpio_num_t dout)
 {
     wav_handle_t            result  = 1;
 
@@ -288,7 +287,10 @@ wav_handle_t wav_handle_init(const char * tag)
                ((result->queue = xQueueCreate(5, sizeof(queue_message_t))) != nil)      )
         {
             result->stage.volume = 100;
-            result->tag = tag;
+            result->tag      = tag;
+            result->pin_bclk = bclk;
+            result->pin_ws   = ws;
+            result->pin_dout = dout;
         }
         else
             result = wav_handle_deinit(result);

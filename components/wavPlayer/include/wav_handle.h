@@ -10,19 +10,13 @@
 #include <stdio.h>
 #include "esp_audio.h"
 #include "driver/i2s_std.h"
+#include "driver/gpio.h"
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
 #define WAV_BUF_SIZE 4096
-
-// I2S Configuration
-#define I2S_BLK_PIN GPIO_NUM_4
-#define I2S_WS_PIN GPIO_NUM_5
-#define I2S_DATA_OUT_PIN GPIO_NUM_10
-#define I2S_DATA_IN_PIN I2S_GPIO_UNUSED
-#define I2S_SCLK_PIN I2S_GPIO_UNUSED
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
@@ -118,6 +112,9 @@ struct wav_handle {
     QueueHandle_t       queue;
     bool                enabled;
     i2s_chan_handle_t 	audio_ch_handle;
+    gpio_num_t          pin_bclk;
+    gpio_num_t          pin_ws;
+    gpio_num_t          pin_dout;
 
     void *ctx;                                              /*!< Backend-specific context pointer. */
     int (*open)(wav_handle_t h);                           /*!< Open/initialize the backend (returns 0 on success). */
@@ -140,7 +137,7 @@ struct wav_handle {
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-wav_handle_t wav_handle_init(const char * tag);
+wav_handle_t wav_handle_init(const char * tag, gpio_num_t bclk, gpio_num_t ws, gpio_num_t dout);
 void wav_handle_stop(wav_handle_t h);
 void wav_handle_play(wav_handle_t h, char * fname);
 wav_handle_t wav_handle_deinit(wav_handle_t h);

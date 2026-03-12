@@ -227,10 +227,8 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
     char *              keyword;
     char *              delim;
     char *              value           = NULL;
-    char *              space;
     int                 len;
-    char                tmp             [ 128 ];
-
+  
 
     if (xQueueReceive(me_state.command_queue[cmd->slot_num], &cmd->msg, TO) == pdPASS)
     {

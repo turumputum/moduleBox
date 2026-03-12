@@ -278,49 +278,6 @@ static int jbuf_init(jbuffer *jbuf, uint32_t size)
     return 0;
 }
 
-static int jbuf_write(uint8_t *datain, uint32_t size, jbuffer *jbuf)
-{
-    uint32_t i = 0;
-    while (size) {
-        uint32_t new_w_p = jbuf->w_p + 1;
-        if (new_w_p >= jbuf->bufsize) new_w_p = 0;
-        if (new_w_p == jbuf->r_p) break;  /* buffer full */
-
-        jbuf->buf[jbuf->w_p] = datain[i]; /* store at current pos, THEN advance */
-        jbuf->w_p = new_w_p;
-        i++;
-        size--;
-    }
-    return i;
-}
-
-static int jbuf_read(uint8_t *dataout, uint32_t size, jbuffer *jbuf)
-{
-    uint32_t i = 0;
-    while (size) {
-        if (jbuf->r_p == jbuf->w_p) break;
-        dataout[i] = jbuf->buf[jbuf->r_p];
-
-        uint32_t new_r_p = jbuf->r_p + 1;
-        if (new_r_p >= jbuf->bufsize) new_r_p = 0;
-
-        jbuf->r_p = new_r_p;
-        i++;
-        size--;
-    }
-    return i;
-}
-
-static int jbuf_count(jbuffer *jbuf)
-{
-    if (jbuf->r_p == jbuf->w_p) return 0;
-    return jbuf->r_p < jbuf->w_p ? jbuf->w_p - jbuf->r_p : jbuf->bufsize - (jbuf->r_p - jbuf->w_p);
-}
-
-static int jbuf_ready(jbuffer *jbuf)
-{
-    return jbuf_count(jbuf) > jbuf->read_thres;
-}
 
 // ///////////////// Audio element callbacks /////////////////
 
@@ -507,11 +464,6 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
             }
         }
     }
-}
-
-static esp_err_t _rtp_opus_write(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
-{
-    return ESP_FAIL;
 }
 
 static esp_err_t _rtp_opus_process(audio_element_handle_t self, char *in_buffer, int in_len)

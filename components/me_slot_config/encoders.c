@@ -9,7 +9,6 @@
 #include "freertos/task.h"
 #include "freertos/projdefs.h"
 #include "freertos/portmacro.h"
-#include <driver/mcpwm.h>
 
 #include "reporter.h"
 #include "stateConfig.h"

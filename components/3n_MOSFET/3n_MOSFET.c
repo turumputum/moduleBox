@@ -220,9 +220,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 void pwmLeds_task(void *arg){
     //PMOSFETCONFIG c = calloc(1, sizeof(MOSFETCONFIG));
     MOSFETCONFIG c = {0};
-    uint32_t startTick = xTaskGetTickCount();
 	int slot_num = *(int*) arg;
-	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
     STDCOMMAND_PARAMS       params = { 0 };
 
 	me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
@@ -288,7 +286,6 @@ void pwmLeds_task(void *arg){
         .b=0
     };
 	
-    uint8_t aniSwitch=0;
     TickType_t lastWakeTime = xTaskGetTickCount(); 
 
     waitForWorkPermit(slot_num);

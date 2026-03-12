@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "driver/gpio.h"
-#include "driver/timer.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 #include "esp_timer.h"
@@ -13,7 +12,6 @@
 #include "freertos/task.h"
 #include "freertos/projdefs.h"
 #include "freertos/portmacro.h"
-#include <driver/mcpwm.h>
 #include "stateConfig.h"
 #include "me_slot_config.h"
 #include "reporter.h"

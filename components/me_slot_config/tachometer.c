@@ -12,7 +12,6 @@
 #include "freertos/task.h"
 #include "freertos/projdefs.h"
 #include "freertos/portmacro.h"
-#include <driver/mcpwm.h>
 #include "stateConfig.h"
 #include "me_slot_config.h"
 #include "reporter.h"
@@ -229,7 +228,6 @@ void tachometer_task(void *arg)
 	waitForWorkPermit(slot_num);
 	
 	while (1)	{	
-		uint64_t current_time = esp_timer_get_time();
 		
 		int current_count;
 		ESP_ERROR_CHECK(pcnt_unit_get_count(var.pcnt_unit, &current_count));
