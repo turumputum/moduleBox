@@ -80,11 +80,11 @@ typedef enum
 #define ENABLE 1
 #define DISABLE 0
 
-void _setVolume_num(audio_element_handle_t i2s_stream, uint8_t vol) {
+void _setVolume_num(audio_board_handle_t board_handle, uint8_t vol) {
 	if(vol>100){
 		vol=100;
 	}
-	i2s_alc_volume_set(i2s_stream, -34 + (vol / 3));
+	audio_hal_set_volume(board_handle->audio_hal, vol);
 }
 
 void pipelineStop(PRTPCONFIG c){
@@ -177,12 +177,10 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
     ESP_LOGI(TAG, "[2.1] Create i2s stream to write data to codec chip");
     i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
     i2s_cfg.type = AUDIO_STREAM_WRITER;
-    i2s_cfg.use_alc = true;
+    i2s_cfg.use_alc = false;
     i2s_cfg.task_core=1;
     //i2s_cfg.buffer_len = 36000;
     c->i2s_stream_writer = i2s_stream_init(&i2s_cfg);
-    //AUDIO_NULL_CHECK(TAG, c->i2s_stream_writer, return ESP_FAIL);
-    // _setVolume_num(c->i2s_stream_writer, c->volume);
 
     ESP_LOGI(TAG, "[2.2] Create rtp client stream to read data");
     // Free existing host string if allocated to prevent memory leak
@@ -375,6 +373,7 @@ void audioLAN_task(void *arg){
 
     waitForWorkPermit(slot_num);
     pipelineStart(c);
+    _setVolume_num(c->board_handle, c->volume);
     if(c->state == ENABLE){
         audio_pipeline_resume(c->pipeline);
         ESP_LOGD(TAG,"audioLAN_%d state ENABLE", slot_num);
@@ -455,7 +454,7 @@ void audioLAN_task(void *arg){
 
             case rtpCMD_setVolume:
                 c->volume = atoi(cmd_arg);
-                _setVolume_num(c->i2s_stream_writer, c->volume);
+                _setVolume_num(c->board_handle, c->volume);
                 ESP_LOGD(TAG, "[audioLAN_%d] setVolume:%d. Free heap:%d", slot_num, c->volume, xPortGetFreeHeapSize());
                 stdreport_i(c->volumeReport, c->volume);
                 break;

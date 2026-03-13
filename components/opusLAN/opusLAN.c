@@ -79,11 +79,11 @@ typedef enum
 #define ENABLE 1
 #define DISABLE 0
 
-void _opusSetVolume_num(audio_element_handle_t i2s_stream, uint8_t vol) {
+void _opusSetVolume_num(audio_board_handle_t board_handle, uint8_t vol) {
 	if(vol>100){
 		vol=100;
 	}
-	i2s_alc_volume_set(i2s_stream, -34 + (vol / 3));
+	audio_hal_set_volume(board_handle->audio_hal, vol);
 }
 
 void opusPipelineStop(POPUSCONFIG c){
@@ -156,7 +156,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     ESP_LOGI(TAG, "[2.1] Create i2s stream to write data to codec chip");
     i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
     i2s_cfg.type = AUDIO_STREAM_WRITER;
-    i2s_cfg.use_alc = true;
+    i2s_cfg.use_alc = false;
     i2s_cfg.task_core = 1;
     i2s_cfg.stack_in_ext = true;     /* Task stack in PSRAM to save internal RAM */
     i2s_cfg.out_rb_size = 8 * 1024;  /* Default: need room for decoded 48kHz stereo PCM */
@@ -199,7 +199,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     rtp_cfg.port = c->port;
     rtp_cfg.host = c->host;  /* NULL for unicast, multicast address for multicast */
     rtp_cfg.task_core = 0;
-    rtp_cfg.buf_size = c->buf_size;  /* Use configured buffer size */
+    rtp_cfg.buf_size = c->buf_size;
     rtp_cfg.sample_rate = c->sample_rate;
     rtp_cfg.bits_per_sample = c->bits_per_sample;
     c->rtp_stream_reader = rtp_opus_stream_init(&rtp_cfg);
@@ -243,6 +243,10 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
 /* 
     Модуль звук через сеть с кодеком Opus
     slots: 0-0
+    - Поддерживает как unicast, так и multicast режимы (настраивается через конфиг)
+    - Читает аудио данные из RTP потока, декодирует Opus и выводит на I2S
+    - Поддерживает горячее переключение multicast адреса на лету через команду setMulticastAddress
+    - задержка порядка 80мс-100мс в зависимости от сети
 */
 void configure_opusLAN(POPUSCONFIG c, int slot_num)
 {
@@ -295,7 +299,7 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
     /* Bits per sample
     - по умолчанию 16
 	*/
-c->bits_per_sample = 16; /* Opus decoder always outputs 16-bit PCM, not configurable */
+    c->bits_per_sample = 16; /* Opus decoder always outputs 16-bit PCM, not configurable */
     ESP_LOGD(TAG, "[opusLAN_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
 
     /* Размер буфера
@@ -373,6 +377,7 @@ void opusLAN_task(void *arg){
 
     waitForWorkPermit(slot_num);
     opusPipelineStart(c);
+    _opusSetVolume_num(c->board_handle, c->volume);
     if(c->state == ENABLE){
         audio_pipeline_resume(c->pipeline);
         ESP_LOGD(TAG,"opusLAN_%d state ENABLE", slot_num);
@@ -386,8 +391,35 @@ void opusLAN_task(void *arg){
 
     int64_t last_blink_time = 0;
     int led_state = 0;
+    int64_t last_rate_adjust_us = 0;   /* for periodic I2S clock correction */
+    int32_t current_i2s_hz = c->sample_rate;
 
     while (1) {
+        /* --- Periodic I2S clock rate correction (compensates crystal drift) ---
+         * Every 60s after the RTP stream has collected >=30s of measurement data,
+         * adjust the I2S clock to match the sender's actual audio clock.
+         * Both receivers converge to the same rate → they stay in sync.
+         */
+        int64_t now_us = esp_timer_get_time();
+        if (c->state == ENABLE && c->rtp_stream_reader != NULL &&
+            (now_us - last_rate_adjust_us) > 60000000LL) {
+
+            int32_t measured_hz = rtp_opus_stream_get_measured_hz(c->rtp_stream_reader);
+            if (measured_hz == c->sample_rate) {
+                /* No measurement yet (or stream just (re)opened): sync tracking var to hardware */
+                current_i2s_hz = c->sample_rate;
+            } else if (measured_hz != current_i2s_hz) {
+                /* Measurement available and differs from current rate — apply */
+                i2s_stream_set_clk(c->i2s_stream_writer, (int)measured_hz, 16, 2);
+                ESP_LOGI(TAG, "[opusLAN_%d] I2S rate adjusted %ld -> %ld Hz (drift %+ld ppm)",
+                         slot_num, (long)current_i2s_hz, (long)measured_hz,
+                         (long)(((int64_t)(measured_hz - c->sample_rate) * 1000000LL) / c->sample_rate));
+                current_i2s_hz = measured_hz;
+            }
+            last_rate_adjust_us = now_us;
+        }
+        /* ----------------------------------------------------------------------- */
+
         //LED Logic
         if (c->state == DISABLE) {
             gpio_set_level(led_pin, 0);
@@ -423,7 +455,7 @@ void opusLAN_task(void *arg){
 
             case opusCMD_setVolume:
                 c->volume = atoi(cmd_arg);
-                _opusSetVolume_num(c->i2s_stream_writer, c->volume);
+                _opusSetVolume_num(c->board_handle, c->volume);
                 ESP_LOGD(TAG, "[opusLAN_%d] setVolume:%d. Free heap:%d", slot_num, c->volume, xPortGetFreeHeapSize());
                 stdreport_i(c->volumeReport, c->volume);
                 break;

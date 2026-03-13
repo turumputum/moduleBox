@@ -59,6 +59,15 @@ typedef struct rtp_opus_stream {
     int64_t                       last_packet_time;
     int                           sample_rate;
     int                           bits_per_sample;
+    /* RTP clock rate tracking — measures sender Hz, used to adjust I2S clock */
+    bool                          sync_initialized;
+    uint32_t                      rtp_ts_base;
+    int64_t                       local_time_base_us;
+    int64_t                       last_clk_update_us;   /* last time measured_sample_hz was updated */
+    int32_t                       measured_sample_hz;   /* sender's measured audio clock rate */
+    /* Stream identity tracking for restart detection */
+    uint32_t                      last_ssrc;
+    uint16_t                      rtp_seq;
 } rtp_opus_stream_t;
 
 struct rtp_header {
@@ -348,6 +357,9 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
     }
     rtp->is_open = true;
     rtp->last_packet_time = esp_timer_get_time();
+    rtp->sync_initialized = false;  /* reset RTP timestamp sync on each open */
+    rtp->last_ssrc        = 0;
+    rtp->rtp_seq          = 0;
     _dispatch_event(self, rtp, NULL, 0, RTP_OPUS_STREAM_STATE_CONNECTED);
 
     return ESP_OK;
@@ -402,7 +414,6 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
     socklen_t addr_len = sizeof(source_addr);
 
     int ret = 0;
-    static uint16_t seq = 0;
 
     /*
      * Simple approach: receive one RTP packet, return one complete Opus frame
@@ -413,8 +424,6 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
     while (1) {
         if (audio_element_is_stopping(self)) {
             ESP_LOGW(TAG, "_rtp_opus_read: Received stop command, aborting.");
-            _rtp_opus_close(self);
-            _rtp_opus_destroy(self);
             return ESP_FAIL;
         }
 
@@ -429,14 +438,80 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
 
             rtp->last_packet_time = esp_timer_get_time();
 
+            /* --- RTP clock rate tracking (no vTaskDelay — only I2S rate adjustment) --- */
+            uint32_t rtp_ts = ((uint32_t)opus_packet_buf[4] << 24)
+                            | ((uint32_t)opus_packet_buf[5] << 16)
+                            | ((uint32_t)opus_packet_buf[6] <<  8)
+                            |  (uint32_t)opus_packet_buf[7];
+
+            uint32_t ssrc = ((uint32_t)opus_packet_buf[8]  << 24)
+                          | ((uint32_t)opus_packet_buf[9]  << 16)
+                          | ((uint32_t)opus_packet_buf[10] <<  8)
+                          |  (uint32_t)opus_packet_buf[11];
+
+            /* Detect stream restart: SSRC change means a new sender (GStreamer restart) */
+            if (rtp->sync_initialized && ssrc != rtp->last_ssrc) {
+                ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
+                         (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
+                rtp->sync_initialized = false;
+                rtp->rtp_seq = 0;
+            }
+            rtp->last_ssrc = ssrc;
+
+            if (!rtp->sync_initialized) {
+                int64_t now_us              = esp_timer_get_time();
+                rtp->rtp_ts_base            = rtp_ts;
+                rtp->local_time_base_us     = now_us;
+                rtp->last_clk_update_us     = now_us;
+                rtp->measured_sample_hz     = rtp->sample_rate;
+                rtp->sync_initialized       = true;
+                ESP_LOGI(TAG, "RTP clock tracking init: ts_base=%lu sample_rate=%d",
+                         (unsigned long)rtp->rtp_ts_base, rtp->sample_rate);
+            } else {
+                int64_t now_us = esp_timer_get_time();
+                int64_t since_base_us = now_us - rtp->local_time_base_us;
+
+                /* After 30s warmup, update clock measurement every 30s */
+                if (since_base_us > 30000000LL &&
+                    (now_us - rtp->last_clk_update_us) > 30000000LL) {
+
+                    int64_t rtp_elapsed = (int32_t)(rtp_ts - rtp->rtp_ts_base); /* signed wraps correctly */
+                    if (rtp_elapsed > 0 && since_base_us > 0) {
+                        int32_t hz = (int32_t)(rtp_elapsed * 1000000LL / since_base_us);
+                        /* Clamp to ±500 ppm of nominal to reject glitches */
+                        int32_t max_delta = rtp->sample_rate / 2000;  /* 500 ppm */
+                        if ((hz - rtp->sample_rate) >  max_delta) hz = rtp->sample_rate + max_delta;
+                        if ((rtp->sample_rate - hz)  >  max_delta) hz = rtp->sample_rate - max_delta;
+                        rtp->measured_sample_hz = hz;
+                        ESP_LOGI(TAG, "RTP clock measured: %ld Hz (nominal %d, drift %+ld ppm)",
+                                 (long)hz, rtp->sample_rate,
+                                 (long)(((int64_t)(hz - rtp->sample_rate) * 1000000LL) / rtp->sample_rate));
+                    }
+                    /* Roll forward base to prevent int32 overflow */
+                    rtp->rtp_ts_base        = rtp_ts;
+                    rtp->local_time_base_us = now_us;
+                    rtp->last_clk_update_us = now_us;
+                }
+
+                /* Guard: large negative jump means source restarted with new RTP timestamps */
+                int32_t ts_delta = (int32_t)(rtp_ts - rtp->rtp_ts_base);
+                if (ts_delta < -(int32_t)(rtp->sample_rate * 5)) {
+                    ESP_LOGW(TAG, "RTP timestamp jumped back >5s, re-syncing clock base");
+                    rtp->rtp_ts_base        = rtp_ts;
+                    rtp->local_time_base_us = esp_timer_get_time();
+                    rtp->last_clk_update_us = rtp->local_time_base_us;
+                }
+            }
+            /* -------------------------------------------------------------------------- */
+
             uint16_t tseq = opus_packet_buf[2] << 8 | opus_packet_buf[3];
-            if ((uint16_t)tseq == (uint16_t)seq) {
+            if (rtp->sync_initialized && (uint16_t)tseq == rtp->rtp_seq) {
                 continue;  /* duplicate */
             }
-            if ((uint16_t)tseq != (uint16_t)(seq + 1)) {
-                ESP_LOGW(TAG, "Missing packet! expected %d got %d", seq + 1, tseq);
+            if (rtp->sync_initialized && (uint16_t)tseq != (uint16_t)(rtp->rtp_seq + 1)) {
+                ESP_LOGW(TAG, "Missing packet! expected %d got %d", rtp->rtp_seq + 1, tseq);
             }
-            seq = tseq;
+            rtp->rtp_seq = tseq;
 
             uint16_t opus_frame_len = ret - 12;
             int total = 2 + opus_frame_len;
@@ -518,6 +593,14 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
         rtp->prev_host[0] = '\0';
     }
 
+    rtp->sync_initialized    = false;
+    rtp->measured_sample_hz  = rtp->sample_rate;
+    rtp->last_clk_update_us  = 0;
+    rtp->rtp_ts_base         = 0;
+    rtp->local_time_base_us  = 0;
+    rtp->last_ssrc           = 0;
+    rtp->rtp_seq             = 0;
+
     if (config->event_handler) {
         rtp->hook = config->event_handler;
         if (config->event_ctx) {
@@ -598,12 +681,17 @@ esp_err_t rtp_opus_stream_switch_multicast_address(audio_element_handle_t self, 
         return ESP_FAIL;
     }
 
-    /* Reset jitter buffer to clear old data */
+    /* Reset jitter buffer and RTP sync to clear old data */
     jbuffer *jbuf = &rtp->jbuf;
     memset(jbuf->buf, 0, jbuf->bufsize);
     jbuf->r_p = 0;
     jbuf->w_p = 0;
     jbuf->state = JBUF_IDLE;
+    rtp->sync_initialized   = false;
+    rtp->measured_sample_hz = rtp->sample_rate;
+    rtp->last_clk_update_us = 0;
+    rtp->last_ssrc          = 0;
+    rtp->rtp_seq            = 0;
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;
@@ -624,4 +712,17 @@ esp_err_t rtp_opus_stream_check_connection(audio_element_handle_t self, int time
         return ESP_FAIL;
     }
     return ESP_OK;
+}
+
+/**
+ * @brief  Returns the sender's measured audio clock rate in Hz.
+ *         Returns nominal sample_rate until at least 30s of data collected.
+ *         Pass to i2s_stream_set_clk periodically to compensate crystal drift.
+ */
+int32_t rtp_opus_stream_get_measured_hz(audio_element_handle_t self)
+{
+    if (!self) return 48000;
+    rtp_opus_stream_t *rtp = (rtp_opus_stream_t *)audio_element_getdata(self);
+    if (!rtp) return 48000;
+    return rtp->measured_sample_hz;
 }

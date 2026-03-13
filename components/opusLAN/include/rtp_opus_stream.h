@@ -85,6 +85,14 @@ esp_err_t rtp_opus_stream_switch_multicast_address(audio_element_handle_t self, 
  */
 esp_err_t rtp_opus_stream_check_connection(audio_element_handle_t self, int timeout_ms);
 
+/**
+ * @brief       Returns the measured sender audio clock rate in Hz.
+ *              Valid after ~30 seconds of streaming. Use to adjust i2s_stream_set_clk
+ *              periodically (e.g., every 60s) to compensate for ESP32 crystal drift
+ *              and keep multiple receivers synchronized.
+ */
+int32_t rtp_opus_stream_get_measured_hz(audio_element_handle_t self);
+
 #ifdef __cplusplus
 }
 #endif
