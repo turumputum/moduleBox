@@ -1390,11 +1390,20 @@ static void ftp_process_cmd (PCLIENT cl) {
 			break;
 		case E_FTP_CMD_RNTO:
 			ftp_get_param_and_open_child(cl, &bufptr);
+
 			// the path of the file to rename was saved in the data buffer
 			ESP_LOGI(TAG_CL, "E_FTP_CMD_RNTO cl->ftp_path=[%s], cl->ftp_data.dBuffer=[%s]", cl->ftp_path, (char *)cl->ftp_data.dBuffer);
 			strcat(fullname, (char *)cl->ftp_data.dBuffer);
 			ESP_LOGI(TAG_CL, "E_FTP_CMD_RNTO fullname=[%s]", fullname);
 			strcat(fullname2, cl->ftp_path);
+
+			if (!strcmp(cl->ftp_path, "/UPDATE.FW"))
+			{
+				ESP_LOGI(TAG_CL, "RESET TRIGGER: renaming to %s", cl->ftp_path);
+
+				cl->resetTrigger = true; 
+			}
+
 			ESP_LOGI(TAG_CL, "E_FTP_CMD_RNTO fullname2=[%s]", fullname2);
 
 			//if (rename((char *)cl->ftp_data.dBuffer, cl->ftp_path) == 0) {
