@@ -159,6 +159,7 @@ typedef enum {
     E_FTP_CMD_NLST,
     E_FTP_CMD_AUTH,
     E_FTP_CMD_PORT,
+    E_FTP_CMD_AVLB,
     E_FTP_NUM_FTP_CMDS
 } ftp_cmd_index_t;
 

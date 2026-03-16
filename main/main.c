@@ -433,6 +433,22 @@ void setVolumeLabel()
 	f_setlabel(label); 
 }
 
+uint64_t get_free_bytes_on_disk()
+{
+	FATFS* fsinfo;
+	DWORD fre_clust;
+	if(f_getfree("0:",&fre_clust,&fsinfo)!= 0) return 0;
+    uint64_t size = ((uint64_t)(fsinfo->csize))*(fsinfo->n_fatent - 2)
+#if _MAX_SS != 512
+        *(fsinfo->ssize);
+#else
+        *512;
+#endif
+
+	return size;
+}
+
+
 void app_main(void)	
 {
 

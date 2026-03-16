@@ -114,7 +114,7 @@ static const ftp_cmd_t ftp_cmd_table[] = { { "FEAT" }, { "SYST" }, { "CDUP" }, {
 										   { "LIST" }, { "RETR" }, { "STOR" }, { "DELE" },
 										   { "RMD"	}, { "MKD"	}, { "RNFR" }, { "RNTO" },
 										   { "NOOP" }, { "QUIT" }, { "APPE" }, { "NLST" }, 
-										   { "AUTH" }, { "PORT" } };
+										   { "AUTH" }, { "PORT" }, { "AVLB" } };
 
 static char * MSG_250 = "Directory successfully changed.";
 
@@ -990,6 +990,7 @@ static void ftp_get_param_and_open_child(PCLIENT cl, char **bufptr) {
 	ftp_open_child(cl->ftp_path, cl->ftp_scratch_buffer);
 	cl->ftp_data.closechild = true;
 }
+extern  uint64_t get_free_bytes_on_disk();
 
 // ==== Ftp command processing =====
 
@@ -1401,6 +1402,16 @@ static void ftp_process_cmd (PCLIENT cl) {
 				ftp_send_reply(cl, 250, MSG_250);
 			} else {
 				ftp_send_reply(cl, 550, NULL);
+			}
+			break;
+		case E_FTP_CMD_AVLB:
+			{
+				char szstr [ 128 ];
+				//ftp_get_param_and_open_child(cl, &bufptr);
+				//parse_list_params();
+				snprintf(szstr, sizeof(szstr), "%lu", (long unsigned)get_free_bytes_on_disk());
+				ftp_send_reply(cl, 213, szstr);
+				//ftp_send_reply(cl, 501, "Cannot determine");
 			}
 			break;
 		case E_FTP_CMD_NOOP:
