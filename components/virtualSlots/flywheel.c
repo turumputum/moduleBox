@@ -49,7 +49,7 @@ typedef struct __tag_FLYWHEEL_CONFIG{
 void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
 {
     /* Значение декремента за один период
-       По умолчанию 0.1
+       По умолчанию 0,1
     */
     ch->decrement = get_option_float_val(slot_num, "decrement", 0.1);
     ESP_LOGD(TAG, "Set decrement:%f for slot:%d", ch->decrement, slot_num);

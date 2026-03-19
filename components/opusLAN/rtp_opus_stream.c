@@ -68,6 +68,9 @@ typedef struct rtp_opus_stream {
     /* Stream identity tracking for restart detection */
     uint32_t                      last_ssrc;
     uint16_t                      rtp_seq;
+    /* Drain task — reads socket independently of pipeline backpressure */
+    TaskHandle_t                  drain_task_handle;
+    volatile bool                 drain_running;
 } rtp_opus_stream_t;
 
 struct rtp_header {
@@ -165,8 +168,11 @@ static int create_multicast_ipv4_socket(char* host, int port)
         return -1;
     }
 
-    // Increase socket receive buffer to reduce packet loss
-    int rcvbuf_size = 16384;
+    // Socket receive buffer — Opus frames are small (~80 bytes) so 32KB can
+    // hold ~400 packets (~8s).  Larger than audioLAN's 16KB because Opus
+    // packets are much smaller than raw PCM and we need to survive WiFi
+    // power-save gaps without packet loss.
+    int rcvbuf_size = 32768;
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf_size, sizeof(rcvbuf_size));
 
     saddr.sin_family = PF_INET;
@@ -209,8 +215,8 @@ static int create_unicast_ipv4_socket(int port)
         return -1;
     }
 
-    // Increase socket receive buffer to reduce packet loss
-    int rcvbuf_size = 16384;
+    // Socket receive buffer — match multicast socket's 32KB
+    int rcvbuf_size = 32768;
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf_size, sizeof(rcvbuf_size));
 
     saddr.sin_family = PF_INET;
@@ -276,17 +282,84 @@ static int jbuf_init(jbuffer *jbuf, uint32_t size)
     jbuf->r_p = 0;
     jbuf->w_p = 0;   /* Start empty — zeros are NOT valid Opus frames */
     /*
-     * Opus at 32kbps ~= 4100 bytes/sec in jitter buffer.
-     * read_thres: initial fill before playback starts (~200ms = ~820 bytes)
-     * min_thres:  go back to filling only when nearly empty (~50ms = ~200 bytes)
-     * This prevents the fill-drain-fill stutter cycle.
+     * Opus at ~80 bytes/frame * 50 fps ≈ 4000 bytes/sec compressed.
+     * read_thres: pre-fill before playback starts (~0.5s = ~2000 bytes).
+     *             Pipeline burst-drains ~700 bytes to fill downstream
+     *             ringbuffers, leaving ~1300 bytes residual (~325ms).
+     *             Lower than before (was 6000 = 1.5s) for minimal latency.
+     * No min_thres: underrun is detected only when jbuf is truly empty
+     *             (no complete frame available). Pipeline + downstream ringbuffers
+     *             provide ~170ms of additional buffering in PCM form.
      */
-    jbuf->read_thres = 1024;
-    jbuf->min_thres = 256;
+    jbuf->read_thres = 2000;
+    jbuf->min_thres = 0;  /* disabled — underrun = empty jbuf, not a threshold */
     jbuf->state = JBUF_IDLE;
     return 0;
 }
 
+static inline uint32_t jbuf_available(jbuffer *jbuf)
+{
+    uint32_t w = jbuf->w_p;
+    uint32_t r = jbuf->r_p;
+    if (w >= r) return w - r;
+    return jbuf->bufsize - r + w;
+}
+
+static inline uint32_t jbuf_free_space(jbuffer *jbuf)
+{
+    return jbuf->bufsize - 1 - jbuf_available(jbuf);
+}
+
+static int jbuf_write(jbuffer *jbuf, const uint8_t *data, uint32_t len)
+{
+    if (jbuf_free_space(jbuf) < len) return -1;
+    uint32_t w = jbuf->w_p;
+    uint32_t first = jbuf->bufsize - w;
+    if (first >= len) {
+        memcpy(jbuf->buf + w, data, len);
+    } else {
+        memcpy(jbuf->buf + w, data, first);
+        memcpy(jbuf->buf, data + first, len - first);
+    }
+    __asm__ volatile("" ::: "memory");  /* compiler barrier: data visible before w_p update */
+    jbuf->w_p = (w + len) % jbuf->bufsize;
+    return 0;
+}
+
+static int jbuf_read(jbuffer *jbuf, uint8_t *data, uint32_t len)
+{
+    if (jbuf_available(jbuf) < len) return -1;
+    uint32_t r = jbuf->r_p;
+    uint32_t first = jbuf->bufsize - r;
+    if (first >= len) {
+        memcpy(data, jbuf->buf + r, len);
+    } else {
+        memcpy(data, jbuf->buf + r, first);
+        memcpy(data + first, jbuf->buf, len - first);
+    }
+    __asm__ volatile("" ::: "memory");
+    jbuf->r_p = (r + len) % jbuf->bufsize;
+    return 0;
+}
+
+static int jbuf_peek(jbuffer *jbuf, uint8_t *data, uint32_t len)
+{
+    if (jbuf_available(jbuf) < len) return -1;
+    uint32_t r = jbuf->r_p;
+    uint32_t first = jbuf->bufsize - r;
+    if (first >= len) {
+        memcpy(data, jbuf->buf + r, len);
+    } else {
+        memcpy(data, jbuf->buf + r, first);
+        memcpy(data + first, jbuf->buf, len - first);
+    }
+    return 0;
+}
+
+
+// ///////////////// Forward declarations /////////////////
+
+static void rtp_opus_drain_task(void *arg);
 
 // ///////////////// Audio element callbacks /////////////////
 
@@ -360,6 +433,20 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
     rtp->sync_initialized = false;  /* reset RTP timestamp sync on each open */
     rtp->last_ssrc        = 0;
     rtp->rtp_seq          = 0;
+
+    /* Reset jitter buffer */
+    memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
+    rtp->jbuf.r_p = 0;
+    rtp->jbuf.w_p = 0;
+    rtp->jbuf.state = JBUF_IDLE;
+
+    /* Start drain task — reads socket into jitter buffer independently.
+     * Priority 24 = above audio element tasks — must never miss packets.
+     * Core 1 to keep core 0 free for lwIP/Ethernet stack. */
+    rtp->drain_running = true;
+    xTaskCreatePinnedToCore(rtp_opus_drain_task, "rtp_drain", 4096, self, 24, &rtp->drain_task_handle, 1);
+    ESP_LOGI(TAG, "Drain task created (core 1, prio 24)");
+
     _dispatch_event(self, rtp, NULL, 0, RTP_OPUS_STREAM_STATE_CONNECTED);
 
     return ESP_OK;
@@ -378,6 +465,12 @@ static esp_err_t _rtp_opus_close(audio_element_handle_t self)
         ESP_LOGE(TAG, "Already closed");
         return ESP_FAIL;
     }
+
+    /* Stop drain task before closing socket */
+    rtp->drain_running = false;
+    vTaskDelay(pdMS_TO_TICKS(50));  /* drain task exits within ~5ms */
+    rtp->drain_task_handle = NULL;
+    ESP_LOGI(TAG, "Drain task stopped");
 
     ESP_LOGD(TAG, "Shutting down socket");
     shutdown(rtp->sock, 0);
@@ -406,39 +499,75 @@ static esp_err_t _rtp_opus_destroy(audio_element_handle_t self)
 static uint8_t *opus_packet_buf = NULL;
 #define OPUS_PACKET_BUF_SIZE 1500  /* Must fit max Opus frame + 12-byte RTP header within MTU */
 
-static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
+/* ///////////////// Socket drain task /////////////////
+ *
+ * Continuously reads RTP packets from the socket and writes Opus frames
+ * (with 2-byte length prefix) into the jitter buffer.  Runs independently
+ * of the audio pipeline, so pipeline backpressure (audio_element_output
+ * blocking on a full downstream ringbuffer) does NOT stall recvfrom().
+ */
+static void rtp_opus_drain_task(void *arg)
 {
+    audio_element_handle_t self = (audio_element_handle_t)arg;
     rtp_opus_stream_t *rtp = (rtp_opus_stream_t *)audio_element_getdata(self);
 
     struct sockaddr_in source_addr;
     socklen_t addr_len = sizeof(source_addr);
 
-    int ret = 0;
+    /* Diagnostic tracking */
+    int64_t last_recv_us = esp_timer_get_time();
+    int64_t last_stats_us = last_recv_us;
+    int64_t max_gap_us = 0;         /* longest gap between successful recvfrom calls */
+    uint32_t total_packets = 0;
+    uint32_t total_lost = 0;
 
-    /*
-     * Simple approach: receive one RTP packet, return one complete Opus frame
-     * with 2-byte big-endian length prefix. No jitter buffer needed — the
-     * pipeline's own ringbuffers between elements handle buffering.
-     * This preserves Opus frame boundaries which the decoder requires.
-     */
-    while (1) {
-        if (audio_element_is_stopping(self)) {
-            ESP_LOGW(TAG, "_rtp_opus_read: Received stop command, aborting.");
-            return ESP_FAIL;
-        }
+    /* Use blocking socket with timeout instead of non-blocking + vTaskDelay.
+     * This way the task sleeps efficiently in lwIP and wakes immediately
+     * when a packet arrives — no 2ms polling delay, no CPU waste. */
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 50000;  /* 50ms timeout — wake up to check drain_running */
+    setsockopt(rtp->sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-        ret = recvfrom(rtp->sock, opus_packet_buf, OPUS_PACKET_BUF_SIZE, 0,
-                       (struct sockaddr *)&source_addr, &addr_len);
+    /* Switch socket back to blocking mode (was set non-blocking in _rtp_opus_open) */
+    int flags = fcntl(rtp->sock, F_GETFL, 0);
+    fcntl(rtp->sock, F_SETFL, flags & ~O_NONBLOCK);
+
+    ESP_LOGI(TAG, "Drain task started on core %d (blocking mode, 50ms timeout)", xPortGetCoreID());
+
+    int64_t loop_top_us = esp_timer_get_time();  /* timestamp at top of loop iteration */
+
+    while (rtp->drain_running) {
+        int64_t before_recv_us = esp_timer_get_time();
+        int ret = recvfrom(rtp->sock, opus_packet_buf, OPUS_PACKET_BUF_SIZE, 0,
+                           (struct sockaddr *)&source_addr, &addr_len);
+        int64_t after_recv_us = esp_timer_get_time();
 
         if (ret > 0) {
             if (ret < 12) {
-                ESP_LOGW(TAG, "Packet too small (%d bytes), skipping", ret);
-                continue;
+                loop_top_us = esp_timer_get_time();
+                continue;  /* packet too small, skip */
             }
 
-            rtp->last_packet_time = esp_timer_get_time();
+            int64_t now_us = after_recv_us;
+            int64_t gap_us = now_us - last_recv_us;
+            last_recv_us = now_us;
+            if (gap_us > max_gap_us) max_gap_us = gap_us;
 
-            /* --- RTP clock rate tracking (no vTaskDelay — only I2S rate adjustment) --- */
+            /* Diagnostic: when gap > 200ms, identify where time was spent */
+            if (gap_us > 200000LL) {
+                int64_t recv_dur_ms   = (after_recv_us - before_recv_us) / 1000;
+                int64_t prerecv_ms    = (before_recv_us - loop_top_us) / 1000;
+                ESP_LOGW(TAG, "STALL %lldms: recvfrom=%lldms pre_recv=%lldms jbuf=%lu/%lu",
+                         gap_us / 1000, recv_dur_ms, prerecv_ms,
+                         (unsigned long)jbuf_available(&rtp->jbuf),
+                         (unsigned long)rtp->jbuf.bufsize);
+            }
+            total_packets++;
+
+            rtp->last_packet_time = now_us;
+
+            /* --- RTP header parsing --- */
             uint32_t rtp_ts = ((uint32_t)opus_packet_buf[4] << 24)
                             | ((uint32_t)opus_packet_buf[5] << 16)
                             | ((uint32_t)opus_packet_buf[6] <<  8)
@@ -449,7 +578,7 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
                           | ((uint32_t)opus_packet_buf[10] <<  8)
                           |  (uint32_t)opus_packet_buf[11];
 
-            /* Detect stream restart: SSRC change means a new sender (GStreamer restart) */
+            /* Detect stream restart: SSRC change */
             if (rtp->sync_initialized && ssrc != rtp->last_ssrc) {
                 ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
                          (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
@@ -458,8 +587,8 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
             }
             rtp->last_ssrc = ssrc;
 
+            /* --- RTP clock rate tracking --- */
             if (!rtp->sync_initialized) {
-                int64_t now_us              = esp_timer_get_time();
                 rtp->rtp_ts_base            = rtp_ts;
                 rtp->local_time_base_us     = now_us;
                 rtp->last_clk_update_us     = now_us;
@@ -468,76 +597,186 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
                 ESP_LOGI(TAG, "RTP clock tracking init: ts_base=%lu sample_rate=%d",
                          (unsigned long)rtp->rtp_ts_base, rtp->sample_rate);
             } else {
-                int64_t now_us = esp_timer_get_time();
                 int64_t since_base_us = now_us - rtp->local_time_base_us;
 
-                /* After 30s warmup, update clock measurement every 30s */
-                if (since_base_us > 30000000LL &&
-                    (now_us - rtp->last_clk_update_us) > 30000000LL) {
+                if (since_base_us > 60000000LL &&
+                    (now_us - rtp->last_clk_update_us) > 60000000LL) {
 
-                    int64_t rtp_elapsed = (int32_t)(rtp_ts - rtp->rtp_ts_base); /* signed wraps correctly */
+                    int64_t rtp_elapsed = (int32_t)(rtp_ts - rtp->rtp_ts_base);
                     if (rtp_elapsed > 0 && since_base_us > 0) {
-                        int32_t hz = (int32_t)(rtp_elapsed * 1000000LL / since_base_us);
-                        /* Clamp to ±500 ppm of nominal to reject glitches */
-                        int32_t max_delta = rtp->sample_rate / 2000;  /* 500 ppm */
-                        if ((hz - rtp->sample_rate) >  max_delta) hz = rtp->sample_rate + max_delta;
-                        if ((rtp->sample_rate - hz)  >  max_delta) hz = rtp->sample_rate - max_delta;
-                        rtp->measured_sample_hz = hz;
-                        ESP_LOGI(TAG, "RTP clock measured: %ld Hz (nominal %d, drift %+ld ppm)",
-                                 (long)hz, rtp->sample_rate,
-                                 (long)(((int64_t)(hz - rtp->sample_rate) * 1000000LL) / rtp->sample_rate));
+                        int32_t hz_raw = (int32_t)(rtp_elapsed * 1000000LL / since_base_us);
+                        int32_t max_delta = rtp->sample_rate / 2000;
+                        if ((hz_raw - rtp->sample_rate) >  max_delta) hz_raw = rtp->sample_rate + max_delta;
+                        if ((rtp->sample_rate - hz_raw)  >  max_delta) hz_raw = rtp->sample_rate - max_delta;
+
+                        int32_t prev = rtp->measured_sample_hz;
+                        if (prev == rtp->sample_rate) {
+                            rtp->measured_sample_hz = hz_raw;
+                        } else {
+                            rtp->measured_sample_hz = (int32_t)((int64_t)hz_raw * 15 + (int64_t)prev * 85) / 100;
+                        }
+                        // RTP clock measured log removed
                     }
-                    /* Roll forward base to prevent int32 overflow */
-                    rtp->rtp_ts_base        = rtp_ts;
-                    rtp->local_time_base_us = now_us;
                     rtp->last_clk_update_us = now_us;
+
+                    if (since_base_us > 14400000000LL) {
+                        rtp->rtp_ts_base        = rtp_ts;
+                        rtp->local_time_base_us = now_us;
+                        ESP_LOGI(TAG, "RTP clock base rolled forward (4h limit)");
+                    }
                 }
 
-                /* Guard: large negative jump means source restarted with new RTP timestamps */
                 int32_t ts_delta = (int32_t)(rtp_ts - rtp->rtp_ts_base);
                 if (ts_delta < -(int32_t)(rtp->sample_rate * 5)) {
                     ESP_LOGW(TAG, "RTP timestamp jumped back >5s, re-syncing clock base");
                     rtp->rtp_ts_base        = rtp_ts;
-                    rtp->local_time_base_us = esp_timer_get_time();
-                    rtp->last_clk_update_us = rtp->local_time_base_us;
+                    rtp->local_time_base_us = now_us;
+                    rtp->last_clk_update_us = now_us;
                 }
             }
-            /* -------------------------------------------------------------------------- */
 
+            /* --- Sequence number tracking --- */
             uint16_t tseq = opus_packet_buf[2] << 8 | opus_packet_buf[3];
-            if (rtp->sync_initialized && (uint16_t)tseq == rtp->rtp_seq) {
-                continue;  /* duplicate */
-            }
-            if (rtp->sync_initialized && (uint16_t)tseq != (uint16_t)(rtp->rtp_seq + 1)) {
-                ESP_LOGW(TAG, "Missing packet! expected %d got %d", rtp->rtp_seq + 1, tseq);
-            }
-            rtp->rtp_seq = tseq;
+            if (rtp->rtp_seq == 0 && total_packets == 1) {
+                /* First packet after sync — seed seq, don't count as loss */
+                rtp->rtp_seq = tseq;
+            } else {
+                if ((uint16_t)tseq == rtp->rtp_seq) {
+                    continue;  /* duplicate */
+                }
+                if ((uint16_t)tseq != (uint16_t)(rtp->rtp_seq + 1)) {
+                    uint16_t lost = (uint16_t)(tseq - rtp->rtp_seq - 1);
+                    total_lost += lost;
+                    ESP_LOGW(TAG, "Missing %d packets! expected %d got %d (recv_gap=%lldms jbuf=%lu/%lu)",
+                             lost, rtp->rtp_seq + 1, tseq,
+                             gap_us / 1000,
+                             (unsigned long)jbuf_available(&rtp->jbuf),
+                             (unsigned long)rtp->jbuf.bufsize);
 
+                    /* PLC: inject zero-length marker frames so the Opus decoder
+                     * generates concealment audio instead of silence gaps.
+                     * A 2-byte header 0x00 0x00 (frame_len=0) tells the decoder
+                     * to call opus_decode(dec, NULL, 0, ...) → PLC output.
+                     * Cap at 5 frames (~100ms) to avoid flooding the buffer. */
+                    uint16_t plc_count = (lost > 5) ? 5 : lost;
+                    uint8_t plc_hdr[2] = { 0x00, 0x00 };
+                    for (uint16_t p = 0; p < plc_count; p++) {
+                        if (jbuf_free_space(&rtp->jbuf) >= 2) {
+                            jbuf_write(&rtp->jbuf, plc_hdr, 2);
+                        }
+                    }
+                    if (plc_count > 0) {
+                        ESP_LOGI(TAG, "PLC: injected %d concealment frames", plc_count);
+                    }
+                }
+                rtp->rtp_seq = tseq;
+            }
+
+            /* --- Write length-prefixed Opus frame into jitter buffer --- */
             uint16_t opus_frame_len = ret - 12;
-            int total = 2 + opus_frame_len;
+            uint32_t total = 2 + opus_frame_len;
+            uint8_t hdr[2] = { (opus_frame_len >> 8) & 0xFF, opus_frame_len & 0xFF };
 
-            if (total > len) {
-                ESP_LOGW(TAG, "Frame too large (%d > %d), skipping", total, len);
-                continue;
+            if (jbuf_free_space(&rtp->jbuf) >= total) {
+                jbuf_write(&rtp->jbuf, hdr, 2);
+                jbuf_write(&rtp->jbuf, opus_packet_buf + 12, opus_frame_len);
+            } else {
+                ESP_LOGW(TAG, "Jitter buffer overflow! avail:%lu free:%lu need:%lu",
+                         (unsigned long)jbuf_available(&rtp->jbuf),
+                         (unsigned long)jbuf_free_space(&rtp->jbuf),
+                         (unsigned long)total);
             }
 
-            /* 2-byte big-endian length prefix + opus payload */
-            buffer[0] = (opus_frame_len >> 8) & 0xFF;
-            buffer[1] = opus_frame_len & 0xFF;
-            memcpy(buffer + 2, opus_packet_buf + 12, opus_frame_len);
+            /* --- Periodic stats (every 60s) --- */
+            if ((now_us - last_stats_us) > 60000000LL) {
+                // DRAIN stats log removed
+                max_gap_us = 0;
+                last_stats_us = now_us;
+            }
 
-            audio_element_update_byte_pos(self, total);
-            return total;
+            loop_top_us = esp_timer_get_time();
 
         } else if (ret < 0) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                vTaskDelay(pdMS_TO_TICKS(5));
-                continue;
+                loop_top_us = esp_timer_get_time();
+                continue;  /* timeout — check drain_running and loop */
             } else {
-                ESP_LOGE(TAG, "_rtp_opus_read: recvfrom error: %d (%s)", errno, strerror(errno));
-                return ESP_FAIL;
+                ESP_LOGE(TAG, "drain_task recvfrom error: %d (%s)", errno, strerror(errno));
+                break;
             }
         }
+    }
+
+    ESP_LOGI(TAG, "Drain task exiting");
+    vTaskDelete(NULL);
+}
+
+/*
+ * _rtp_opus_read — pulls one complete Opus frame from the jitter buffer.
+ * The drain task fills the jitter buffer from the socket independently.
+ *
+ * Initial pre-buffering: waits until jbuf reaches read_thres (~6000 bytes,
+ * ~1.5s of Opus) before serving any data. This gives the pipeline enough
+ * to fill all downstream ringbuffers in one burst.
+ *
+ * After that: serve frames as fast as pipeline requests.  At startup the
+ * pipeline drains jbuf rapidly to fill downstream ringbuffers (~16+16KB
+ * of PCM); jbuf will drop to 0 and that is NORMAL — downstream buffers
+ * now hold ~200ms of decoded PCM.  In steady state, drain task writes
+ * ~80 bytes/20ms and pipeline reads ~80 bytes/20ms → balanced.
+ * If jbuf is momentarily empty, we just wait — drain task will deliver
+ * the next frame within 20ms, well within downstream buffer margin.
+ * No underrun/refill cycling — once PLAYING, stay PLAYING.
+ */
+static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
+{
+    rtp_opus_stream_t *rtp = (rtp_opus_stream_t *)audio_element_getdata(self);
+    jbuffer *jbuf = &rtp->jbuf;
+
+    while (1) {
+        if (audio_element_is_stopping(self)) {
+            return ESP_FAIL;
+        }
+
+        uint32_t avail = jbuf_available(jbuf);
+
+        /* One-time pre-buffer before first playback */
+        if (jbuf->state != JBUF_PLAYING) {
+            if (avail >= jbuf->read_thres) {
+                ESP_LOGI(TAG, "Jitter buffer filled: %lu bytes, starting playback",
+                         (unsigned long)avail);
+                jbuf->state = JBUF_PLAYING;
+            } else {
+                jbuf->state = JBUF_FILLING;
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
+        }
+
+        /* Try to read one complete frame */
+        if (avail >= 2) {
+            uint8_t hdr[2];
+            jbuf_peek(jbuf, hdr, 2);
+            uint16_t frame_len = (hdr[0] << 8) | hdr[1];
+            uint32_t total = 2 + frame_len;
+
+            if (frame_len == 0) {
+                /* PLC marker frame: pass the 2-byte zero-length header to the
+                 * Opus decoder so it generates concealment audio */
+                if ((int)2 <= len) {
+                    jbuf_read(jbuf, (uint8_t *)buffer, 2);
+                    audio_element_update_byte_pos(self, 2);
+                    return 2;
+                }
+            } else if (frame_len < 1500 && avail >= total && (int)total <= len) {
+                jbuf_read(jbuf, (uint8_t *)buffer, total);
+                audio_element_update_byte_pos(self, total);
+                return total;
+            }
+        }
+
+        /* No complete frame — wait for drain task to deliver (typically <20ms) */
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
@@ -616,17 +855,20 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     AUDIO_MEM_CHECK(TAG, el, goto _rtp_opus_init_exit);
     audio_element_setdata(el, rtp);
 
-    /* Allocate packet receive buffer in PSRAM */
+    /* Allocate packet receive buffer — internal RAM for speed (used by drain task) */
     if (opus_packet_buf == NULL) {
-        opus_packet_buf = heap_caps_malloc(OPUS_PACKET_BUF_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        opus_packet_buf = heap_caps_malloc(OPUS_PACKET_BUF_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if (opus_packet_buf == NULL) {
-            opus_packet_buf = malloc(OPUS_PACKET_BUF_SIZE);
+            opus_packet_buf = malloc(OPUS_PACKET_BUF_SIZE);  /* fallback */
         }
         assert(opus_packet_buf != NULL);
     }
 
-    /* Jitter buffer in PSRAM for Opus compressed frames */
-    jbuf_init(&rtp->jbuf, 8192);
+    /*
+     * Jitter buffer in PSRAM — absorbs pipeline backpressure stalls.
+     * 32KB ≈ 5+ seconds of Opus frames at typical bitrates.
+     */
+    jbuf_init(&rtp->jbuf, 32768);
 
     return el;
 
@@ -725,4 +967,12 @@ int32_t rtp_opus_stream_get_measured_hz(audio_element_handle_t self)
     rtp_opus_stream_t *rtp = (rtp_opus_stream_t *)audio_element_getdata(self);
     if (!rtp) return 48000;
     return rtp->measured_sample_hz;
+}
+
+int32_t rtp_opus_stream_get_jbuf_fill_pct(audio_element_handle_t self)
+{
+    if (!self) return 0;
+    rtp_opus_stream_t *rtp = (rtp_opus_stream_t *)audio_element_getdata(self);
+    if (!rtp || rtp->jbuf.bufsize == 0) return 0;
+    return (int32_t)(jbuf_available(&rtp->jbuf) * 100 / rtp->jbuf.bufsize);
 }

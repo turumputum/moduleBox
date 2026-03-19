@@ -45,13 +45,13 @@ typedef struct __tag_RND_CONFIG{
 */
 void configure_random(PRND_CONFIG ch, int slot_num){
     
-    /* Максимальное значение.
+    /* Максимальное значение
        По умолчанию INT32_MAX
     */
     ch->maxVal = get_option_int_val(slot_num, "maxVal", "", INT32_MAX, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "Set maxVal :%ld for slot:%d", ch->maxVal, slot_num);
 
-    /* Минимальное значение.
+    /* Минимальное значение
        По умолчанию 0
     */
     ch->minVal = get_option_int_val(slot_num, "minVal", "", 0, INT32_MIN, INT32_MAX);

@@ -186,12 +186,12 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     stdcommand_register(&ctx->led.cmds, LEDBAR_toggleLedState, "toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
-    пример \"moduleBox/ledRing_0/setRGB:255 0 0\" установить красный цвет
+    пример moduleBox/ledRing_0/setRGB:255 0 0 - установить красный цвет
     */
     stdcommand_register(&ctx->led.cmds, LEDBAR_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Команда задает положение светового эффекта
-    пример \"moduleBox/ledBar_0/setPos:12\"
+    пример moduleBox/ledBar_0/setPos:12
     */
     stdcommand_register(&ctx->led.cmds, LEDBAR_setPos, "setPos", PARAMT_int);
 }

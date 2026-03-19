@@ -47,25 +47,25 @@ typedef struct __tag_COUNTER_CONFIG{
 */
 void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
     
-    /* Максимальное значение счетчика.
+    /* Максимальное значение счетчика
        По умолчанию INT32_MAX
     */
     ch->maxVal = get_option_int_val(slot_num, "maxVal", "", INT32_MAX, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "Set maxVal :%ld for slot:%d", ch->maxVal, slot_num);
 
-    /* Минимальное значение счетчика.
+    /* Минимальное значение счетчика
        По умолчанию 0
     */
     ch->minVal = get_option_int_val(slot_num, "minVal", "", 0, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "Set minVal :%ld for slot:%d", ch->minVal, slot_num);
 
-    /* Пороговое значение счетчика.
+    /* Пороговое значение счетчика
        По умолчанию 0
     */
     ch->threshold = get_option_int_val(slot_num, "threshold", "", 0, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "Set threshold :%ld for slot:%d", ch->threshold, slot_num);
 
-    /* Сброс к противоположному значению при переполнении счетчика.
+    /* Сброс к противоположному значению при переполнении счетчика
        0-1 по умолчанию 0
     */
     ch->circularCounter = get_option_flag_val(slot_num, "circularCounter");

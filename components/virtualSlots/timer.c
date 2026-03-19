@@ -45,7 +45,7 @@ typedef enum{
 */
 void configure_timer(PTIMER_CONFIG ch, int slot_num){
     
-    /* Время через которое сработает таймер. Единицы измерения мс.
+    /* Время через которое сработает таймер, единицы измерения мс
        По умолчанию 1000 мс
     */
     ch->time = get_option_int_val(slot_num, "time", "ms", 1000, 1, UINT32_MAX);

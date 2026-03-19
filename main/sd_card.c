@@ -119,9 +119,9 @@ int spisd_init() {
 
 	if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
 		ESP_LOGD(TAG, "old board pinout notFound( lets try new bord pinout");
-		clk_pin = 18;//18;
-	 	cmd_pin = 8;//8;
-	 	d0_pin = 2;//2;
+		clk_pin = 21;//18;
+	 	cmd_pin = 10;//8;
+	 	d0_pin = 6;//2;
 
 		gpio_pad_select_gpio(clk_pin);
 		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);

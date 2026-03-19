@@ -93,6 +93,12 @@ esp_err_t rtp_opus_stream_check_connection(audio_element_handle_t self, int time
  */
 int32_t rtp_opus_stream_get_measured_hz(audio_element_handle_t self);
 
+/**
+ * @brief  Returns jitter buffer fill level as a percentage (0-100).
+ *         Use to detect buffer drift and apply I2S rate feedback.
+ */
+int32_t rtp_opus_stream_get_jbuf_fill_pct(audio_element_handle_t self);
+
 #ifdef __cplusplus
 }
 #endif

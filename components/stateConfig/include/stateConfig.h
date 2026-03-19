@@ -12,7 +12,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION "3.43"
+#define VERSION "3.44"
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -113,6 +113,7 @@ typedef struct {
 	char *LAN_netMask;
 	char *LAN_gateWay;
 	char *LAN_speed; // "auto", "100M", "10M"
+	uint8_t LAN_pollingPeriod; // W5500 poll period ms (2-10, default 5)
 
 	char *deviceName;
 	int logLevel;

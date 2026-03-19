@@ -175,7 +175,7 @@ void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
     */
     stdcommand_register(&ctx->led.cmds, SWIPERLED_toggleLedState, "toggleLedState", PARAMT_none);
 
-    /* Установить новый целевой цвет. 
+    /* Установить новый целевой цвет
     Цвет задаётся десятичными значениями R G B через пробел
     */
    stdcommand_register(&ctx->led.cmds, SWIPERLED_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);

@@ -112,7 +112,7 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     }
 
     /* Флаг базирует двигатель сразу после включения
-        иначе, слот ждет команды "goHome" из вне
+        иначе, слот ждет команды goHome из вне
 	*/
 	c->goHomeOnStart = get_option_flag_val(slot_num, "goHomeOnStart");
 	if(c->goHomeOnStart){

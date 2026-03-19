@@ -273,6 +273,7 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("CyberGear", level);
 	esp_log_level_set("BUTTON_LEDS", level);
 	esp_log_level_set("PHONE_DIALER", level);
+	esp_log_level_set("MASQUERADE", level);
 	}
 
 

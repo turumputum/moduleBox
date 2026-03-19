@@ -40,14 +40,15 @@ typedef struct __tag_WHITELIST_CONFIG{
 } WHITELIST_CONFIG, * PWHITELIST_CONFIG;
 
 /*
-    Программный модуль для размещения связей во внешнем файле. Виртуальный слот, не взаимодействует с аппаратной частью.
+    Программный модуль для размещения связей во внешнем файле
+    Виртуальный слот, не взаимодействует с аппаратной частью
     slots: 0-9
 */
 void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
     
     strcpy(ch->filename, "/sdcard/");
     
-    /* Имя файла со списком. По умолчанию whitelist.txt.
+    /* Имя файла со списком, по умолчанию whitelist,txt
     */
     if (strstr(me_config.slot_options[slot_num], "filename") != NULL) {
         strcat(ch->filename, get_option_string_val(slot_num, "filename", ""));

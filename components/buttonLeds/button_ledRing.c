@@ -173,7 +173,7 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
     ctx->led.offset = get_option_int_val(slot_num, "offset", "", 0, 0, ctx->led.num_of_led);
 
     /* Начальный цвет
-    - по умолчанию \"0 0 255\" синий
+    - по умолчанию 0 0 255 (синий)
     */
     if (get_option_color_val(&ctx->led.targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
     {
@@ -208,12 +208,12 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
     stdcommand_register(&ctx->led.cmds, LEDRING_toggleLedState, "toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
-    пример \"moduleBox/ledRing_0/setRGB:255 0 0\" установить красный цвет
+    пример moduleBox/ledRing_0/setRGB:255 0 0 - установить красный цвет
     */
     stdcommand_register(&ctx->led.cmds, LEDRING_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
     
     /* Команда задает положение светового эффекта, используется при подсветке спиннера
-    пример \"moduleBox/ledRing_0/setPos:12\"
+    пример moduleBox/ledRing_0/setPos:12
     */
     stdcommand_register(&ctx->led.cmds, LEDRING_setPos, "setPos", PARAMT_int);
 

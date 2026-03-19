@@ -178,7 +178,7 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
     ctx->led.offset = get_option_int_val(slot_num, "offset", "", 0, 0, ctx->led.num_of_led);
 
     /* Начальный цвет
-    - по умолчанию \"0 0 255\" синий
+    - по умолчанию 0 0 255 (синий)
     */
     if (get_option_color_val(&ctx->led.targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
     {
@@ -216,7 +216,7 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
     stdcommand_register(&ctx->led.cmds, RUNFIRE_toggleLedState, "toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
-    пример \"moduleBox/runFire_0/setRGB:255 0 0\" установить красный цвет
+    пример moduleBox/runFire_0/setRGB:255 0 0 - установить красный цвет
     */
     stdcommand_register(&ctx->led.cmds, RUNFIRE_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 }

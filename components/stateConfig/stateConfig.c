@@ -134,6 +134,11 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->LAN_DHCP = _yesno(value);
 	} else if (MATCH("LAN", "speed")) {
 		pconfig->LAN_speed = strdup(value);
+	} else if (MATCH("LAN", "pollingPeriod")) {
+		int v = atoi(value);
+		if (v < 2) v = 2;
+		if (v > 10) v = 10;
+		pconfig->LAN_pollingPeriod = (uint8_t)v;
 	} else if (MATCH("WIFI", "WIFI_enable")) {//-----------------------------------------------
 		pconfig->WIFI_enable = _yesno(value);
 	} else if (MATCH("WIFI", "SSID")) {
@@ -222,6 +227,7 @@ void load_Default_Config(void) {
 	me_config.LAN_netMask = strdup("255.255.255.0");
 	me_config.LAN_gateWay = strdup("192.168.88.1");
 	me_config.LAN_speed = strdup("auto");
+	me_config.LAN_pollingPeriod = 5;
 	me_state.LAN_init_res = ESP_FAIL;
 
 	me_config.MDNS_enable=1;
@@ -360,6 +366,7 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
+	
     sprintf(tmp, "\r\n[UDP] \r\n");
     fprintf(configFile, tmp);
     memset(tmp, 0, strlen(tmp));

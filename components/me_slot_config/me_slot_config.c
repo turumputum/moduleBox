@@ -198,6 +198,8 @@ int init_slots(void){
 			start_whitelist_task(i);	// W, C
 		}else if(!memcmp(me_config.slot_mode[i], "collector", 9)){
 			start_collector_task(i);	// W, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "masquerade", 10)){
+			start_masquerade_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "random", 6)){
 			start_random_task(i);	// W, C
 		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){

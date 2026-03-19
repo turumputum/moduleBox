@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_netif.h"
@@ -66,6 +67,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t ev
 		break;
 	case ETHERNET_EVENT_DISCONNECTED:
 		me_state.eth_connected = 0;
+		ESP_LOGW(TAG, "!!! ETH LINK DOWN at %lld ms", (long long)(esp_timer_get_time()/1000));
 		ESP_LOGI(TAG, "Ethernet Link Down");
 		break;
 	case ETHERNET_EVENT_START:
@@ -308,7 +310,11 @@ int LAN_init(void) {
     };
 
 	eth_w5500_config_t w5500_config = ETH_W5500_DEFAULT_CONFIG(1, &spi_devcfg);
-    w5500_config.int_gpio_num = spi_eth_module_config.int_gpio;
+    // Switch to polling mode: GPIO NEGEDGE interrupt was being missed under load
+    // (INT pin stays LOW but edge is lost while emac_w5500_task is busy with SPI).
+    w5500_config.int_gpio_num = -1;      // disable GPIO interrupt
+    w5500_config.poll_period_ms = (me_config.LAN_pollingPeriod >= 2 && me_config.LAN_pollingPeriod <= 10)
+                                  ? me_config.LAN_pollingPeriod : 5;  // poll period from config (2-10ms)
     esp_eth_mac_t *mac = esp_eth_mac_new_w5500(&w5500_config, &mac_config);
     esp_eth_phy_t *phy = esp_eth_phy_new_w5500(&phy_config);
 
@@ -322,7 +328,9 @@ int LAN_init(void) {
 		//return ret;
 	}
 
-	if (spi_eth_module_config.mac_addr != NULL) {
+
+
+        if (spi_eth_module_config.mac_addr != NULL) {
         ret = esp_eth_ioctl(eth_handle, ETH_CMD_S_MAC_ADDR, spi_eth_module_config.mac_addr);
 		if (ret != ESP_OK) {
 			ESP_LOGW(TAG, "SPI Ethernet MAC address config failed, ret:%d", ret);

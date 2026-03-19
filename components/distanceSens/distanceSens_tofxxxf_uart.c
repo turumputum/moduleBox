@@ -51,7 +51,7 @@ void configure_TOFxxxF(distanceSens_t *distanceSens, uint8_t slot_num)
         }
     }
 
-    /* Флаг включает вывод значений в формате float (0.0-1.0)
+    /* Флаг включает вывод значений в формате float (от 0 до 1)
     Без параметров
     */
     if (strstr(me_config.slot_options[slot_num], "floatOutput") != NULL) {
@@ -104,9 +104,9 @@ void configure_TOFxxxF(distanceSens_t *distanceSens, uint8_t slot_num)
         }
     }
 
-    /* Коэффициент фильтра сглаживания (0.0-1.0)
-    При значении 1.0 фильтр отключен
-    Числовое значение с плавающей точкой, по умолчанию 1.0
+    /* Коэффициент фильтра сглаживания (от 0 до 1)
+    При значении 1 фильтр отключен
+    Числовое значение с плавающей точкой, по умолчанию 1
     */
     if (strstr(me_config.slot_options[slot_num], "filterK") != NULL) {
         distanceSens->k = get_option_float_val(slot_num, "filterK", 1);
@@ -169,7 +169,7 @@ void configure_TOFxxxF(distanceSens_t *distanceSens, uint8_t slot_num)
     */
     distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "distance", 0, distanceSens->maxVal);
     
-    /* Рапортует текущее значение расстояния в формате float (0.0-1.0)
+    /* Рапортует текущее значение расстояния в формате float (от 0 до 1)
     */
     distanceSens->distanceFloatReport = stdreport_register(RPTT_ratio, slot_num, "ratio", "ratio", 0.0f, 1.0f);
     

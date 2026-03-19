@@ -8,13 +8,14 @@ file(GLOB_RECURSE MODULE_FILES "startup.c"
                             "collector.c"
                             "scaler.c"
                             
-                            "conductor.c") 
+                            "conductor.c"
+                            "masquerade.c") 
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
 endif()
 
-idf_component_register(SRCS "virtualSlots.c"
+idf_component_register(SRCS "masquerade.c" "virtualSlots.c"
                         "tankControl.c"
                         "watchdog.c"
                         ${MODULE_FILES}  

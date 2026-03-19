@@ -120,8 +120,9 @@ void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
                 uint8_t dutyVal = gamma_8[(int)(255-254*f_res)];
                 ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, dutyVal);
                 ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+                distanceSens->prevPos = distanceSens->currentPos;
             }
         }
-        distanceSens->prevPos = distanceSens->currentPos;
+        
     }
 }

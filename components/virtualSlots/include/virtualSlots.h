@@ -46,4 +46,7 @@ void start_tankControl_task(int slot_num);
 // Stepper Conductor module
 void start_conductor_task(int slot_num);
 
+// Masquerade module
+void start_masquerade_task(int slot_num);
+
 #endif // VIRTUALSLOTS_H

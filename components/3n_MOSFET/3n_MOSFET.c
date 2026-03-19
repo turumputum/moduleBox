@@ -174,12 +174,12 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	} 
 
-    /* Числовое значение.
+    /* Числовое значение
        задаёт текущее состояние светодиода (вкл/выкл)
     */
     stdcommand_register(&c->cmds, MYCMD_default, NULL, PARAMT_int);
 
-    /* Установить новый целевой цвет. 
+    /* Установить новый целевой цвет
        Цвет задаётся десятичными значениями R G B через пробел
     */
     stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);

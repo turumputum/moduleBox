@@ -164,7 +164,7 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
 
 	
     /* Начальный цвет
-    - по умолчанию \"0 0 255\" синий
+    - по умолчанию 0 0 255 (синий)
     */
     if (get_option_color_val(&ctx->led.targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
     {
@@ -190,7 +190,7 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 	} 
 
-    /* Числовое значение.
+    /* Числовое значение
        задаёт текущее состояние светодиода (вкл/выкл)
     */
     stdcommand_register(&ctx->led.cmds, SMARTLED_default, NULL, PARAMT_int);
@@ -200,7 +200,7 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     stdcommand_register(&ctx->led.cmds, SMARTLED_toggleLedState, "toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
-    пример \"moduleBox/ledRing_0/setRGB:255 0 0\" установить красный цвет
+    пример moduleBox/smartLed_0/setRGB:255 0 0 - установить красный цвет
     */
     stdcommand_register(&ctx->led.cmds, SMARTLED_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
     
