@@ -89,6 +89,8 @@ static uint8_t ftp_stop = 0;
 
 static uint8_t anon_enabled = 0; 
 
+static uint8_t flagForceReboot = 0;
+
 char ftp_user[FTP_USER_PASS_LEN_MAX + 1];
 char ftp_pass[FTP_USER_PASS_LEN_MAX + 1];
 
@@ -114,7 +116,7 @@ static const ftp_cmd_t ftp_cmd_table[] = { { "FEAT" }, { "SYST" }, { "CDUP" }, {
 										   { "LIST" }, { "RETR" }, { "STOR" }, { "DELE" },
 										   { "RMD"	}, { "MKD"	}, { "RNFR" }, { "RNTO" },
 										   { "NOOP" }, { "QUIT" }, { "APPE" }, { "NLST" }, 
-										   { "AUTH" }, { "PORT" }, { "AVLB" } };
+										   { "AUTH" }, { "PORT" }, { "AVLB" }, { "REBT" } };
 
 static char * MSG_250 = "Directory successfully changed.";
 
@@ -1401,7 +1403,7 @@ static void ftp_process_cmd (PCLIENT cl) {
 			{
 				ESP_LOGI(TAG_CL, "RESET TRIGGER: renaming to %s", cl->ftp_path);
 
-				cl->resetTrigger = true; 
+				cl->resetTrigger = true;
 			}
 
 			ESP_LOGI(TAG_CL, "E_FTP_CMD_RNTO fullname2=[%s]", fullname2);
@@ -1413,6 +1415,12 @@ static void ftp_process_cmd (PCLIENT cl) {
 				ftp_send_reply(cl, 550, NULL);
 			}
 			break;
+
+		case E_FTP_CMD_REBT:
+			ftp_send_reply(cl, 200, NULL);
+			flagForceReboot = 1;
+			break;
+
 		case E_FTP_CMD_AVLB:
 			{
 				char szstr [ 128 ];
@@ -1759,6 +1767,7 @@ int32_t ftp_get_maxstack (void) {
 }
 #endif
 
+extern void moveUpdateToTheInternalStorage();
 
 //-------------------------------
 void ftp_task(void *pvParameters) {
@@ -1833,6 +1842,16 @@ void ftp_task(void *pvParameters) {
 		int anyInUse 		= 0;
 		int anyReqToReset	= 0;
 
+		if (flagForceReboot)
+		{
+			if (!resetTimeout)
+				resetTimeout = DEF_RESET_TIMEOUT;
+
+			flagForceReboot = 0;
+
+			resetCause = "forced reboot";
+		}
+
 		for (int i = 0; i < MAX_CLIENTS; i++)
 		{
 			int res = ftp_run(&cl[i], now - time_ms);
@@ -1872,6 +1891,11 @@ void ftp_task(void *pvParameters) {
 			if (!resetTimeout || !(--resetTimeout))
 			{
 				ESP_LOGI(TAG_CL, "RESET by FTP: %s", resetCause);
+
+				vTaskDelay(pdMS_TO_TICKS(1000));
+
+				moveUpdateToTheInternalStorage();
+
 				esp_restart();
 			}
 			// else
