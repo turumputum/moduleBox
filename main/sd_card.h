@@ -10,6 +10,7 @@ int spisd_deinit();
 int spisd_sectors_read(void * dst, uint32_t start_sector, uint32_t num);
 int spisd_sectors_write(void * dst, uint32_t start_sector, uint32_t num);
 int spisd_mount_fs();
+void spisd_umount_fs();
 void spisd_list_root();
 
 

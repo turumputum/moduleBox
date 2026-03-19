@@ -49,6 +49,13 @@ int spisd_deinit() {
 	return 1;
 }
 
+void spisd_umount_fs()
+{
+	const char mount_point[] = MOUNT_POINT;
+
+	esp_vfs_fat_sdcard_unmount(mount_point, card);
+}
+
 int spisd_mount_fs() {
 	int result = -1;
 	esp_err_t ret;
