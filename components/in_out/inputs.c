@@ -198,7 +198,7 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     
     /* Отчет о комбинированном состоянии обоих каналов (результат логической операции OR/AND)
     */
-    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", me_state.trigger_topic_list[slot_num]);
+    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "");
 
     // Configure GPIO
     gpio_config_t io_conf = {};

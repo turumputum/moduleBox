@@ -42,6 +42,7 @@ typedef struct {
     int                         buf_size;
     int                         sample_rate;
     int                         bits_per_sample;
+    int                         latency_ms;  /*!< Pre-buffer latency target (ms). All devices with same value start at same RTP timestamp. */
     rtp_opus_stream_event_handle_cb  event_handler;
     void                        *event_ctx;
 } rtp_opus_stream_cfg_t;
@@ -53,6 +54,7 @@ typedef struct {
 #define RTP_OPUS_STREAM_TASK_CORE                (0)
 #define RTP_OPUS_STREAM_DEFAULT_SAMPLE_RATE      (48000)
 #define RTP_OPUS_STREAM_DEFAULT_BITS_PER_SAMPLE  (16)
+#define RTP_OPUS_STREAM_DEFAULT_LATENCY_MS       (100)
 
 #define RTP_OPUS_STREAM_CFG_DEFAULT() {                     \
     .type            = AUDIO_STREAM_READER,                 \
@@ -66,6 +68,7 @@ typedef struct {
     .buf_size        = RTP_OPUS_STREAM_BUF_SIZE,            \
     .sample_rate     = RTP_OPUS_STREAM_DEFAULT_SAMPLE_RATE, \
     .bits_per_sample = RTP_OPUS_STREAM_DEFAULT_BITS_PER_SAMPLE, \
+    .latency_ms      = RTP_OPUS_STREAM_DEFAULT_LATENCY_MS,  \
     .event_handler   = NULL,                                \
     .event_ctx       = NULL,                                \
 }

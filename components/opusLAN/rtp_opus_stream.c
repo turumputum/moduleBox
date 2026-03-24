@@ -68,6 +68,12 @@ typedef struct rtp_opus_stream {
     /* Stream identity tracking for restart detection */
     uint32_t                      last_ssrc;
     uint16_t                      rtp_seq;
+    bool                          need_seq_seed;       /* true = next packet seeds seq (no loss check) */
+    int64_t                       last_overflow_log_us; /* for rate-limiting overflow warnings */
+    /* Sync-start: all devices with same latency_ms start at same RTP timestamp position */
+    uint32_t                      target_delay_ms;     /* latency target from config */
+    uint32_t                      sync_rtp_ts_start;   /* RTP ts threshold set on first packet */
+    volatile bool                 sync_ready;          /* set by drain task when ts threshold reached */
     /* Drain task — reads socket independently of pipeline backpressure */
     TaskHandle_t                  drain_task_handle;
     volatile bool                 drain_running;
@@ -297,6 +303,8 @@ static int jbuf_init(jbuffer *jbuf, uint32_t size)
     return 0;
 }
 
+// ///////////////// end jitter buffer /////////////////
+
 static inline uint32_t jbuf_available(jbuffer *jbuf)
 {
     uint32_t w = jbuf->w_p;
@@ -433,12 +441,15 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
     rtp->sync_initialized = false;  /* reset RTP timestamp sync on each open */
     rtp->last_ssrc        = 0;
     rtp->rtp_seq          = 0;
+    rtp->need_seq_seed    = true;
 
     /* Reset jitter buffer */
     memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
     rtp->jbuf.r_p = 0;
     rtp->jbuf.w_p = 0;
     rtp->jbuf.state = JBUF_IDLE;
+    rtp->sync_ready = false;          /* wait for RTP sync point before playback */
+    rtp->sync_rtp_ts_start = 0;
 
     /* Start drain task — reads socket into jitter buffer independently.
      * Priority 24 = above audio element tasks — must never miss packets.
@@ -582,10 +593,29 @@ static void rtp_opus_drain_task(void *arg)
             if (rtp->sync_initialized && ssrc != rtp->last_ssrc) {
                 ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
                          (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
-                rtp->sync_initialized = false;
-                rtp->rtp_seq = 0;
+                rtp->sync_initialized  = false;
+                rtp->sync_ready        = false;
+                rtp->sync_rtp_ts_start = 0;
+                rtp->rtp_seq           = 0;
+                rtp->need_seq_seed    = true;
+                /* Flush jitter buffer — two simultaneous sources would otherwise
+                 * fill it at 2× the drain rate and cause permanent overflow. */
+                jbuffer *jb = &rtp->jbuf;
+                jb->r_p   = 0;
+                jb->w_p   = 0;
+                jb->state = JBUF_IDLE;
+                ESP_LOGI(TAG, "jbuf flushed on SSRC change");
             }
             rtp->last_ssrc = ssrc;
+
+            /* --- Sync-start: mark ready when we reach the target RTP timestamp --- */
+            if (!rtp->sync_ready && rtp->sync_rtp_ts_start != 0) {
+                if ((int32_t)(rtp_ts - rtp->sync_rtp_ts_start) >= 0) {
+                    rtp->sync_ready = true;
+                    ESP_LOGI(TAG, "[sync] Ready at RTP ts=%lu (target=%lu), starting playback",
+                             (unsigned long)rtp_ts, (unsigned long)rtp->sync_rtp_ts_start);
+                }
+            }
 
             /* --- RTP clock rate tracking --- */
             if (!rtp->sync_initialized) {
@@ -594,8 +624,13 @@ static void rtp_opus_drain_task(void *arg)
                 rtp->last_clk_update_us     = now_us;
                 rtp->measured_sample_hz     = rtp->sample_rate;
                 rtp->sync_initialized       = true;
-                ESP_LOGI(TAG, "RTP clock tracking init: ts_base=%lu sample_rate=%d",
-                         (unsigned long)rtp->rtp_ts_base, rtp->sample_rate);
+                /* Compute sync-start timestamp: all devices with same latency_ms will wait
+                 * for the SAME RTP ts, so they all start playback at the same stream position */
+                uint32_t delay_samples = (uint32_t)rtp->target_delay_ms * rtp->sample_rate / 1000;
+                rtp->sync_rtp_ts_start = rtp_ts + delay_samples;
+                ESP_LOGI(TAG, "RTP clock tracking init: ts_base=%lu sample_rate=%d sync_start_ts=%lu (latency=%dms)",
+                         (unsigned long)rtp->rtp_ts_base, rtp->sample_rate,
+                         (unsigned long)rtp->sync_rtp_ts_start, (int)rtp->target_delay_ms);
             } else {
                 int64_t since_base_us = now_us - rtp->local_time_base_us;
 
@@ -637,9 +672,10 @@ static void rtp_opus_drain_task(void *arg)
 
             /* --- Sequence number tracking --- */
             uint16_t tseq = opus_packet_buf[2] << 8 | opus_packet_buf[3];
-            if (rtp->rtp_seq == 0 && total_packets == 1) {
-                /* First packet after sync — seed seq, don't count as loss */
-                rtp->rtp_seq = tseq;
+            if (rtp->need_seq_seed) {
+                /* First packet after open or SSRC change — seed seq, no loss check */
+                rtp->rtp_seq       = tseq;
+                rtp->need_seq_seed = false;
             } else {
                 if ((uint16_t)tseq == rtp->rtp_seq) {
                     continue;  /* duplicate */
@@ -681,10 +717,14 @@ static void rtp_opus_drain_task(void *arg)
                 jbuf_write(&rtp->jbuf, hdr, 2);
                 jbuf_write(&rtp->jbuf, opus_packet_buf + 12, opus_frame_len);
             } else {
-                ESP_LOGW(TAG, "Jitter buffer overflow! avail:%lu free:%lu need:%lu",
-                         (unsigned long)jbuf_available(&rtp->jbuf),
-                         (unsigned long)jbuf_free_space(&rtp->jbuf),
-                         (unsigned long)total);
+                /* Rate-limit overflow warnings to once per second */
+                if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
+                    ESP_LOGW(TAG, "Jitter buffer overflow! avail:%lu free:%lu need:%lu",
+                             (unsigned long)jbuf_available(&rtp->jbuf),
+                             (unsigned long)jbuf_free_space(&rtp->jbuf),
+                             (unsigned long)total);
+                    rtp->last_overflow_log_us = now_us;
+                }
             }
 
             /* --- Periodic stats (every 60s) --- */
@@ -740,17 +780,16 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
 
         uint32_t avail = jbuf_available(jbuf);
 
-        /* One-time pre-buffer before first playback */
+        /* Wait for RTP sync point set by drain task (latency_ms ahead of first packet) */
+        if (!rtp->sync_ready) {
+            vTaskDelay(pdMS_TO_TICKS(5));
+            continue;
+        }
+
+        /* Mark jbuf as playing once sync is ready (keeps overflow/underflow logic happy) */
         if (jbuf->state != JBUF_PLAYING) {
-            if (avail >= jbuf->read_thres) {
-                ESP_LOGI(TAG, "Jitter buffer filled: %lu bytes, starting playback",
-                         (unsigned long)avail);
-                jbuf->state = JBUF_PLAYING;
-            } else {
-                jbuf->state = JBUF_FILLING;
-                vTaskDelay(pdMS_TO_TICKS(5));
-                continue;
-            }
+            ESP_LOGI(TAG, "Sync reached, starting playback: %lu bytes in jbuf", (unsigned long)avail);
+            jbuf->state = JBUF_PLAYING;
         }
 
         /* Try to read one complete frame */
@@ -839,6 +878,11 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     rtp->local_time_base_us  = 0;
     rtp->last_ssrc           = 0;
     rtp->rtp_seq             = 0;
+    rtp->need_seq_seed       = true;
+    rtp->last_overflow_log_us = 0;
+    rtp->target_delay_ms      = (config->latency_ms > 0) ? (uint32_t)config->latency_ms : RTP_OPUS_STREAM_DEFAULT_LATENCY_MS;
+    rtp->sync_rtp_ts_start    = 0;
+    rtp->sync_ready           = false;
 
     if (config->event_handler) {
         rtp->hook = config->event_handler;
@@ -868,7 +912,7 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
      * Jitter buffer in PSRAM — absorbs pipeline backpressure stalls.
      * 32KB ≈ 5+ seconds of Opus frames at typical bitrates.
      */
-    jbuf_init(&rtp->jbuf, 32768);
+    jbuf_init(&rtp->jbuf, 16384);  /* 16KB in PSRAM — ~4s Opus capacity, Stage 1 reduction */
 
     return el;
 

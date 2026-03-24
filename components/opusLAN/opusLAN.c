@@ -54,6 +54,7 @@ typedef struct __tag_OPUSCONFIG{
     int                     sample_rate;
     int                     bits_per_sample;
     int                     buf_size;
+    int                     latency_ms;      /* target latency / sync delay in ms (40-500, default 240) */
     
     int                    stateReport;
     int                    volumeReport;
@@ -159,7 +160,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     i2s_cfg.use_alc = false;
     i2s_cfg.task_core = 0;
     i2s_cfg.stack_in_ext = true;     /* Task stack in PSRAM to save internal RAM */
-    i2s_cfg.out_rb_size = 16 * 1024; /* 16KB: ~85ms of 48kHz stereo PCM, more headroom */
+    i2s_cfg.out_rb_size = 8 * 1024;  /* 8KB: ~42ms of 48kHz stereo PCM, Stage 1 latency reduction */
     i2s_cfg.buffer_len = 3600;       /* Default DMA buffer size */
     c->i2s_stream_writer = i2s_stream_init(&i2s_cfg);
     ESP_LOGI(TAG, "Free heap after i2s init: %u (internal: %u)",
@@ -174,7 +175,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     opus_cfg.self_delimited = false;
     opus_cfg.enable_frame_length_prefix = true;
     opus_cfg.task_core = 1;           /* Core 1: keep core 0 free for lwIP/Ethernet — Opus decoding is CPU-heavy */
-    opus_cfg.out_rb_size = 16 * 1024; /* 16KB: ~4 decoded frames, avoids backpressure on RTP reader */
+    opus_cfg.out_rb_size = 8 * 1024;  /* 8KB: ~2 decoded frames, Stage 1 latency reduction */
     opus_cfg.task_stack = 30 * 1024;  /* Default, stack in PSRAM */
     opus_cfg.stack_in_ext = true;     /* Put decoder task stack in PSRAM */
     c->opus_decoder = raw_opus_decoder_init(&opus_cfg);
@@ -203,6 +204,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     rtp_cfg.buf_size = c->buf_size;
     rtp_cfg.sample_rate = c->sample_rate;
     rtp_cfg.bits_per_sample = c->bits_per_sample;
+    rtp_cfg.latency_ms = c->latency_ms;
     c->rtp_stream_reader = rtp_opus_stream_init(&rtp_cfg);
     ESP_LOGI(TAG, "Free heap after rtp init: %u (internal: %u)",
              xPortGetFreeHeapSize(), heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
@@ -243,11 +245,8 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
 
 /* 
     Модуль звук через сеть с кодеком Opus
+    Задержка порядка 80мс-100мс в зависимости от сети
     slots: 0-0
-    - Поддерживает как unicast, так и multicast режимы (настраивается через конфиг)
-    - Читает аудио данные из RTP потока, декодирует Opus и выводит на I2S
-    - Поддерживает горячее переключение multicast адреса на лету через команду setMulticastAddress
-    - задержка порядка 80мс-100мс в зависимости от сети
 */
 void configure_opusLAN(POPUSCONFIG c, int slot_num)
 {
@@ -308,6 +307,12 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
 	*/
 	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 5124, 1024, 8192);
     ESP_LOGD(TAG, "[opusLAN_%d] bufSize:%d", slot_num, c->buf_size);
+
+    /* Target latency / sync delay in ms
+    - default 240ms (synchronised across all devices with same latencyMs)
+    */
+	c->latency_ms = get_option_int_val(slot_num, "latencyMs", "num", 50, 40, 500);
+    ESP_LOGD(TAG, "[opusLAN_%d] latencyMs:%d", slot_num, c->latency_ms);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         /* Топик 
@@ -392,61 +397,7 @@ void opusLAN_task(void *arg){
 
     int64_t last_blink_time = 0;
     int led_state = 0;
-    int64_t last_rate_adjust_us = 0;   /* for periodic I2S clock correction */
-    int64_t last_jbuf_nudge_us  = 0;   /* for jitter buffer level feedback */
-    int32_t current_i2s_hz = c->sample_rate;
-
     while (1) {
-        /* --- Periodic I2S clock rate correction (compensates crystal drift) ---
-         * Every 5 minutes after the RTP stream has collected measurement data,
-         * adjust the I2S clock to match the sender's actual audio clock.
-         * Dead band of ±2 Hz prevents unnecessary adjustments from noise.
-         * Both receivers converge to the same rate → they stay in sync.
-         */
-        int64_t now_us = esp_timer_get_time();
-        if (c->state == ENABLE && c->rtp_stream_reader != NULL &&
-            (now_us - last_rate_adjust_us) > 300000000LL) {  /* 5 minutes */
-
-            int32_t measured_hz = rtp_opus_stream_get_measured_hz(c->rtp_stream_reader);
-            if (measured_hz == c->sample_rate) {
-                /* No measurement yet (or stream just (re)opened): sync tracking var to hardware */
-                current_i2s_hz = c->sample_rate;
-            } else {
-                int32_t delta = measured_hz - current_i2s_hz;
-                if (delta < 0) delta = -delta;
-                if (delta >= 2) {  /* Dead band: ignore changes < 2 Hz (~41 ppm) */
-                    /* Measurement available and differs significantly — apply */
-                    i2s_stream_set_clk(c->i2s_stream_writer, (int)measured_hz, 16, 2);
-                    ESP_LOGI(TAG, "[opusLAN_%d] I2S rate adjusted %ld -> %ld Hz (drift %+ld ppm)",
-                             slot_num, (long)current_i2s_hz, (long)measured_hz,
-                             (long)(((int64_t)(measured_hz - c->sample_rate) * 1000000LL) / c->sample_rate));
-                    current_i2s_hz = measured_hz;
-                }
-            }
-            last_rate_adjust_us = now_us;
-        }
-
-        /* --- Jitter buffer level feedback (every 30s) ---
-         * If jbuf fills up it means I2S is slower than source → speed up 1 Hz.
-         * If jbuf drains low it means I2S is faster than source → slow down 1 Hz.
-         * This corrects cases where RTP clock measurement overshoots.
-         */
-        if (c->state == ENABLE && c->rtp_stream_reader != NULL &&
-            (now_us - last_jbuf_nudge_us) > 30000000LL) {  /* 30 seconds */
-            int32_t fill_pct = rtp_opus_stream_get_jbuf_fill_pct(c->rtp_stream_reader);
-            if (fill_pct > 75 && current_i2s_hz < c->sample_rate + 20) {
-                current_i2s_hz += 1;
-                i2s_stream_set_clk(c->i2s_stream_writer, (int)current_i2s_hz, 16, 2);
-                ESP_LOGI(TAG, "[opusLAN_%d] I2S nudged +1Hz -> %ld Hz (jbuf %ld%% full)",
-                         slot_num, (long)current_i2s_hz, (long)fill_pct);
-            } else if (fill_pct < 10 && current_i2s_hz > c->sample_rate - 20) {
-                current_i2s_hz -= 1;
-                i2s_stream_set_clk(c->i2s_stream_writer, (int)current_i2s_hz, 16, 2);
-                ESP_LOGI(TAG, "[opusLAN_%d] I2S nudged -1Hz -> %ld Hz (jbuf %ld%% full)",
-                         slot_num, (long)current_i2s_hz, (long)fill_pct);
-            }
-            last_jbuf_nudge_us = now_us;
-        }
         /* ----------------------------------------------------------------------- */
 
         //LED Logic
