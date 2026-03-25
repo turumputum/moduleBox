@@ -105,6 +105,8 @@ static const char * configDescription =
 
 
 
+#include "manifest_modules.h"
+
 #define MODDEF(a) extern const char * get_manifest_##a();
 
 MODULE_FUNCTIONS_DEFS

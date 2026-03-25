@@ -12,6 +12,9 @@
 #include "esp_vfs_fat.h"
 #include <dirent.h>
 #include <sys/stat.h>
+#include "freertos/semphr.h"
+#include "diskio_impl.h"
+#include "diskio_sdmmc.h"
 
 #include <mbdebug.h>
 
@@ -25,6 +28,60 @@
 static const char *TAG = "SDMMC";
 
 #define MOUNT_POINT "/sdcard"
+
+static SemaphoreHandle_t s_sdcard_mutex = NULL;
+
+void sdcard_lock(void) {
+	if (s_sdcard_mutex) xSemaphoreTake(s_sdcard_mutex, portMAX_DELAY);
+}
+
+void sdcard_unlock(void) {
+	if (s_sdcard_mutex) xSemaphoreGive(s_sdcard_mutex);
+}
+
+// ---------- Mutex-wrapped diskio для FATFS ----------
+// Регистрируем свои функции после mount, чтобы и FATFS (аудио),
+// и USB MSC (прямые sector read/write) использовали один мьютекс.
+// Без этого FATFS и USB MSC конкурируют на SDMMC между CMD18 и CMD12.
+
+// forward declaration — определение ниже в файле
+extern sdmmc_card_t *card;
+
+static DSTATUS sd_diskio_init(BYTE pdrv) { return 0; }
+static DSTATUS sd_diskio_status(BYTE pdrv) { return 0; }
+
+static DRESULT sd_diskio_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
+	sdcard_lock();
+	esp_err_t err = sdmmc_read_sectors(card, buff, sector, count);
+	sdcard_unlock();
+	return (err == ESP_OK) ? RES_OK : RES_ERROR;
+}
+
+static DRESULT sd_diskio_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
+	sdcard_lock();
+	esp_err_t err = sdmmc_write_sectors(card, (void*)buff, sector, count);
+	sdcard_unlock();
+	return (err == ESP_OK) ? RES_OK : RES_ERROR;
+}
+
+static DRESULT sd_diskio_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
+	switch (cmd) {
+		case CTRL_SYNC:       return RES_OK;
+		case GET_SECTOR_COUNT: *(LBA_t*)buff = card->csd.capacity;    return RES_OK;
+		case GET_SECTOR_SIZE:  *(WORD*)buff  = card->csd.sector_size; return RES_OK;
+		case GET_BLOCK_SIZE:   *(DWORD*)buff = 1;                     return RES_OK;
+		default:               return RES_PARERR;
+	}
+}
+
+static const ff_diskio_impl_t s_mutex_diskio = {
+	.init   = sd_diskio_init,
+	.status = sd_diskio_status,
+	.read   = sd_diskio_read,
+	.write  = sd_diskio_write,
+	.ioctl  = sd_diskio_ioctl,
+};
+// -------------------------------------------------------
 #define SPI_DMA_CHAN    SPI_DMA_CH_AUTO
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -86,6 +143,18 @@ int spisd_mount_fs() {
 		}
 
 		result = ESP_OK;
+
+		// Заменяем стандартный diskio FATFS на наш, защищённый мьютексом.
+		// Это предотвращает конкуренцию FATFS (аудио) и USB MSC за SDMMC шину.
+		// pdrv=0 — первый (и единственный) примонтированный накопитель.
+		BYTE pdrv = ff_diskio_get_pdrv_card(card);
+		if (pdrv != 0xFF) {
+			ff_diskio_register(pdrv, &s_mutex_diskio);
+			ESP_LOGD(TAG, "Mutex diskio registered for pdrv=%d", pdrv);
+		} else {
+			ESP_LOGW(TAG, "ff_diskio_get_pdrv_card failed, using pdrv=0");
+			ff_diskio_register(0, &s_mutex_diskio);
+		}
 	} else {
 		if (ret == ESP_FAIL) {
 			ESP_LOGI(TAG,
@@ -101,6 +170,10 @@ int spisd_mount_fs() {
 }
 
 int spisd_init() {
+
+	if (!s_sdcard_mutex) {
+		s_sdcard_mutex = xSemaphoreCreateMutex();
+	}
 
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
@@ -126,9 +199,9 @@ int spisd_init() {
 
 	if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
 		ESP_LOGD(TAG, "old board pinout notFound( lets try new bord pinout");
-		clk_pin = 21;//18;
-	 	cmd_pin = 10;//8;
-	 	d0_pin = 6;//2;
+		clk_pin = 41;//21;//18;
+	 	cmd_pin = 40;//10;//8;
+	 	d0_pin = 3;//6;//2;
 
 		gpio_pad_select_gpio(clk_pin);
 		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
@@ -149,12 +222,20 @@ int spisd_init() {
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
 	gpio_set_level(led_pin, 1);
 
+	gpio_set_pull_mode(clk_pin, GPIO_PULLUP_ONLY);
+	gpio_set_pull_mode(cmd_pin, GPIO_PULLUP_ONLY);
+	gpio_set_pull_mode(d0_pin, GPIO_PULLUP_ONLY);
+
 	slot_config.clk = clk_pin;
 	slot_config.cmd = cmd_pin;
 	slot_config.d0 = d0_pin;
 	slot_config.width = 1;
 
-	//host.max_freq_khz = 10000;
+	// SDMMC_FREQ_DEFAULT = 20MHz — стандартная скорость для GPIO Matrix.
+	// 40MHz (HIGHSPEED) через GPIO Matrix + USB-нагрузка даёт end-bit error (0x8008).
+	// input_delay_phase работает только при HIGHSPEED/52M, при 20MHz не нужна.
+	host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+	host.input_delay_phase = SDMMC_DELAY_PHASE_1;
 
 	int res=spisd_mount_fs();
 	ESP_LOGD(TAG, "SDcard init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(),
@@ -175,7 +256,9 @@ int spisd_get_sector_num() {
 
 int spisd_sectors_read(void *dst, uint32_t start_sector, uint32_t num) {
 	int result = -1;
+	sdcard_lock();
     esp_err_t ret = sdmmc_read_sectors(card, dst, start_sector, num);
+	sdcard_unlock();
 	if (ret == ESP_OK) {
 		result = 1;
 	} else {
@@ -216,9 +299,11 @@ int spisd_sectors_read(void *dst, uint32_t start_sector, uint32_t num) {
 int spisd_sectors_write(void *dst, uint32_t start_sector, uint32_t num) {
 	int result = -1;
 
+	sdcard_lock();
 	if (sdmmc_write_sectors(card, dst, start_sector, num) == ESP_OK) {
 		result = 1;
 	}
+	sdcard_unlock();
 
 	return result;
 }

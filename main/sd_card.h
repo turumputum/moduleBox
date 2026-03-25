@@ -13,5 +13,9 @@ int spisd_mount_fs();
 void spisd_umount_fs();
 void spisd_list_root();
 
+/** Захватить мьютекс SD карты (перед прямым sdmmc_read_sectors или VFS операциями,
+ *  которые могут конкурировать с USB MSC) */
+void sdcard_lock(void);
+void sdcard_unlock(void);
 
 #endif // __SPISD_H__

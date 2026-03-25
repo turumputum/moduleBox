@@ -2,7 +2,8 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-# Reset MODULE_FUNCTIONS cache to avoid accumulating duplicates across builds
+# Reset MODULE_FUNCTIONS at configure start to prevent accumulation across rebuilds.
+# gen_manifest_modules.cmake reads the complete list from CMakeCache at BUILD time.
 SET(MODULE_FUNCTIONS "" CACHE INTERNAL "MODULE_FUNCTIONS" FORCE)
 SET(MODULE_FUNCTIONS_DEFS "" CACHE INTERNAL "MODULE_FUNCTIONS_DEFS" FORCE)
 

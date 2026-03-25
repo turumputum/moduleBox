@@ -7,11 +7,12 @@
 file(READ "${CACHE_FILE}" CACHE_CONTENTS)
 
 # Extract MODULE_FUNCTIONS value
-string(REGEX MATCH "MODULE_FUNCTIONS:INTERNAL=(.*)" _match "${CACHE_CONTENTS}")
+# Note: in CMake regex, '.' matches '\n', so use [^\r\n]* to stop at line end
+string(REGEX MATCH "MODULE_FUNCTIONS:INTERNAL=([^\r\n]*)" _match "${CACHE_CONTENTS}")
 set(MF "${CMAKE_MATCH_1}")
 
 # Extract MODULE_FUNCTIONS_DEFS value  
-string(REGEX MATCH "MODULE_FUNCTIONS_DEFS:INTERNAL=(.*)" _match "${CACHE_CONTENTS}")
+string(REGEX MATCH "MODULE_FUNCTIONS_DEFS:INTERNAL=([^\r\n]*)" _match "${CACHE_CONTENTS}")
 set(MFD "${CMAKE_MATCH_1}")
 
 # Strip leading/trailing whitespace and trailing single quotes

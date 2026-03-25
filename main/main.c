@@ -136,7 +136,7 @@ extern QueueHandle_t exec_mailbox;
 wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 // static task
-#define USBD_STACK_SIZE 4096
+#define USBD_STACK_SIZE 8192  // увеличен с 4096: sdmmc_read_sectors вызывается из tud_msc_read10_cb
 StackType_t usb_device_stack[USBD_STACK_SIZE];
 StaticTask_t usb_device_taskdef;
 
@@ -494,11 +494,11 @@ void app_main(void)
 		}
 	}
 
-	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL,0);
-	//xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, usb_device_stack, &usb_device_taskdef);
+	// xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL,0);
+	// //xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 20, usb_device_stack, &usb_device_taskdef);
 	
 
-	xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
+	// xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
 	
 
 	load_Default_Config();
@@ -526,6 +526,11 @@ void app_main(void)
 	ESP_LOGD(TAG, "Free SPIRAM: %d bytes",heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
 	me_state.slot_init_res = init_slots();
+
+	// Запускаем USB задачу только после завершения инициализации слотов
+	// чтобы избежать конкурентного доступа к SD карте (FATFS + USB MSC)
+	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL, 0);
+	xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
 
 	//start_dwinUart_task(1);
 	//debugTopicLists();

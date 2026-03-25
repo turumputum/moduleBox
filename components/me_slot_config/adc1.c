@@ -20,11 +20,12 @@
 #include "freertos/task.h"
 #include "freertos/projdefs.h"
 #include "freertos/portmacro.h"
-#include <driver/mcpwm.h>
+// #include <driver/mcpwm.h>
 #include "stateConfig.h"
 #include "me_slot_config.h"
 #include "reporter.h"
 #include <stdreport.h>
+#include "analog.h"
 
 #include "esp_adc/adc_continuous.h"
 
@@ -95,6 +96,8 @@ typedef struct __tag_ADC1_CHANNEL
 	int 					ratioReport;
 	int 					rawReport;
 
+	TickType_t				lastReportTime;
+
 } ADC1_CHANNEL, * PADC1_CHANNEL; 
 
 
@@ -139,25 +142,21 @@ adc_digi_pattern_config_t 	adc1_pattern		[ SOC_ADC_PATT_LEN_MAX ] 	= { 0 };
 static ADC1_CHANNEL 		adc1_channels 		[ NUM_OF_SLOTS ] 			= { 0 };
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
-static adc_channel_t CHANNEL_ADC1_MAP[ NUM_OF_SLOTS ] =
+
+// Dynamic channel→slot reverse mapping, populated at runtime.
+// Indexed by ADC1 channel number (0..9), value = slot index or -1.
+static int channel_to_slot[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+// The single task that stays on duty reading ADC data. The ISR notifies this task.
+static TaskHandle_t s_duty_task_handle = NULL;
+
+// For ESP32-S3: ADC1 channels 0-9 map to GPIOs 1-10 respectively.
+static int gpio_to_adc1_channel(uint8_t gpio)
 {
-    ADC1_CHANNEL_3, // SLOT 0
-    -1,				// SLOT 1
-    -1,				// SLOT 2
-    ADC1_CHANNEL_2,	// SLOT 3
-    ADC1_CHANNEL_1,	// SLOT 4
-    ADC1_CHANNEL_6	// SLOT 5
-};
-static int SLOT_ADC1_MAP[ NUM_OF_SLOTS ] =
-{
-    -1,				// ADC1_CHANNEL_0 -> none
-    4,				// ADC1_CHANNEL_1 -> SLOT 4
-    3,				// ADC1_CHANNEL_2 -> SLOT 3
-    0, 				// ADC1_CHANNEL_3 -> SLOT 0 
-    -1,				// ADC1_CHANNEL_4 -> none
-    -1,				// ADC1_CHANNEL_5 -> none
-	5,  			// ADC1_CHANNEL_6 -> SLOT 5
-};
+	if (gpio >= 1 && gpio <= 10)
+		return (int)(gpio - 1);
+	return -1;
+}
 
 
 // ---------------------------------------------------------------------------
@@ -167,10 +166,8 @@ static int SLOT_ADC1_MAP[ NUM_OF_SLOTS ] =
 static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
 {
     BaseType_t mustYield = pdFALSE;
-	PADC1_CHANNEL  ch = (PADC1_CHANNEL)user_data;
-    //Notify that ADC continuous driver has done enough number of conversions
-    vTaskNotifyGiveFromISR(ch->s_task_handle, &mustYield);
-
+    if (s_duty_task_handle)
+        vTaskNotifyGiveFromISR(s_duty_task_handle, &mustYield);
     return (mustYield == pdTRUE);
 }
 
@@ -200,6 +197,9 @@ static bool adc1_start_and_there_can_be_only_one()
 		{
 			if (!started)
 			{
+				// Set duty task handle BEFORE starting — ISR may fire immediately.
+				s_duty_task_handle = xTaskGetCurrentTaskHandle();
+
 				adc1_dig_cfg.adc_pattern = adc1_pattern;
 
 				if (adc_continuous_config(adc1_handle, &adc1_dig_cfg) == ESP_OK)
@@ -223,9 +223,17 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 {
 	bool result  	= false;
 
+	int channel = gpio_to_adc1_channel(SLOTS_PIN_MAP[ch->slot_num][0]);
+
+	if (channel < 0)
+	{
+		ESP_LOGE(TAG, "S%d: GPIO %d has no ADC1 channel", ch->slot_num, SLOTS_PIN_MAP[ch->slot_num][0]);
+		return false;
+	}
+
 	if( xSemaphoreTake(startSemaphore, portMAX_DELAY) == pdTRUE)
 	{
-		if ((CHANNEL_ADC1_MAP[ch->slot_num] != -1) && (!ch->used))
+		if (!ch->used)
 		{
 			ch->s_task_handle = xTaskGetCurrentTaskHandle();
 			ch->cb.on_conv_done = s_conv_done_cb;
@@ -234,14 +242,14 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 			adc_digi_pattern_config_t * p = &adc1_pattern[ch->pattern_num];
 
 			p->atten 		= ADC_ATTEN_DB_12;
-			p->channel 		= CHANNEL_ADC1_MAP[ch->slot_num];
+			p->channel 		= (adc_channel_t)channel;
 			p->unit 		= ADC_UNIT_1;
 			p->bit_width 	= SOC_ADC_DIGI_MAX_BITWIDTH;
 
 			// Добавляем CB только для первого потока, он и будет рабочим.
 			if (!adc1_dig_cfg.pattern_num)
 			{
-				ESP_LOGD(TAG, "ADC CB was set on slot %d", ch->slot_num);
+				ESP_LOGD(TAG, "ADC CB was set on slot %d (GPIO %d, CH %d)", ch->slot_num, SLOTS_PIN_MAP[ch->slot_num][0], channel);
 
 				if (adc_continuous_register_event_callbacks(adc1_handle, &ch->cb, ch) == ESP_OK)
 				{
@@ -253,6 +261,7 @@ static bool adc1_add_channel(PADC1_CHANNEL	ch)
 
 			if (result)
 			{
+				channel_to_slot[channel] = ch->slot_num;
 				adc1_dig_cfg.pattern_num++;
 				ch->used = true;
 			}
@@ -332,7 +341,6 @@ void adc1_task(void *arg)
 {
     uint32_t 		ret_num 		= 0;
     int 			slot_num 		= *(int *)arg;
-	TickType_t 		lastReportTime 	= 0;
 	PADC1_CHANNEL	ch 				= &adc1_channels[slot_num];
 	uint8_t 		result			[ EXAMPLE_READ_LEN ] = {0};
 
@@ -409,7 +417,7 @@ void adc1_task(void *arg)
 						uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
 						uint32_t raw_val = EXAMPLE_ADC_GET_DATA(p);
 
-						int slot = SLOT_ADC1_MAP[chan_num];
+						int slot = (chan_num < 10) ? channel_to_slot[chan_num] : -1;
 
 						if (!(slot < 0))
 						{
@@ -439,18 +447,14 @@ void adc1_task(void *arg)
 								ch->result = ch->result * (1 - ch->k) + raw_val * ch->k;
 							
 								if (  (abs(ch->result - ch->prev_result)>ch->dead_band)  	|| 
-								      ((ch->periodic != 0) && ((xTaskGetTickCount() - lastReportTime) >= pdMS_TO_TICKS(ch->periodic))) 
-									   													 	)
-								{
-									ch->prev_result = ch->result;
+							      ((ch->periodic != 0) && ((xTaskGetTickCount() - ch->lastReportTime) >= pdMS_TO_TICKS(ch->periodic))) 
+								   													 	)
+							{
+								ch->prev_result = ch->result;
 
-									//printf("@@@@@@@ >> slot %d, value %d\n", ch->slot_num, ch->result);
+								stdreport_i(ch->currentReport, ch->result);
 
-									stdreport_i(ch->currentReport, ch->result);
-
-									//printf("@@@@@@@ << slot %d, value %d\n", ch->slot_num, ch->result);
-
-									lastReportTime = xTaskGetTickCount();
+								ch->lastReportTime = xTaskGetTickCount();
 								}
 							}
 // ======================================================================================================
@@ -466,7 +470,7 @@ void adc1_task(void *arg)
 	}
 	else
 	{
-		ESP_LOGD(TAG, "Error adding channel for slot %d", slot_num);	
+		ESP_LOGE(TAG, "S%d: adc1_add_channel FAILED (GPIO=%d)", slot_num, SLOTS_PIN_MAP[slot_num][0]);
 	}
 
 	ESP_LOGD(TAG, "task of slot %d dismissed", slot_num);
@@ -475,6 +479,15 @@ void adc1_task(void *arg)
 }
 void start_adc1_task(int slot_num)
 {
+	// Board version < 4: continuous ADC hardware not available on this board,
+	// fall back to the legacy single-shot analog driver.
+	if (me_config.boardVersion < 4)
+	{
+		ESP_LOGD(TAG, "S%d: boardVersion %d < 4, falling back to analog task", slot_num, me_config.boardVersion);
+		start_analog_task(slot_num);
+		return;
+	}
+
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	int t_slot_num = slot_num;
 
