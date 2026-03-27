@@ -4,6 +4,7 @@ void crosslinker_task(void *parameter);
 void reportTaskList();
 void reportNETstatus();
 void reportFreeRAM();
+void reportFreeDisk();
 void reportVersion();
 
 //void startup_crosslinks_exec(void);

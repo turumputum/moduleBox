@@ -1,6 +1,6 @@
 // ***************************************************************************
 // TITLE
-//      Ultrasonic Distance Sensor Module
+//      Ultrasonic Distance Sensor Module (SR04M UART)
 //
 // PROJECT
 //     moduleBox
@@ -11,19 +11,17 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "driver/gpio.h"
+#include "driver/uart.h"
 #include "driver/ledc.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
 
 #include "reporter.h"
 #include "stateConfig.h"
 #include "esp_log.h"
 #include "me_slot_config.h"
 #include "stdreport.h"
-
+#include <mbdebug.h>
 
 #include <generated_files/gen_distanceSens_sr04m.h>
 
@@ -37,27 +35,17 @@ static const char* TAG = "DISTANCE_SENS";
 extern void distanceSens_config(distanceSens_t *distanceSens, uint8_t slot_num);
 extern void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
 
-typedef struct {
-    uint32_t level : 1;
-    int64_t time;
-} interrupt_data_t;
-
-static QueueHandle_t interrupt_queue;
-
-static void IRAM_ATTR gpio_isr_handler(void* arg) {
-    interrupt_data_t interrupt_data;
-    interrupt_data.level = gpio_get_level((gpio_num_t)arg);
-    interrupt_data.time = esp_timer_get_time();
-    xQueueSendFromISR(interrupt_queue, &interrupt_data, NULL);
-}
-
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
 /* 
-    Модуль ультразвукового датчика расстояния sr04m
-    Поддерживает измерение расстояния до 400см
+    Модуль ультразвукового датчика расстояния SR04M (UART режим)
+    Протокол: отправка 0x55 → ответ 4 байта [0xFF, DATA_H, DATA_L, SUM]
+    Расстояние в мм = (DATA_H << 8) | DATA_L
+    Контрольная сумма: (0xFF + DATA_H + DATA_L) & 0xFF
+    Скорость UART: 9600 бод
+    Поддерживает измерение расстояния до 4500мм (450см)
     slots: 0-5
 */
 void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
@@ -70,10 +58,10 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
     if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
         distanceSens->deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
         if (distanceSens->deadBand <= 0) {
-            ESP_LOGD(TAG, "Ultrasonic dead_band wrong format, set default slot:%d", distanceSens->deadBand);
+            ESP_LOGD(TAG, "SR04M dead_band wrong format, set default slot:%d", distanceSens->deadBand);
             distanceSens->deadBand = 1;
         } else {
-            ESP_LOGD(TAG, "Ultrasonic set dead_band:%d for slot:%d", distanceSens->deadBand, slot_num);
+            ESP_LOGD(TAG, "SR04M set dead_band:%d for slot:%d", distanceSens->deadBand, slot_num);
         }
     }
 
@@ -86,35 +74,29 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
     }
 
     /* Максимальное значение диапазона измерений
-    Числовое значение 1-4096, по умолчанию 400см
+    Числовое значение 1-4500мм, по умолчанию 4500
     */
-    if (strstr(me_config.slot_options[slot_num], "maxVal") != NULL) {
-        distanceSens->maxVal = get_option_int_val(slot_num, "maxVal", "", 400, 1, 4096);
-        ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", distanceSens->maxVal, slot_num);
-    }
+    distanceSens->maxVal = get_option_int_val(slot_num, "maxVal", "", 4500, 1, 4500);
+    ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", distanceSens->maxVal, slot_num);
 
     /* Минимальное значение диапазона измерений
-    Числовое значение 1-4096, по умолчанию 0
+    Числовое значение 0-4500мм, по умолчанию 0
     */
-    if (strstr(me_config.slot_options[slot_num], "minVal") != NULL) {
-        distanceSens->minVal = get_option_int_val(slot_num, "minVal", "", 0, 0, 4096);
-        ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);
-    }
+    distanceSens->minVal = get_option_int_val(slot_num, "minVal", "", 0, 0, 4500);
+    ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);
 
     /* Задержка между отправкой рапортов (антидребезг)
-    Числовое значение 1-4096мс, по умолчанию 0
+    Числовое значение 1-4096мс, по умолчанию 10
     */
-    if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
-        distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
-        ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);
-    }
+    distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
+    ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);
 
     /* Порог для бинарного выхода (вкл/выкл)
     При значении 0 работает как аналоговый датчик
-    Числовое значение 0-4096, по умолчанию 0
+    Числовое значение 0-4500, по умолчанию 0
     */
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-        distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 4096);
+        distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 4500);
         if (distanceSens->threshold <= 0) {
             ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
             distanceSens->threshold = 0;
@@ -194,9 +176,9 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 
     // --- Report registration ---
     
-    /* Рапортует текущее значение расстояния в см
+    /* Рапортует текущее значение расстояния в мм
     */
-    distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "cm", "distance", 0, distanceSens->maxVal);
+    distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "distance", 0, distanceSens->maxVal);
     /* Рапортует текущее значение расстояния в формате float (от 0 до 1)
     */
     distanceSens->distanceFloatReport = stdreport_register(RPTT_ratio, slot_num, "ratio", "ratio", 0.0f, 1.0f);
@@ -208,63 +190,79 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 void sr04m_task(void* arg) {
     int slot_num = *(int*)arg;
 
+    // --- Find free UART ---
+    int uart_num = UART_NUM_1;
+    while (uart_is_driver_installed(uart_num)) {
+        uart_num++;
+        if (uart_num >= UART_NUM_MAX) {
+            char errorString[50];
+            sprintf(errorString, "slot num:%d ___ No free UART driver", slot_num);
+            ESP_LOGE(TAG, "%s", errorString);
+            mblog(E, errorString);
+            vTaskDelay(200);
+            vTaskDelete(NULL);
+        }
+    }
+
+    uint8_t echo_pin = SLOTS_PIN_MAP[slot_num][0];  // pin 4: sensor RX (receives 0x55)
+    uint8_t trig_pin = SLOTS_PIN_MAP[slot_num][1];  // pin 5: sensor TX (sends data)
+
+    uart_config_t uart_config = {
+        .baud_rate = 9600,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+    };
+    uart_param_config(uart_num, &uart_config);
+    // ESP TX → echo_pin (pin 4, sensor RX), ESP RX ← trig_pin (pin 5, sensor TX)
+    uart_set_pin(uart_num, echo_pin, trig_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    #define BUF_SIZE 256
+    uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0);
+
     distanceSens_t distanceSens = DISTANCE_SENS_DEFAULT();
-    distanceSens.maxVal = 400;
+    distanceSens.maxVal = 4500;
     configure_sr04m(&distanceSens, slot_num);
 
-    gpio_num_t trigger_pin = (gpio_num_t)SLOTS_PIN_MAP[slot_num][1];
-    gpio_num_t echo_pin = (gpio_num_t)SLOTS_PIN_MAP[slot_num][0];
-
-    gpio_config_t trigger_conf = {
-        .pin_bit_mask = (1ULL << trigger_pin),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&trigger_conf);
-
-    gpio_config_t echo_conf = {
-        .pin_bit_mask = (1ULL << echo_pin),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_ANYEDGE
-    };
-    gpio_config(&echo_conf);
-
-    interrupt_queue = xQueueCreate(50, sizeof(interrupt_data_t));
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(echo_pin, gpio_isr_handler, (void*)echo_pin);
-
-    interrupt_data_t interrupt_data;
-    int64_t start_time = 0;
-    int64_t end_time = 0;
-    int64_t last_trigger_time = 0;
+    uint8_t trigger_cmd = 0x55;
+    uint8_t rawByte[4];
+    uint8_t index = 0;
 
     waitForWorkPermit(slot_num);
 
     while (1) {
-        if(esp_timer_get_time()-last_trigger_time>100000){
-            gpio_set_level(trigger_pin, 1);
-            esp_rom_delay_us(10);
-            last_trigger_time=esp_timer_get_time();
+        // Отправляем команду измерения каждый цикл
+        if (index == 0) {
+            uart_write_bytes(uart_num, &trigger_cmd, 1);
+            uart_wait_tx_done(uart_num, pdMS_TO_TICKS(20));
         }
-        
-        gpio_set_level(trigger_pin, 0);
 
-        if (xQueueReceive(interrupt_queue, &interrupt_data, pdMS_TO_TICKS(0)) == pdTRUE) {
-            if (interrupt_data.level == 0) {
-                start_time = interrupt_data.time;
-            } else if (interrupt_data.level == 1 && start_time > 0) {
-                end_time = interrupt_data.time;
-                distanceSens.currentPos = (end_time - start_time) / 58;
-                distanceSens_report(&distanceSens, slot_num);
-                start_time = 0;
+        // Побайтовое чтение с синхронизацией на заголовок 0xFF
+        int len = uart_read_bytes(uart_num, &rawByte[index], 1, pdMS_TO_TICKS(200));
+        if (len > 0) {
+            if (index == 0) {
+                if (rawByte[0] == 0xFF) {
+                    index++;
+                }
+            } else {
+                index++;
+                if (index == 4) {
+                    uint8_t checksum = (rawByte[0] + rawByte[1] + rawByte[2]) & 0xFF;
+                    if (checksum == rawByte[3]) {
+                        uint16_t distance_mm = (rawByte[1] << 8) | rawByte[2];
+                        if (distance_mm > 0) {
+                            distanceSens.currentPos = distance_mm;
+                        } else {
+                            distanceSens.currentPos = distanceSens.maxVal;
+                        }
+                        distanceSens_report(&distanceSens, slot_num);
+                    }
+                    index = 0;
+                }
             }
+        } else {
+            index = 0;
         }
-
-        vTaskDelay(pdMS_TO_TICKS(25));
     }
 }
 

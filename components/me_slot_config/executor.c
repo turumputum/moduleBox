@@ -234,6 +234,10 @@ void executer_task(void * param){
 				ESP_LOGD(TAG, "getVersion");
 				reportVersion();
 				sum++;
+			}else if(strstr(msg.str, "system/getFreeDisk")!=NULL){
+				ESP_LOGD(TAG, "getFreeDisk");
+				reportFreeDisk();
+				sum++;
 			}else if(strstr(msg.str, "system/restart")!=NULL){
 				ESP_LOGD(TAG, "restart");
 				esp_restart();

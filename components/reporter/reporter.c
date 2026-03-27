@@ -17,6 +17,7 @@
 #include "myMqtt.h"
 #include "LAN.h"
 #include "udplink.h"
+#include "esp_vfs_fat.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "REPORTER";
@@ -426,6 +427,20 @@ void reportFreeRAM(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
 	snprintf(tmpStr, 128, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
+	forward_report(tmpStr, -1);
+	heap_caps_free(tmpStr);
+}
+
+void reportFreeDisk(){
+	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
+	if(!tmpStr) return;
+	uint64_t total = 0, free_bytes = 0;
+	esp_err_t ret = esp_vfs_fat_info("/sdcard", &total, &free_bytes);
+	if(ret == ESP_OK){
+		snprintf(tmpStr, 128, "%s/system/freeDisk:%llu", me_config.deviceName, (unsigned long long)free_bytes);
+	}else{
+		snprintf(tmpStr, 128, "%s/system/freeDisk:error", me_config.deviceName);
+	}
 	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
