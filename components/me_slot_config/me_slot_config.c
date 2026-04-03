@@ -49,6 +49,7 @@
 #include "opusLAN.h"
 #include "dialer.h"
 #include <mbdebug.h>
+#include <testsd.h>
 
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -162,7 +163,9 @@ int init_slots(void){
 			start_adc1_task(i); // W, C
 		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
 			start_stepper_task(i);		// W, C
-		
+		}else if(!memcmp(me_config.slot_mode[i], "testsd", 6)){
+			start_testsd_task(i);		// W, C
+			
 		// }else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
 		// 	start_out_3ch_task(i);		// W, NOC
 		

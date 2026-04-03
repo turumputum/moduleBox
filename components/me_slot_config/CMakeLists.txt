@@ -1,4 +1,4 @@
-file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "encoders.c" ) 
+file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "encoders.c" "testsd.c") 
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
