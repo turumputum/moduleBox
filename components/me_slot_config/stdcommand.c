@@ -234,7 +234,7 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
     {
         len = strlen(me_state.action_topic_list[cmd->slot_num]);
 
-        //ESP_LOGD(TAG, "Input cmd:%s", cmd->msg.str);
+        ESP_LOGD(TAG, "Slot:%d input cmd:'%s' topic:'%s' len:%d", cmd->slot_num, cmd->msg.str, me_state.action_topic_list[cmd->slot_num], len);
 
         if (strlen(cmd->msg.str) > len)
         {
@@ -291,6 +291,11 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
                                 result = cmd->keywords[i].id;
                             }
                         }
+                        else if ((1 == cmd->keywords[i].count) && (PARAMT_none == (PARAMT)cmd->keywords[i].p[0]))
+                        {
+                            // Command registered with no parameters, but parameters were provided — accept anyway
+                            result = cmd->keywords[i].id;
+                        }
                         else if (params->skipTypeChecking)
                         {
                             result = cmd->keywords[i].id;
@@ -343,6 +348,15 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
                     }
                 }
             }
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Slot:%d msg too short to contain command: '%s' (len=%d, topic_len=%d)", cmd->slot_num, cmd->msg.str, (int)strlen(cmd->msg.str), len);
+        }
+
+        if (-1 == result)
+        {
+            ESP_LOGW(TAG, "Slot:%d command not recognized: '%s'", cmd->slot_num, cmd->msg.str);
         }
     }
 

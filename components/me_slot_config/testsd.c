@@ -33,8 +33,10 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "freertos/semphr.h"
+#include "esp_heap_caps.h"
 #include "diskio_impl.h"
 #include "diskio_sdmmc.h"
+#include "ff.h"
 
 #include <stdcommand.h>
 #include <stdreport.h>
@@ -55,6 +57,8 @@
     } \
     } while(0)
 
+#define CHUNK_SECTORS		128
+
 // ---------------------------------------------------------------------------
 // ---------------------------------- TYPES ----------------------------------
 // -|-----------------------|-------------------------------------------------
@@ -74,6 +78,10 @@ typedef struct __tag_TESTSD_CONFIG
 
 	int                    	stateReport;
     int                    	resultReport;
+	int 					progressReport;
+
+	int 					cardDetected;
+	uint8_t 				ledPin;
 
 	char *					custom_topic;
 	int 					flag_custom_topic;
@@ -101,6 +109,7 @@ typedef enum
 	STATE_stopped	= 0,
 	STATE_init,
 	STATE_running,
+	STATE_formatting,
 	STATE_done
 } STATE;	
 
@@ -118,6 +127,7 @@ typedef struct __tag_TESTSCORE
 	unsigned long 			erroneous;
 
 	unsigned long 			blockSize;
+	unsigned long 			chunkSectors;
 
 	STATE					state;
 	int 					result;
@@ -157,7 +167,17 @@ static char * stateNames[] =
 	"stopped",
 	"initializing",
 	"running",
+	"formatting",
 	"done"
+};
+
+/* result: 0=none, 1=success, -1=error, -2=format_error */
+static const char * resultNames[] = 
+{
+	"formatError",	/* -2 */
+	"error",		/* -1 */
+	"none",			/*  0 */
+	"success"		/*  1 */
 };
 
 static char * testTypeNames[] = 
@@ -178,21 +198,115 @@ const char * getStateName(STATE state)
 	return stateNames[state];
 }
 
+static const char * getResultName(int result)
+{
+	/* result range: -2..1 → index 0..3 */
+	int idx = result + 2;
+	if (idx < 0) idx = 0;
+	if (idx > 3) idx = 3;
+	return resultNames[idx];
+}
+
 
 /* 
     Модуль тестирования SD-карт
 */
+static int detect_sd_card_presence(void)
+{
+	if (!host_inited) {
+		/* Хост не инициализирован — проверяем наличие карты по уровню на DATA0 пине.
+		   SD-карта имеет внутренние pull-up на линиях; без карты pullup на плате даёт HIGH,
+		   при вставленной карте линия CMD тоже HIGH. Используем sdmmc_card_init через хост. 
+		   Без хоста надёжная детекция невозможна — возвращаем -1 (неизвестно). */
+		return -1;
+	}
+
+	sdmmc_card_t *probe = calloc(1, sizeof(sdmmc_card_t));
+	if (!probe) return 0;
+
+	int result = (sdmmc_card_init(&host, probe) == ESP_OK) ? 1 : 0;
+	free(probe);
+
+	return result;
+}
+
+static esp_err_t format_sd_card(void)
+{
+	BYTE pdrv;
+	FATFS *fs = NULL;
+	void *work_buf = NULL;
+	esp_err_t result = ESP_FAIL;
+
+	ff_diskio_register_sdmmc(0, card);
+	pdrv = 0;
+
+	fs = calloc(1, sizeof(FATFS));
+	if (!fs) {
+		ESP_LOGE(TAG, "Format: FATFS alloc failed");
+		goto fmt_cleanup;
+	}
+
+	FRESULT fres = f_mount(fs, "", 0);
+	if (fres != FR_OK) {
+		ESP_LOGE(TAG, "Format: f_mount failed (%d)", fres);
+		goto fmt_cleanup;
+	}
+
+	const size_t workbuf_size = 4096;
+	work_buf = malloc(workbuf_size);
+	if (!work_buf) {
+		ESP_LOGE(TAG, "Format: workbuf alloc failed");
+		goto fmt_cleanup;
+	}
+
+	const MKFS_PARM opt = { FM_FAT32, 0, 0, 0, 0 };
+	ESP_LOGI(TAG, "Formatting SD card as FAT32...");
+	fres = f_mkfs("", &opt, work_buf, workbuf_size);
+	if (fres != FR_OK) {
+		ESP_LOGE(TAG, "Format: f_mkfs failed (%d)", fres);
+		goto fmt_cleanup;
+	}
+
+	ESP_LOGI(TAG, "SD card formatted successfully");
+	result = ESP_OK;
+
+fmt_cleanup:
+	f_mount(NULL, "", 0);
+	ff_diskio_register(pdrv, NULL);
+	if (fs) free(fs);
+	if (work_buf) free(work_buf);
+
+	return result;
+}
+
 void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
+
+	/* Светодиод индикации наличия SD-карты
+	*/
+	c->ledPin = SLOTS_PIN_MAP[slot_num][3];
+	if (c->ledPin != 0) {
+		esp_rom_gpio_pad_select_gpio(c->ledPin);
+		gpio_set_direction(c->ledPin, GPIO_MODE_OUTPUT);
+		gpio_set_level(c->ledPin, 1);
+	}
+	c->cardDetected = -1; // неизвестное начальное состояние
 
 	/* Задаёт тип теста
 	   read - только чтение
 	   readwrite - чтение и запись обратно
 	   readback - чтение, запись и проверка вторичным чтением
 	*/
-	c->testType = get_option_enum_val(slot_num, "testType", "read", "readwrite", "readback", NULL);
-	ESP_LOGD(TAG, "Slot:%d test type = %s", slot_num, testTypeNames[c->testType]);
+	c->testType = get_option_enum_val(slot_num, "testType", "readwrite", "read", "readback", NULL);
+	if (c->testType < 0) c->testType = 0;
+	/* remap: 0=readwrite, 1=read, 2=readback → enum TESTT */
+	switch (c->testType) {
+		case 0: c->testType = TESTT_readwrite; break;
+		case 1: c->testType = TESTT_read;      break;
+		case 2: c->testType = TESTT_readback;   break;
+	}
+	ESP_LOGD(TAG, "Slot:%d test type[%d] = %s", slot_num, c->testType, testTypeNames[c->testType]);
 
 	/* Определяет порог ошибок для останова тестирования
 	*/
@@ -205,13 +319,20 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 	ESP_LOGD(TAG, "Slot:%d run delay = %d", slot_num, c->runDelay);
 
 
-    /* Рапортует о текущем статусе (фазе) тестирования
+    /* Рапортует о текущем статусе (фазе) тестирования, а также детекции карты.
+       Возможные значения: "stopped", "initializing", "running", "formatting", "done", "inserted", "ejected"
 	*/
-	c->stateReport = stdreport_register(RPTT_int, slot_num, "state", "state");
+	c->stateReport = stdreport_register(RPTT_string, slot_num, "string", "state");
 
-    /* Рапортует результат завершенного тестирования
+    /* Рапортует результат завершенного тестирования.
+       Возможные значения: "none", "success", "error", "formatError"
 	*/
-	c->resultReport = stdreport_register(RPTT_int, slot_num, "result", "result");
+	c->resultReport = stdreport_register(RPTT_string, slot_num, "string", "result");
+
+	/* Рапортует прогресс тестирования в целых процентах.
+	   Возможные значения: 0 — 100
+	*/
+	c->progressReport = stdreport_register(RPTT_int, slot_num, "percent", "progress");
 
     /* Команда запускает тестирование
     */
@@ -232,8 +353,10 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 		char *str = calloc(strlen(me_config.deviceName)+strlen("/testsd_")+4, sizeof(char));
 		sprintf(str, "%s/testsd_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=str;
+		me_state.trigger_topic_list[slot_num]=str;
 	}else{
 		me_state.action_topic_list[slot_num]=c->custom_topic;
+		me_state.trigger_topic_list[slot_num]=c->custom_topic;
 	}
 }
 
@@ -270,7 +393,6 @@ static esp_err_t init_sdmmc_host(int slot, const void *slot_config, int *out_slo
 int testsd_init() 
 {
 	int 			result = ESP_FAIL;
-	esp_err_t 		ret;
 	PSDCARDPINSET	curPs;
 	SDCARDPINSET	oldPs = { "Old slot 1", 47, 21, 40, 48 };
 	SDCARDPINSET	newPs = { "New slot 1", 41, 40,  3, 48 };
@@ -322,7 +444,12 @@ int testsd_init_card()
 {
 	int 			result = ESP_FAIL;
 
-	ESP_LOGD(TAG, "Opeining SD card for testing");
+	ESP_LOGD(TAG, "Opening SD card for testing");
+
+	if (card) {
+		free(card);
+		card = NULL;
+	}
 
 	if ((card = (sdmmc_card_t*)calloc(1, sizeof(sdmmc_card_t))) != 0)
 	{
@@ -342,37 +469,47 @@ int testsd_init_card()
 static void testRead(PTESTSD_CONFIG c, 
 					 PTESTSCORE 	ts)
 {
-	if (sdmmc_read_sectors(card, ts->readBuffer, ts->current, 1) != ESP_OK)
-	{
-		ESP_LOGE(TAG, "Error reading block %lu", ts->current);
+	unsigned long remain = ts->total - ts->current;
+	unsigned long count = (remain < ts->chunkSectors) ? remain : ts->chunkSectors;
 
+	if (sdmmc_read_sectors(card, ts->readBuffer, ts->current, count) != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Error reading blocks %lu..%lu", ts->current, ts->current + count - 1);
 		ts->erroneous++;
 	}
+	ts->current += count - 1; /* caller adds 1 */
 }
 static void testReadWrite(PTESTSD_CONFIG c, 
 					      PTESTSCORE 	ts)
 {
-	if (sdmmc_read_sectors(card, ts->readBuffer, ts->current, 1) == ESP_OK)
-	{
-		if (sdmmc_write_sectors(card, ts->readBuffer, ts->current, 1) != ESP_OK)
-		{
-			ESP_LOGE(TAG, "Error writing block %lu", ts->current);
+	unsigned long remain = ts->total - ts->current;
+	unsigned long count = (remain < ts->chunkSectors) ? remain : ts->chunkSectors;
 
+	if (sdmmc_read_sectors(card, ts->readBuffer, ts->current, count) == ESP_OK)
+	{
+		if (sdmmc_write_sectors(card, ts->readBuffer, ts->current, count) != ESP_OK)
+		{
+			ESP_LOGE(TAG, "Error writing blocks %lu..%lu", ts->current, ts->current + count - 1);
 			ts->erroneous++;
 		}
 	}
 	else
 	{
-		ESP_LOGE(TAG, "Error reading block %lu", ts->current);
+		ESP_LOGE(TAG, "Error reading blocks %lu..%lu", ts->current, ts->current + count - 1);
 		ts->erroneous++;
 	}
+	ts->current += count - 1;
 }
 static void testReadBack(PTESTSD_CONFIG c, 
 					     PTESTSCORE 	ts)
 {
+	unsigned long remain = ts->total - ts->current;
+	unsigned long count = (remain < ts->chunkSectors) ? remain : ts->chunkSectors;
+	size_t bytes = count * ts->blockSize;
+
 	if (!ts->compareBuffer)	
 	{
-		if ((ts->compareBuffer = malloc(ts->blockSize)) == NULL)
+		if ((ts->compareBuffer = heap_caps_malloc(bytes, MALLOC_CAP_DMA | MALLOC_CAP_8BIT)) == NULL)
 		{
 			ESP_LOGE(TAG, "Error allocating memory for compare buffer");
 			ts->erroneous = c->maxErrors;
@@ -381,36 +518,37 @@ static void testReadBack(PTESTSD_CONFIG c,
 
 	if (ts->compareBuffer)
 	{
-		if (sdmmc_read_sectors(card, ts->readBuffer, ts->current, 1) == ESP_OK)
+		if (sdmmc_read_sectors(card, ts->readBuffer, ts->current, count) == ESP_OK)
 		{
-			if (sdmmc_write_sectors(card, ts->readBuffer, ts->current, 1) == ESP_OK)
+			if (sdmmc_write_sectors(card, ts->readBuffer, ts->current, count) == ESP_OK)
 			{
-				if (sdmmc_read_sectors(card, ts->compareBuffer, ts->current, 1) == ESP_OK)
+				if (sdmmc_read_sectors(card, ts->compareBuffer, ts->current, count) == ESP_OK)
 				{
-					if (memcmp(ts->compareBuffer, ts->readBuffer, ts->blockSize))
+					if (memcmp(ts->compareBuffer, ts->readBuffer, bytes))
 					{
-						ESP_LOGE(TAG, "Error comparing readed back block %lu", ts->current);
+						ESP_LOGE(TAG, "Error comparing blocks %lu..%lu", ts->current, ts->current + count - 1);
 						ts->erroneous++;
 					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "Error reading back block %lu", ts->current);
+					ESP_LOGE(TAG, "Error reading back blocks %lu..%lu", ts->current, ts->current + count - 1);
 					ts->erroneous++;
 				}
 			}
 			else
 			{
-				ESP_LOGE(TAG, "Error writing block %lu", ts->current);
+				ESP_LOGE(TAG, "Error writing blocks %lu..%lu", ts->current, ts->current + count - 1);
 				ts->erroneous++;
 			}
 		}
 		else
 		{
-			ESP_LOGE(TAG, "Error reading block %lu", ts->current);
+			ESP_LOGE(TAG, "Error reading blocks %lu..%lu", ts->current, ts->current + count - 1);
 			ts->erroneous++;
 		}
 	}
+	ts->current += count - 1;
 }
 
 void secondsToHMS(uint32_t total_seconds, char* buf, size_t size) 
@@ -427,9 +565,15 @@ void testsd_task(void *arg)
 	STDCOMMAND_PARAMS 	params 				= {0};
     int 				slot_num 			= *(int *)arg;
 	TickType_t 			lastProgressTime 	= 0;
+	int 				lastProgressPercent = -1;
+	TickType_t 			lastDetectTime 		= 0;
 	TESTSCORE			ts					= { 0 };
 
+	ESP_LOGW(TAG, "Slot:%d task started", slot_num);
+
 	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
+	configure_testsd(c, slot_num);
 
     if ( (1 == slot_num) && (ESP_OK == me_state.sd_init_res) )
 	{
@@ -438,19 +582,33 @@ void testsd_task(void *arg)
         vTaskDelete(NULL);
     }
 
-	if (testsd_init() != ESP_OK)
-	{
-        mblog(E, "Performing base SD card initialization failed, cannot test SD cards");
-        vTaskDelay(200);
-        vTaskDelete(NULL);
-    }
-
-	configure_testsd(c, slot_num);
-
 	waitForWorkPermit(slot_num);
+
+	if (testsd_init() != ESP_OK) {
+		ESP_LOGW(TAG, "Slot:%d SDMMC host init failed, detection and testing unavailable until retry", slot_num);
+	}
+
+	ESP_LOGW(TAG, "Slot:%d entering main loop", slot_num);
 
     while (1) 
 	{
+		/* Периодическая детекция SD-карты в состоянии простоя */
+		if (ts.state != STATE_running && ts.state != STATE_init && ts.state != STATE_formatting) {
+			TickType_t now = xTaskGetTickCount();
+			if (pdTICKS_TO_MS(now - lastDetectTime) >= 1000) {
+				lastDetectTime = now;
+				int detected = detect_sd_card_presence();
+				if (detected != c->cardDetected) {
+					c->cardDetected = detected;
+					if (c->ledPin != 0) {
+						gpio_set_level(c->ledPin, !detected);
+					}
+					stdreport_s(c->stateReport, detected ? "inserted" : "ejected");
+					ESP_LOGI(TAG, "Slot:%d SD card %s", slot_num, detected ? "inserted" : "ejected");
+				}
+			}
+		}
+
         switch (stdcommand_receive(&c->cmds, &params, 0))
  		{
             case -1: // none
@@ -474,7 +632,7 @@ void testsd_task(void *arg)
 						ts.result 		= 0;
 						break;
 				}
-				stdreport_i(c->stateReport, (int)ts.state);
+				stdreport_s(c->stateReport, (char*)getStateName(ts.state));
 				ESP_LOGD(TAG, "Current state: %s", getStateName(ts.state));
                 break;
 
@@ -488,7 +646,7 @@ void testsd_task(void *arg)
 
 					case STATE_done:
 						ESP_LOGD(TAG, "last result: %d", ts.result);
-						stdreport_i(c->resultReport, (int)ts.result);
+						stdreport_s(c->resultReport, (char*)getResultName(ts.result));
 
 						ts.state 		= STATE_stopped;
 					break;
@@ -497,12 +655,13 @@ void testsd_task(void *arg)
 						ts.state 		= STATE_stopped;
 						break;
 				}
-				stdreport_i(c->stateReport, (int)ts.state);
+				stdreport_s(c->stateReport, (char*)getStateName(ts.state));
 				ts.result 	= 0;
 				ESP_LOGD(TAG, "Current state: %s", getStateName(ts.state));
                 break;
 
 			default:
+				ESP_LOGW(TAG, "Slot:%d unknown command: %s", slot_num, c->cmds.msg.str);
 				break;				
 		}
 
@@ -512,6 +671,18 @@ void testsd_task(void *arg)
 				{
 					ts.result 	= 0;
 
+					if (!host_inited) {
+						ESP_LOGW(TAG, "Slot:%d retrying SDMMC host init", slot_num);
+						if (testsd_init() != ESP_OK) {
+							ESP_LOGE(TAG, "SDMMC host init failed, cannot test");
+							ts.result = -1;
+							ts.state = STATE_done;
+							stdreport_s(c->resultReport, (char*)getResultName(ts.result));
+							stdreport_s(c->stateReport, (char*)getStateName(ts.state));
+							break;
+						}
+					}
+
 					if (testsd_init_card() == ESP_OK)
 					{
 						ts.beginTime	= xTaskGetTickCount();
@@ -520,12 +691,23 @@ void testsd_task(void *arg)
 						//ts.total 		= 1000;
 						ts.current 		= 0;
 						ts.erroneous 	= 0;
+						ts.chunkSectors = CHUNK_SECTORS;
 
-						if ((ts.readBuffer = malloc(ts.blockSize)) != 0)
+						/* Пытаемся выделить DMA-буфер, уменьшая chunk при нехватке памяти */
+						ts.readBuffer = NULL;
+						while (ts.chunkSectors >= 1 && !ts.readBuffer) {
+							ts.readBuffer = heap_caps_malloc(ts.blockSize * ts.chunkSectors, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+							if (!ts.readBuffer) {
+								ts.chunkSectors /= 2;
+							}
+						}
+
+						if (ts.readBuffer != NULL)
 						{
-							ESP_LOGI(TAG, "Begining %s test of SD-card: %lu sectors, %u bytes size", 
+							ESP_LOGI(TAG, "Begining %s test of SD-card: %lu sectors, %u bytes/sector, chunk=%lu sectors (%lu bytes)", 
 										testTypeNames[c->testType],
-										(unsigned long)card->csd.capacity, (unsigned)ts.blockSize);
+										(unsigned long)card->csd.capacity, (unsigned)ts.blockSize,
+										ts.chunkSectors, ts.chunkSectors * ts.blockSize);
 
 							ts.state = STATE_running;
 						}
@@ -541,8 +723,8 @@ void testsd_task(void *arg)
 						ts.state = STATE_done;
 					}
 
-					stdreport_i(c->resultReport, (int)ts.result);
-					stdreport_i(c->stateReport, (int)ts.state);
+					stdreport_s(c->resultReport, (char*)getResultName(ts.result));
+					stdreport_s(c->stateReport, (char*)getStateName(ts.state));
 				}
 				break;
 
@@ -560,13 +742,21 @@ void testsd_task(void *arg)
 
 				ts.current++;
 
+				{
+					int pct = (int)((ts.current * 100) / ts.total);
+					if (pct != lastProgressPercent) {
+						lastProgressPercent = pct;
+						stdreport_i(c->progressReport, pct);
+					}
+				}
+
 				if (lastProgressTime)
 				{
 					TickType_t now = xTaskGetTickCount();
 
 					if (pdTICKS_TO_MS(now - lastProgressTime) >= 10000)
 					{
-						ESP_LOGI(TAG, "Running: %.2f%% (%lu / %lu)", (double)ts.current / ((double)ts.total / 100), ts.current, ts.total);
+						ESP_LOGI(TAG, "Running: %d%% (%lu / %lu)", lastProgressPercent, ts.current, ts.total);
 
 						lastProgressTime = xTaskGetTickCount();
 					}
@@ -582,8 +772,9 @@ void testsd_task(void *arg)
 					ts.result 	= -1;
 					ts.state 	= STATE_done;
 
-					stdreport_i(c->resultReport, (int)ts.result);
-					stdreport_i(c->stateReport, (int)ts.state);
+					stdreport_s(c->resultReport, (char*)getResultName(ts.result));
+					stdreport_s(c->stateReport, (char*)getStateName(ts.state));
+					break;
 				}
 
 				if (ts.current >= ts.total)
@@ -596,10 +787,9 @@ void testsd_task(void *arg)
 						ESP_LOGI(TAG, "Test done without errors, duration: %s", ts.readBuffer);
 
 					ts.result 	= 1;
-					ts.state 	= STATE_done;
+					ts.state 	= STATE_formatting;
 
-					stdreport_i(c->resultReport, (int)ts.result);
-					stdreport_i(c->stateReport, (int)ts.state);
+					stdreport_s(c->stateReport, (char*)getStateName(ts.state));
 				}
 				if (c->runDelay)
 				{
@@ -607,11 +797,24 @@ void testsd_task(void *arg)
 				}
 				break;
 
+			case STATE_formatting:
+				if (format_sd_card() == ESP_OK) {
+					ESP_LOGI(TAG, "Card formatted after successful test");
+					ts.result = 1;
+				} else {
+					ESP_LOGE(TAG, "Card formatting failed");
+					ts.result = -2;
+				}
+				ts.state = STATE_done;
+				stdreport_s(c->resultReport, (char*)getResultName(ts.result));
+				stdreport_s(c->stateReport, (char*)getStateName(ts.state));
+				break;
+
 			default:
 				break;
 		}
 		
-		if ( (ts.state != STATE_running) && (ts.state != STATE_init) && (ts.readBuffer != 0) )
+		if ( (ts.state != STATE_running) && (ts.state != STATE_init) && (ts.state != STATE_formatting) && (ts.readBuffer != 0) )
 		{
 			if (ts.compareBuffer)
 			{
@@ -619,17 +822,36 @@ void testsd_task(void *arg)
 				ts.compareBuffer = NULL;
 			}
 
-
 			free(ts.readBuffer);
 			ts.readBuffer = NULL;
 
-			ESP_LOGD(TAG, "Buffer memory was freed");
+			if (card)
+			{
+				free(card);
+				card = NULL;
+			}
+
+			/* Сброс SDMMC-хоста после теста для очистки состояния периферии.
+			   Без этого ошибка 0x107 остаётся в хосте и ломает последующую детекцию. */
+			if (host_inited) {
+				sdmmc_host_deinit();
+				host_inited = false;
+			}
+			if (testsd_init() != ESP_OK) {
+				ESP_LOGW(TAG, "Slot:%d SDMMC host reinit failed after test", slot_num);
+			}
+
+			ts.state = STATE_stopped;
+			stdreport_s(c->stateReport, (char*)getStateName(ts.state));
+
+			ESP_LOGI(TAG, "Test resources freed, ready for new start command");
 		}
     }
 }
 void start_testsd_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
+	static int t_slot_num;
+	t_slot_num = slot_num;
 	xTaskCreatePinnedToCore(testsd_task, "testsd_task", 1024 * 4, &t_slot_num, 12, NULL,1);
 
 	ESP_LOGD(TAG, "TESTSD init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

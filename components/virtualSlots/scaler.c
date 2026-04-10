@@ -96,11 +96,11 @@ void configure_scaler(PSCALER_CONFIG ch, int slot_num)
 
     /* Установить входное значение для масштабирования
     */
-    stdcommand_register(&ch->cmds, SCALERCMD_set, NULL, PARAMT_int);
+    stdcommand_register(&ch->cmds, SCALERCMD_set, "pushVal", PARAMT_int);
 
     /* Отчёт масштабированного значения
     */
-    ch->report = stdreport_register(RPTT_int, slot_num, "", "");
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "result");
 }
 
 void scaler_task(void* arg) {
