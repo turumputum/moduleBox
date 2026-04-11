@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "esp_log.h"
 #include "esp_err.h"
@@ -77,6 +78,24 @@ typedef struct rtp_stream {
     int64_t                       last_packet_time;
     int                           sample_rate;
     int                           bits_per_sample;
+
+    // === Clock drift correction state ===
+    uint32_t                      first_rtp_ts;       // First RTP timestamp received
+    int64_t                       total_samples_to_i2s; // Total samples actually returned to I2S (post-correction)
+    bool                          drift_initialized;  // Whether drift tracking has started
+    uint32_t                      last_rtp_ts;        // Last RTP timestamp seen
+    uint16_t                      last_seq;           // Last sequence number (moved from static)
+    int64_t                       last_drift_log_us;  // Last time drift was logged
+    int32_t                       drift_correction_total; // Net corrections (+ = inserted, - = dropped)
+
+    // Rate-based drift detection: measure slope of raw_drift over windows
+    int64_t                       drift_start_us;        // Time when drift tracking started
+    int32_t                       drift_window_raw;      // raw_drift snapshot at window start
+    int64_t                       drift_window_start_us; // Time of window start snapshot
+    bool                          drift_window_valid;    // Whether we have a valid window start
+    int32_t                       drift_rate_mpps;       // Measured drift rate in milli-samples/sec (x1000)
+    int64_t                       last_correction_us;    // Rate limiter for corrections
+    int32_t                       correction_debt;       // Accumulated fractional corrections needed
 } rtp_stream_t;
 
 struct rtp_header {
@@ -452,6 +471,9 @@ static esp_err_t _rtp_open(audio_element_handle_t self)
     }
     rtp->is_open = true;
     rtp->last_packet_time = esp_timer_get_time();
+    // Reset drift tracking on each new connection
+    rtp->drift_initialized = false;
+    rtp->last_seq = 0;
     _dispatch_event(self, rtp, NULL, 0, RTP_STREAM_STATE_CONNECTED);
 
 
@@ -508,6 +530,13 @@ static esp_err_t _rtp_destroy(audio_element_handle_t self){
 }
 
 uint8_t packet_buf[1600]; //fixme todo
+
+// Extract 32-bit RTP timestamp from packet bytes 4-7 (network byte order)
+static inline uint32_t rtp_get_timestamp(const uint8_t *pkt) {
+    return ((uint32_t)pkt[4] << 24) | ((uint32_t)pkt[5] << 16) |
+           ((uint32_t)pkt[6] << 8)  | (uint32_t)pkt[7];
+}
+
 static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
 {
     rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
@@ -529,8 +558,6 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
         }
 
         ret = recvfrom(rtp->sock, packet_buf, 1600, 0, (struct sockaddr *)&source_addr, &addr_len);
-        //TODO validate rtp packet here;
-        static uint16_t seq=0; //FIXME must be in rtp struct
         if (ret>0) 
         {
             rtp->last_packet_time = esp_timer_get_time();
@@ -541,10 +568,35 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
             }
             
             uint16_t tseq = packet_buf[2] << 8 | packet_buf[3];
-            if ((uint16_t)tseq ==((uint16_t)seq))  
+            if ((uint16_t)tseq == (uint16_t)rtp->last_seq)  
             {
                 ESP_LOGE(TAG, "Duplicated packet! %d", tseq);
                 continue;
+            }
+
+            // === Extract RTP timestamp and track clock drift ===
+            uint32_t rtp_ts = rtp_get_timestamp(packet_buf);
+            int64_t now_us = esp_timer_get_time();
+
+            if (!rtp->drift_initialized) {
+                // First packet — start drift tracking
+                rtp->first_rtp_ts = rtp_ts;
+                rtp->last_rtp_ts = rtp_ts;
+                rtp->total_samples_to_i2s = 0;
+                rtp->drift_correction_total = 0;
+                rtp->drift_start_us = now_us;
+                rtp->drift_window_valid = false;
+                rtp->drift_window_raw = 0;
+                rtp->drift_window_start_us = 0;
+                rtp->drift_rate_mpps = 0;
+                rtp->last_drift_log_us = now_us;
+                rtp->last_correction_us = now_us;
+                rtp->correction_debt = 0;
+                rtp->drift_initialized = true;
+                ESP_LOGI(TAG, "[drift] Initialized: rtp_ts=%lu sample_rate=%d",
+                         (unsigned long)rtp_ts, rtp->sample_rate);
+            } else {
+                rtp->last_rtp_ts = rtp_ts;
             }
 
             for (uint16_t i=12; i< ret-1; i=i+2)
@@ -555,10 +607,10 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
             }
             
             saved = jbuf_write(packet_buf+12, ret-12, &rtp->jbuf);
-            //ESP_LOGE(TAG, "r %d s %d jb %d", ret, saved, jbuf_count(&rtp->jbuf));
             
-            if ((uint16_t)tseq !=((uint16_t)seq+1))  ESP_LOGE(TAG, "Missing packet! expected %d got %d", seq+1, tseq);
-            seq=tseq; 
+            if ((uint16_t)tseq != (uint16_t)(rtp->last_seq + 1))
+                ESP_LOGE(TAG, "Missing packet! expected %d got %d", rtp->last_seq + 1, tseq);
+            rtp->last_seq = tseq; 
         }else if (ret < 0) 
         {
             // === ИСПРАВЛЕНИЕ 2: Обработка ошибок сокета/закрытия ===
@@ -607,9 +659,140 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
 
     wr = jbuf_read((uint8_t *)buffer, readlen, &rtp->jbuf);
     
+    // === Clock drift correction via drift RATE measurement ===
+    //
+    // We track raw_drift = (total_samples_to_i2s - rtp_elapsed).
+    // Its absolute value includes a large constant offset (jitter buffer fill,
+    // pipeline latency) — this is NOT drift.
+    // Only the SLOPE (rate of change) of raw_drift indicates real clock drift.
+    //
+    // Algorithm:
+    //   1. SETTLE period (15s): let pipeline fill stabilize, do nothing
+    //   2. Start measurement window, record raw_drift snapshot
+    //   3. Every WINDOW_SEC (30s): compute slope = delta_raw / delta_time
+    //   4. If |slope| > MIN_RATE: accumulate correction_debt at that rate
+    //   5. When |correction_debt| >= 1 sample: apply insertion/drop
+    //
+    // Typical crystal drift ~20-50 ppm → 0.96-2.4 samples/sec at 48kHz
+    // Over 30s window: 29-72 samples → clearly measurable
+    //
+    #define DRIFT_SETTLE_US         (15 * 1000000LL)   // 15s settle before measuring
+    #define DRIFT_WINDOW_US         (30 * 1000000LL)   // 30s measurement window
+    #define DRIFT_MIN_RATE_MPPS     300                // min drift rate to act on: 0.3 samples/sec (in milli-samples/sec)
+    #define DRIFT_CORRECTION_COOLDOWN_US (100000LL)    // min 100ms between corrections
+
+    if (rtp->drift_initialized && wr > 0 && rtp->sample_rate > 0) {
+        int bytes_per_frame = (rtp->bits_per_sample / 8) * 2; // stereo frame size
+        int frames_this_read = wr / bytes_per_frame;
+        rtp->total_samples_to_i2s += frames_this_read;
+
+        // RTP elapsed samples (sender's clock)
+        uint32_t rtp_elapsed = rtp->last_rtp_ts - rtp->first_rtp_ts;
+        // Raw drift = our consumption minus sender's timeline (constant offset + accumulated drift)
+        int32_t raw_drift = (int32_t)(rtp->total_samples_to_i2s - (int64_t)rtp_elapsed);
+
+        int64_t now_us = esp_timer_get_time();
+        int64_t elapsed_us = now_us - rtp->drift_start_us;
+
+        // Phase 1: Settle — wait for pipeline to stabilize
+        if (!rtp->drift_window_valid && elapsed_us >= DRIFT_SETTLE_US) {
+            // Take first snapshot to start measurement window
+            rtp->drift_window_raw = raw_drift;
+            rtp->drift_window_start_us = now_us;
+            rtp->drift_window_valid = true;
+            rtp->drift_rate_mpps = 0;
+            rtp->correction_debt = 0;
+            ESP_LOGI(TAG, "[drift] Window started: raw=%ld", (long)raw_drift);
+        }
+
+        // Phase 2: Measure drift rate and apply corrections
+        if (rtp->drift_window_valid) {
+            int64_t window_elapsed_us = now_us - rtp->drift_window_start_us;
+
+            // Re-measure drift rate every WINDOW_SEC
+            if (window_elapsed_us >= DRIFT_WINDOW_US) {
+                int32_t delta_raw = raw_drift - rtp->drift_window_raw;
+                // drift_rate in milli-samples per second (x1000 for precision)
+                // delta_raw is in samples, window_elapsed_us is in microseconds
+                rtp->drift_rate_mpps = (int32_t)((int64_t)delta_raw * 1000000000LL / window_elapsed_us);
+
+                ESP_LOGI(TAG, "[drift] Window: delta_raw=%ld over %.1fs → rate=%ld mpps (%.2f samp/s)",
+                         (long)delta_raw,
+                         (float)window_elapsed_us / 1000000.0f,
+                         (long)rtp->drift_rate_mpps,
+                         (float)rtp->drift_rate_mpps / 1000.0f);
+
+                // Slide window forward
+                rtp->drift_window_raw = raw_drift;
+                rtp->drift_window_start_us = now_us;
+
+                // If rate is below noise threshold, zero out debt
+                if (abs(rtp->drift_rate_mpps) < DRIFT_MIN_RATE_MPPS) {
+                    rtp->correction_debt = 0;
+                }
+            }
+
+            // Accumulate correction debt based on measured rate
+            // debt accumulates in milli-samples; correct when |debt| >= 1000 (= 1 sample)
+            if (abs(rtp->drift_rate_mpps) >= DRIFT_MIN_RATE_MPPS) {
+                // Calculate how many milli-samples of debt to add for this read
+                // frames_this_read samples at sample_rate → time = frames / rate seconds
+                // debt_delta = drift_rate_mpps * (frames / rate) milli-samples
+                int32_t debt_delta = (int32_t)((int64_t)rtp->drift_rate_mpps * frames_this_read / rtp->sample_rate);
+                rtp->correction_debt += debt_delta;
+            }
+
+            // Apply corrections when debt reaches 1 full sample (1000 milli-samples)
+            bool cooldown_ok = (now_us - rtp->last_correction_us) > DRIFT_CORRECTION_COOLDOWN_US;
+
+            if (cooldown_ok && wr >= bytes_per_frame * 4) {
+                if (rtp->correction_debt >= 1000) {
+                    // Positive rate: local clock FAST, consuming more → DROP one frame
+                    int drop_pos = (wr / 2 / bytes_per_frame) * bytes_per_frame;
+                    if (drop_pos + bytes_per_frame <= wr) {
+                        memmove(buffer + drop_pos,
+                                buffer + drop_pos + bytes_per_frame,
+                                wr - drop_pos - bytes_per_frame);
+                        wr -= bytes_per_frame;
+                        rtp->drift_correction_total--;
+                        rtp->correction_debt -= 1000;
+                        rtp->last_correction_us = now_us;
+                    }
+                } else if (rtp->correction_debt <= -1000) {
+                    // Negative rate: local clock SLOW, consuming less → INSERT one frame
+                    if (wr + bytes_per_frame <= len) {
+                        int dup_pos = (wr / 2 / bytes_per_frame) * bytes_per_frame;
+                        memmove(buffer + dup_pos + bytes_per_frame,
+                                buffer + dup_pos,
+                                wr - dup_pos);
+                        wr += bytes_per_frame;
+                        rtp->drift_correction_total++;
+                        rtp->correction_debt += 1000;
+                        rtp->last_correction_us = now_us;
+                    }
+                }
+            }
+        }
+
+        // Log drift statistics every 10 seconds
+        if ((now_us - rtp->last_drift_log_us) > 10000000) {
+            int jbuf_fill = jbuf_count(&rtp->jbuf);
+            ESP_LOGI(TAG, "[drift] rtp_el=%lu i2s=%lld raw=%ld rate=%ld.%03ld samp/s debt=%ld corr=%ld jbuf=%d/%d %s",
+                     (unsigned long)rtp_elapsed,
+                     rtp->total_samples_to_i2s,
+                     (long)raw_drift,
+                     (long)(rtp->drift_rate_mpps / 1000),
+                     (long)(abs(rtp->drift_rate_mpps) % 1000),
+                     (long)rtp->correction_debt,
+                     (long)rtp->drift_correction_total,
+                     jbuf_fill, (int)rtp->jbuf.bufsize,
+                     rtp->drift_window_valid ? "[active]" : "[settling]");
+            rtp->last_drift_log_us = now_us;
+        }
+    }
+
     audio_element_update_byte_pos(self, wr);
     if (wr%4!=0) ESP_LOGE(TAG, "wrong count written %d requested %d available %d %d %d", wr, len, available, r, w); 
-    //ESP_LOGE(TAG, "get %d saved %d returned %d jbuf %d", ret, saved, wr, jbuf_count(&rtp->jbuf));
 
     return wr > 0 ? wr : -4;
 }
@@ -754,6 +937,9 @@ esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const
     jbuf->r_p = 0;
     jbuf->w_p = jbuf->bufsize;
     jbuf->state = JBUF_IDLE;
+
+    // Reset drift tracking for new stream
+    rtp->drift_initialized = false;
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;

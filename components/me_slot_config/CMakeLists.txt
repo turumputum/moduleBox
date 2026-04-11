@@ -34,6 +34,7 @@ idf_component_register(SRCS
                         myHID 
                         someUnique 
                         distanceSens 
+                        lidars
                         accel 
                         servoDev 
                         dwin 

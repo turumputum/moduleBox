@@ -1213,8 +1213,7 @@ distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "dis
 
 | Символ | Причина запрета |
 |--------|----------------|
-| `"` | Разрывает JSON-строку |
-| `'` | Разрывает JSON-строку |
+| `"` | Разрывает JSON-строку - используйте одинарные кавычки вместо двойных |
 | `\` | Невалидный неэкранированный backslash в JSON |
 | `.` | Нарушает синтаксический разбор текста |
 
@@ -1228,6 +1227,8 @@ distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "dis
 */
 /* Путь C:\folder\file
 */
+/* Возможные значения: "on", "off"
+*/
 ```
 
 ✅ Правильно:
@@ -1237,6 +1238,8 @@ distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "dis
 /* Задаёт режим авто
 */
 /* Путь /folder/file
+*/
+/* Возможные значения: 'on', 'off'
 */
 ```
 

@@ -34,6 +34,7 @@
 #include "dwin.h"
 
 #include "distanceSens.h"
+#include "lidars.h"
 #include "mb_oneWire.h"
 #include "accel.h"
 #include "servoDev.h"
@@ -155,6 +156,8 @@ int init_slots(void){
 			start_tofxxxfuart_task(i);		// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
 			start_hlk2410_task(i);		// W, NOC
+		}else if(!memcmp(me_config.slot_mode[i], "rplidarS1", 9)){
+			start_rplidarS1_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "sr04m", 5)){
 			start_sr04m_task(i);	// W, NOC
 		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){

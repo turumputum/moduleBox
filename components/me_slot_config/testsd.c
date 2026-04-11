@@ -319,13 +319,13 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 	ESP_LOGD(TAG, "Slot:%d run delay = %d", slot_num, c->runDelay);
 
 
-    /* Рапортует о текущем статусе (фазе) тестирования, а также детекции карты.
-       Возможные значения: "stopped", "initializing", "running", "formatting", "done", "inserted", "ejected"
+    /* Рапортует о текущем статусе (фазе) тестирования, а также детекции карты
+       Возможные значения: 'stopped', 'initializing', 'running', 'formatting', 'done', 'inserted', 'ejected'
 	*/
 	c->stateReport = stdreport_register(RPTT_string, slot_num, "string", "state");
 
-    /* Рапортует результат завершенного тестирования.
-       Возможные значения: "none", "success", "error", "formatError"
+    /* Рапортует результат завершенного тестирования
+       Возможные значения: 'none', 'success', 'error', 'formatError'
 	*/
 	c->resultReport = stdreport_register(RPTT_string, slot_num, "string", "result");
 
