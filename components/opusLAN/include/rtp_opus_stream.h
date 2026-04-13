@@ -40,6 +40,7 @@ typedef struct {
     int                         task_prio;
     bool                        ext_stack;
     int                         buf_size;
+    int                         jbuf_ms;            /*!< Jitter buffer target in milliseconds (0 = default 500ms) */
     int                         sample_rate;
     int                         bits_per_sample;
     int                         latency_ms;  /*!< Pre-buffer latency target (ms). All devices with same value start at same RTP timestamp. */
@@ -50,6 +51,7 @@ typedef struct {
 #define RTP_OPUS_STREAM_DEFAULT_PORT             (8080)
 #define RTP_OPUS_STREAM_TASK_STACK               (3072)
 #define RTP_OPUS_STREAM_BUF_SIZE                 (1024)
+#define RTP_OPUS_STREAM_DEFAULT_JBUF_MS          (500)
 #define RTP_OPUS_STREAM_TASK_PRIO                (22)
 #define RTP_OPUS_STREAM_TASK_CORE                (0)
 #define RTP_OPUS_STREAM_DEFAULT_SAMPLE_RATE      (48000)
@@ -66,6 +68,7 @@ typedef struct {
     .task_prio       = RTP_OPUS_STREAM_TASK_PRIO,           \
     .ext_stack       = true,                                \
     .buf_size        = RTP_OPUS_STREAM_BUF_SIZE,            \
+    .jbuf_ms         = RTP_OPUS_STREAM_DEFAULT_JBUF_MS,     \
     .sample_rate     = RTP_OPUS_STREAM_DEFAULT_SAMPLE_RATE, \
     .bits_per_sample = RTP_OPUS_STREAM_DEFAULT_BITS_PER_SAMPLE, \
     .latency_ms      = RTP_OPUS_STREAM_DEFAULT_LATENCY_MS,  \

@@ -63,6 +63,7 @@ typedef struct {
     int                         task_prio;          /*!< Task priority (based on freeRTOS priority) */
     bool                        ext_stack;          /*!< Allocate stack on extern ram */
     int                         buf_size;           /*!< Audio element buffer size (0 = default RTP_STREAM_BUF_SIZE) */
+    int                         jbuf_ms;            /*!< Jitter buffer size in milliseconds (0 = default 20ms) */
     int                         sample_rate;        /*!< Audio sample rate in Hz (e.g. 8000, 16000, 44100, 48000) */
     int                         bits_per_sample;    /*!< Bits per audio sample (e.g. 8, 16, 24, 32) */
     rtp_stream_event_handle_cb  event_handler;      /*!< TCP stream event callback*/
@@ -83,6 +84,7 @@ typedef struct {
 
 #define RTP_STREAM_DEFAULT_SAMPLE_RATE       (48000)
 #define RTP_STREAM_DEFAULT_BITS_PER_SAMPLE   (16)
+#define RTP_STREAM_DEFAULT_JBUF_MS           (20)
 
 #define RTP_STREAM_CFG_DEFAULT() {              \
     .type            = AUDIO_STREAM_READER,     \
@@ -94,6 +96,7 @@ typedef struct {
     .task_prio       = RTP_STREAM_TASK_PRIO,    \
     .ext_stack       = true,                    \
     .buf_size        = RTP_STREAM_BUF_SIZE,     \
+    .jbuf_ms         = RTP_STREAM_DEFAULT_JBUF_MS, \
     .sample_rate     = RTP_STREAM_DEFAULT_SAMPLE_RATE,     \
     .bits_per_sample = RTP_STREAM_DEFAULT_BITS_PER_SAMPLE, \
     .event_handler   = NULL,                    \

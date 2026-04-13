@@ -46,6 +46,21 @@ extern uint8_t led_segment;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "AUDIO_LAN";
 
+// Helper: get device IP address string for reports
+static const char* _get_device_ip(void) {
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
+    if (!netif) netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif) {
+        static esp_netif_ip_info_t ip_info;
+        static char ip_str[16];
+        if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+            esp_ip4addr_ntoa(&ip_info.ip, ip_str, sizeof(ip_str));
+            return ip_str;
+        }
+    }
+    return "0.0.0.0";
+}
+
 typedef struct __tag_RTPCONFIG{
 	uint8_t 				state;
 	int 				    defaultState;
@@ -56,10 +71,11 @@ typedef struct __tag_RTPCONFIG{
     bool                    useMulticast;
     int                     sample_rate;
     int                     bits_per_sample;
-    int                     buf_size;
+    int                     jbuf_ms;
     
     int                    stateReport;
     int                    volumeReport;
+    int                    addressReport;
 
     STDCOMMANDS             cmds;
 
@@ -200,7 +216,8 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
     rtp_cfg.port = c->port;
     rtp_cfg.host = c->host;  /* NULL for unicast, multicast address for multicast */
     rtp_cfg.task_core = 0;
-    rtp_cfg.buf_size = c->buf_size;
+    rtp_cfg.buf_size = 0; // use default audio_element buffer
+    rtp_cfg.jbuf_ms = c->jbuf_ms;
     rtp_cfg.sample_rate = c->sample_rate;
     rtp_cfg.bits_per_sample = c->bits_per_sample;
     c->rtp_stream_reader = rtp_stream_init(&rtp_cfg);
@@ -294,11 +311,11 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 	c->bits_per_sample = get_option_int_val(slot_num, "bitsPerSample", "num", 16, 8, 32);
     ESP_LOGD(TAG, "[LANplayer_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
 
-    /* Размер буфера
-    - по умолчанию 1024
+    /* Размер jitter-буфера в миллисекундах
+    - по умолчанию 20 мс
 	*/
-	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 5124, 256, 8192);
-    ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d", slot_num, c->buf_size);
+	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 20, 20, 200);
+    ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         /* Топик 
@@ -322,6 +339,10 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     /* Рапортует при изменении громкости
 	*/
 	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "volume");
+
+    /* Рапортует текущий адрес стрима (multicast/unicast)
+	*/
+	c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "address");
 
     /* Команда включает/выключает плеер
     */
@@ -382,9 +403,9 @@ void audioLAN_task(void *arg){
         ESP_LOGD(TAG,"audioLAN_%d slot state DISABLE", slot_num);
     }
 
-    char init_report[32];
     stdreport_i(c->stateReport, c->state);
     stdreport_i(c->volumeReport, c->volume);
+    { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
 
     //TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -478,6 +499,7 @@ void audioLAN_task(void *arg){
                         } else {
                             audio_pipeline_pause(c->pipeline);
                         }
+                        { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
                     } else {
                         /* Переключение на новый multicast адрес */
                         ESP_LOGI(TAG, "[audioLAN_%d] Switching to multicast: %s", slot_num, cmd_arg);
@@ -493,6 +515,7 @@ void audioLAN_task(void *arg){
                                 c->multicastAddress = new_addr;
                                 if (c->host) free(c->host);
                                 c->host = strdup(new_addr);
+                                { char _ab[32]; snprintf(_ab, sizeof(_ab), "%s:%d", new_addr, c->port); stdreport_s(c->addressReport, _ab); }
                             } else {
                                 ESP_LOGW(TAG, "[audioLAN_%d] Hot-switch failed, restarting pipeline", slot_num);
                                 free(new_addr);
@@ -506,6 +529,7 @@ void audioLAN_task(void *arg){
                                 } else {
                                     audio_pipeline_pause(c->pipeline);
                                 }
+                                { char _ab[32]; snprintf(_ab, sizeof(_ab), "%s:%d", c->multicastAddress, c->port); stdreport_s(c->addressReport, _ab); }
                             }
                         } else {
                             /* Был unicast или первый раз — полный перезапуск */
@@ -519,6 +543,7 @@ void audioLAN_task(void *arg){
                             } else {
                                 audio_pipeline_pause(c->pipeline);
                             }
+                            { char _ab[32]; snprintf(_ab, sizeof(_ab), "%s:%d", c->multicastAddress, c->port); stdreport_s(c->addressReport, _ab); }
                         }
                     }
                     ESP_LOGD(TAG, "[audioLAN_%d] setMulticastAddress done. multicast:%d host:%s Free heap:%d",

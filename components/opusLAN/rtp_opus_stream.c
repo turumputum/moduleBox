@@ -70,6 +70,13 @@ typedef struct rtp_opus_stream {
     uint16_t                      rtp_seq;
     bool                          need_seq_seed;       /* true = next packet seeds seq (no loss check) */
     int64_t                       last_overflow_log_us; /* for rate-limiting overflow warnings */
+    /* Wall-clock drift measurement (windowed rate) */
+    int64_t                       drift_start_us;       /* time when drift tracking started */
+    int32_t                       drift_window_raw;     /* raw_drift snapshot at window start */
+    int64_t                       drift_window_start_us;/* time of window start */
+    bool                          drift_window_valid;   /* whether window measurement active */
+    int32_t                       drift_rate_mpps;      /* measured drift milli-samples/sec */
+    int64_t                       last_drift_log_us;    /* last diagnostic log time */
     /* Sync-start: all devices with same latency_ms start at same RTP timestamp position */
     uint32_t                      target_delay_ms;     /* latency target from config */
     uint32_t                      sync_rtp_ts_start;   /* RTP ts threshold set on first packet */
@@ -442,6 +449,12 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
     rtp->last_ssrc        = 0;
     rtp->rtp_seq          = 0;
     rtp->need_seq_seed    = true;
+    rtp->drift_start_us       = 0;
+    rtp->drift_window_valid   = false;
+    rtp->drift_window_raw     = 0;
+    rtp->drift_window_start_us = 0;
+    rtp->drift_rate_mpps      = 0;
+    rtp->last_drift_log_us    = 0;
 
     /* Reset jitter buffer */
     memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
@@ -598,6 +611,8 @@ static void rtp_opus_drain_task(void *arg)
                 rtp->sync_rtp_ts_start = 0;
                 rtp->rtp_seq           = 0;
                 rtp->need_seq_seed    = true;
+                rtp->drift_window_valid = false;
+                rtp->drift_rate_mpps    = 0;
                 /* Flush jitter buffer — two simultaneous sources would otherwise
                  * fill it at 2× the drain rate and cause permanent overflow. */
                 jbuffer *jb = &rtp->jbuf;
@@ -617,55 +632,109 @@ static void rtp_opus_drain_task(void *arg)
                 }
             }
 
-            /* --- RTP clock rate tracking --- */
+            /* --- RTP clock rate tracking + wall-clock drift measurement --- */
+            #define DRIFT_SETTLE_US         (15 * 1000000LL)   /* 15s settle before measuring */
+            #define DRIFT_WINDOW_US         (30 * 1000000LL)   /* 30s measurement window */
+            #define DRIFT_MAX_RATE_MPPS     500000             /* max plausible: 500 samp/s */
+
             if (!rtp->sync_initialized) {
                 rtp->rtp_ts_base            = rtp_ts;
                 rtp->local_time_base_us     = now_us;
                 rtp->last_clk_update_us     = now_us;
                 rtp->measured_sample_hz     = rtp->sample_rate;
                 rtp->sync_initialized       = true;
-                /* Compute sync-start timestamp: all devices with same latency_ms will wait
-                 * for the SAME RTP ts, so they all start playback at the same stream position */
-                uint32_t delay_samples = (uint32_t)rtp->target_delay_ms * rtp->sample_rate / 1000;
-                rtp->sync_rtp_ts_start = rtp_ts + delay_samples;
-                ESP_LOGI(TAG, "RTP clock tracking init: ts_base=%lu sample_rate=%d sync_start_ts=%lu (latency=%dms)",
-                         (unsigned long)rtp->rtp_ts_base, rtp->sample_rate,
-                         (unsigned long)rtp->sync_rtp_ts_start, (int)rtp->target_delay_ms);
+                rtp->drift_start_us         = now_us;
+                rtp->drift_window_valid     = false;
+                rtp->drift_rate_mpps        = 0;
+                /* Period-aligned sync start: all devices round to the same
+                 * 1-second boundary in RTP timestamp space, so they begin
+                 * playback at the same stream position regardless of join time.
+                 * Pre-sync packets are NOT written to jbuf (see below). */
+                uint32_t align_period = (uint32_t)rtp->sample_rate;  /* 1-second boundary */
+                rtp->sync_rtp_ts_start = ((rtp_ts / align_period) + 2) * align_period;
+                ESP_LOGI(TAG, "RTP sync: ts_base=%lu sync_start=%lu (align=%lu wait~%ldms)",
+                         (unsigned long)rtp->rtp_ts_base,
+                         (unsigned long)rtp->sync_rtp_ts_start,
+                         (unsigned long)align_period,
+                         (long)((int32_t)(rtp->sync_rtp_ts_start - rtp_ts) * 1000 / rtp->sample_rate));
             } else {
-                int64_t since_base_us = now_us - rtp->local_time_base_us;
+                int64_t elapsed_us = now_us - rtp->drift_start_us;
+                int64_t rtp_elapsed = (int32_t)(rtp_ts - rtp->rtp_ts_base);
+                int64_t expected_local_samples = elapsed_us * (int64_t)rtp->sample_rate / 1000000LL;
+                int32_t raw_drift = (int32_t)(rtp_elapsed - expected_local_samples);
 
-                if (since_base_us > 60000000LL &&
-                    (now_us - rtp->last_clk_update_us) > 60000000LL) {
+                /* Phase 1: Settle — wait for pipeline to stabilize */
+                if (!rtp->drift_window_valid && elapsed_us >= DRIFT_SETTLE_US) {
+                    rtp->drift_window_raw = raw_drift;
+                    rtp->drift_window_start_us = now_us;
+                    rtp->drift_window_valid = true;
+                    rtp->drift_rate_mpps = 0;
+                    ESP_LOGI(TAG, "[drift] Window started: raw=%ld", (long)raw_drift);
+                }
 
-                    int64_t rtp_elapsed = (int32_t)(rtp_ts - rtp->rtp_ts_base);
-                    if (rtp_elapsed > 0 && since_base_us > 0) {
-                        int32_t hz_raw = (int32_t)(rtp_elapsed * 1000000LL / since_base_us);
-                        int32_t max_delta = rtp->sample_rate / 2000;
-                        if ((hz_raw - rtp->sample_rate) >  max_delta) hz_raw = rtp->sample_rate + max_delta;
-                        if ((rtp->sample_rate - hz_raw)  >  max_delta) hz_raw = rtp->sample_rate - max_delta;
+                /* Phase 2: Measure drift rate over windows */
+                if (rtp->drift_window_valid) {
+                    int64_t window_elapsed_us = now_us - rtp->drift_window_start_us;
+                    if (window_elapsed_us >= DRIFT_WINDOW_US) {
+                        int32_t delta_raw = raw_drift - rtp->drift_window_raw;
+                        rtp->drift_rate_mpps = (int32_t)((int64_t)delta_raw * 1000000000LL / window_elapsed_us);
 
-                        int32_t prev = rtp->measured_sample_hz;
-                        if (prev == rtp->sample_rate) {
-                            rtp->measured_sample_hz = hz_raw;
+                        /* Sanity check */
+                        if (abs(rtp->drift_rate_mpps) > DRIFT_MAX_RATE_MPPS) {
+                            ESP_LOGW(TAG, "[drift] Rate %ld mpps exceeds max, resetting",
+                                     (long)rtp->drift_rate_mpps);
+                            rtp->drift_rate_mpps = 0;
+                            rtp->drift_window_valid = false;
+                            rtp->drift_start_us = now_us - DRIFT_SETTLE_US;
                         } else {
-                            rtp->measured_sample_hz = (int32_t)((int64_t)hz_raw * 15 + (int64_t)prev * 85) / 100;
-                        }
-                        // RTP clock measured log removed
-                    }
-                    rtp->last_clk_update_us = now_us;
+                            /* Update measured Hz from drift rate */
+                            rtp->measured_sample_hz = rtp->sample_rate + rtp->drift_rate_mpps / 1000;
+                            /* Slide window */
+                            rtp->drift_window_raw = raw_drift;
+                            rtp->drift_window_start_us = now_us;
 
-                    if (since_base_us > 14400000000LL) {
-                        rtp->rtp_ts_base        = rtp_ts;
-                        rtp->local_time_base_us = now_us;
-                        ESP_LOGI(TAG, "RTP clock base rolled forward (4h limit)");
+                            ESP_LOGI(TAG, "[drift] delta=%ld over %.1fs → rate=%ld mpps (%.2f samp/s) hz=%ld",
+                                     (long)delta_raw,
+                                     (float)window_elapsed_us / 1000000.0f,
+                                     (long)rtp->drift_rate_mpps,
+                                     (float)rtp->drift_rate_mpps / 1000.0f,
+                                     (long)rtp->measured_sample_hz);
+                        }
                     }
                 }
 
-                int32_t ts_delta = (int32_t)(rtp_ts - rtp->rtp_ts_base);
-                if (ts_delta < -(int32_t)(rtp->sample_rate * 5)) {
-                    ESP_LOGW(TAG, "RTP timestamp jumped back >5s, re-syncing clock base");
+                /* Diagnostic log every 10s */
+                if ((now_us - rtp->last_drift_log_us) > 10000000LL) {
+                    ESP_LOGI(TAG, "[drift] raw=%ld rate=%ld.%03ld samp/s hz=%ld jbuf=%lu/%lu %s",
+                             (long)raw_drift,
+                             (long)(rtp->drift_rate_mpps / 1000),
+                             (long)(abs(rtp->drift_rate_mpps) % 1000),
+                             (long)rtp->measured_sample_hz,
+                             (unsigned long)jbuf_available(&rtp->jbuf),
+                             (unsigned long)rtp->jbuf.bufsize,
+                             rtp->drift_window_valid ? "[active]" : "[settling]");
+                    rtp->last_drift_log_us = now_us;
+                }
+
+                /* Roll forward base every 4h to avoid timestamp wrap */
+                int64_t since_base_us = now_us - rtp->local_time_base_us;
+                if (since_base_us > 14400000000LL) {
                     rtp->rtp_ts_base        = rtp_ts;
                     rtp->local_time_base_us = now_us;
+                    rtp->drift_start_us     = now_us;
+                    rtp->drift_window_valid = false;
+                    ESP_LOGI(TAG, "RTP clock base rolled forward (4h limit)");
+                }
+
+                /* Detect large timestamp backward jump (>5s) → stream restart */
+                int32_t ts_delta = (int32_t)(rtp_ts - rtp->rtp_ts_base);
+                if (ts_delta < -(int32_t)(rtp->sample_rate * 5)) {
+                    ESP_LOGW(TAG, "RTP timestamp jumped back >5s, re-syncing");
+                    rtp->rtp_ts_base        = rtp_ts;
+                    rtp->local_time_base_us = now_us;
+                    rtp->drift_start_us     = now_us;
+                    rtp->drift_window_valid = false;
+                    rtp->drift_rate_mpps    = 0;
                     rtp->last_clk_update_us = now_us;
                 }
             }
@@ -689,41 +758,44 @@ static void rtp_opus_drain_task(void *arg)
                              (unsigned long)jbuf_available(&rtp->jbuf),
                              (unsigned long)rtp->jbuf.bufsize);
 
-                    /* PLC: inject zero-length marker frames so the Opus decoder
-                     * generates concealment audio instead of silence gaps.
-                     * A 2-byte header 0x00 0x00 (frame_len=0) tells the decoder
-                     * to call opus_decode(dec, NULL, 0, ...) → PLC output.
-                     * Cap at 5 frames (~100ms) to avoid flooding the buffer. */
-                    uint16_t plc_count = (lost > 5) ? 5 : lost;
-                    uint8_t plc_hdr[2] = { 0x00, 0x00 };
-                    for (uint16_t p = 0; p < plc_count; p++) {
-                        if (jbuf_free_space(&rtp->jbuf) >= 2) {
-                            jbuf_write(&rtp->jbuf, plc_hdr, 2);
+                    /* PLC: only inject after sync point (no point buffering
+                     * concealment audio for pre-sync data that will be discarded). */
+                    if (rtp->sync_ready) {
+                        uint16_t plc_count = (lost > 5) ? 5 : lost;
+                        uint8_t plc_hdr[2] = { 0x00, 0x00 };
+                        for (uint16_t p = 0; p < plc_count; p++) {
+                            if (jbuf_free_space(&rtp->jbuf) >= 2) {
+                                jbuf_write(&rtp->jbuf, plc_hdr, 2);
+                            }
                         }
-                    }
-                    if (plc_count > 0) {
-                        ESP_LOGI(TAG, "PLC: injected %d concealment frames", plc_count);
+                        if (plc_count > 0) {
+                            ESP_LOGI(TAG, "PLC: injected %d concealment frames", plc_count);
+                        }
                     }
                 }
                 rtp->rtp_seq = tseq;
             }
 
             /* --- Write length-prefixed Opus frame into jitter buffer --- */
-            uint16_t opus_frame_len = ret - 12;
-            uint32_t total = 2 + opus_frame_len;
-            uint8_t hdr[2] = { (opus_frame_len >> 8) & 0xFF, opus_frame_len & 0xFF };
+            /* Only buffer after sync point — pre-sync packets are discarded
+             * to ensure all devices start from the same RTP timestamp. */
+            if (rtp->sync_ready) {
+                uint16_t opus_frame_len = ret - 12;
+                uint32_t total = 2 + opus_frame_len;
+                uint8_t hdr[2] = { (opus_frame_len >> 8) & 0xFF, opus_frame_len & 0xFF };
 
-            if (jbuf_free_space(&rtp->jbuf) >= total) {
-                jbuf_write(&rtp->jbuf, hdr, 2);
-                jbuf_write(&rtp->jbuf, opus_packet_buf + 12, opus_frame_len);
-            } else {
-                /* Rate-limit overflow warnings to once per second */
-                if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
-                    ESP_LOGW(TAG, "Jitter buffer overflow! avail:%lu free:%lu need:%lu",
-                             (unsigned long)jbuf_available(&rtp->jbuf),
-                             (unsigned long)jbuf_free_space(&rtp->jbuf),
-                             (unsigned long)total);
-                    rtp->last_overflow_log_us = now_us;
+                if (jbuf_free_space(&rtp->jbuf) >= total) {
+                    jbuf_write(&rtp->jbuf, hdr, 2);
+                    jbuf_write(&rtp->jbuf, opus_packet_buf + 12, opus_frame_len);
+                } else {
+                    /* Rate-limit overflow warnings to once per second */
+                    if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
+                        ESP_LOGW(TAG, "Jitter buffer overflow! avail:%lu free:%lu need:%lu",
+                                 (unsigned long)jbuf_available(&rtp->jbuf),
+                                 (unsigned long)jbuf_free_space(&rtp->jbuf),
+                                 (unsigned long)total);
+                        rtp->last_overflow_log_us = now_us;
+                    }
                 }
             }
 
@@ -880,6 +952,12 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     rtp->rtp_seq             = 0;
     rtp->need_seq_seed       = true;
     rtp->last_overflow_log_us = 0;
+    rtp->drift_start_us       = 0;
+    rtp->drift_window_valid   = false;
+    rtp->drift_window_raw     = 0;
+    rtp->drift_window_start_us = 0;
+    rtp->drift_rate_mpps      = 0;
+    rtp->last_drift_log_us    = 0;
     rtp->target_delay_ms      = (config->latency_ms > 0) ? (uint32_t)config->latency_ms : RTP_OPUS_STREAM_DEFAULT_LATENCY_MS;
     rtp->sync_rtp_ts_start    = 0;
     rtp->sync_ready           = false;
@@ -910,9 +988,18 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
 
     /*
      * Jitter buffer in PSRAM — absorbs pipeline backpressure stalls.
-     * 32KB ≈ 5+ seconds of Opus frames at typical bitrates.
+     * Computed from jbuf_ms: Opus at ~80 bytes/frame * 50 fps ≈ 4000 bytes/sec.
+     * read_thres = jbuf_ms worth of compressed data (controls latency).
+     * bufsize = 4x read_thres for headroom against frame size variance.
      */
-    jbuf_init(&rtp->jbuf, 16384);  /* 16KB in PSRAM — ~4s Opus capacity, Stage 1 reduction */
+    int jbuf_ms_val = (config->jbuf_ms > 0) ? config->jbuf_ms : RTP_OPUS_STREAM_DEFAULT_JBUF_MS;
+    int read_thres = jbuf_ms_val * 4;  /* ~4 bytes/ms of Opus compressed data */
+    if (read_thres < 500) read_thres = 500;
+    int jbuf_bytes = read_thres * 4;   /* 4x headroom */
+    if (jbuf_bytes < 4096) jbuf_bytes = 4096;
+    ESP_LOGI(TAG, "jbuf: %d ms, read_thres=%d, buf=%d bytes", jbuf_ms_val, read_thres, jbuf_bytes);
+    jbuf_init(&rtp->jbuf, jbuf_bytes);
+    rtp->jbuf.read_thres = read_thres;
 
     return el;
 
@@ -978,6 +1065,8 @@ esp_err_t rtp_opus_stream_switch_multicast_address(audio_element_handle_t self, 
     rtp->last_clk_update_us = 0;
     rtp->last_ssrc          = 0;
     rtp->rtp_seq            = 0;
+    rtp->drift_window_valid = false;
+    rtp->drift_rate_mpps    = 0;
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;

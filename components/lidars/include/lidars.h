@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
+#include "driver/ledc.h"
 #include "stdcommand.h"
 
 typedef struct {
@@ -49,12 +50,15 @@ typedef struct {
     // Dead band
     uint16_t deadBand;
 
-    // Motor
-    uint8_t motorEnabled;
+    // Scan enable
+    uint8_t scanEnabled;
     uint8_t defaultState;
 
     // Commands
     STDCOMMANDS cmds;
+
+    // LED indication
+    ledc_channel_config_t ledc_chan;
 
     // Report IDs
     int distanceReport;
@@ -84,7 +88,7 @@ typedef struct {
     .lastTick = 0,\
     .debounceGap = 0,\
     .deadBand = 0,\
-    .motorEnabled = 0,\
+    .scanEnabled = 0,\
     .defaultState = 0,\
     .distanceReport = -1,\
     .angleReport = -1,\

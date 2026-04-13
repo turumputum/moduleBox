@@ -43,8 +43,6 @@ static const char* TAG = "LIDARS";
 #define RPLIDAR_RESP_DESC_LEN   7
 #define RPLIDAR_SCAN_PKT_LEN    5
 
-#define MOTOR_PWM_FREQ          25000
-#define MOTOR_PWM_DUTY          153     // ~60% of 255
 #define RPLIDAR_MAX_RETRIES     5
 
 // Command IDs
@@ -123,7 +121,7 @@ static int angle_in_range(lidars_t *lidar, uint16_t angle) {
     Модуль лидара RPLIDAR S1 через UART
     Измеряет расстояние до ближайшего обьекта в заданном секторе углов
     Дальность до 40м, разрешение 360 градусов
-    pin[0]=TX, pin[1]=RX, pin[2]=MOTOR_PWM
+    pin[0]=TX, pin[1]=RX, pin[2]=LED
     slots: 0-5
 */
 static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
@@ -207,12 +205,12 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
     */
     lidar->debounceGap = pdMS_TO_TICKS(get_option_int_val(slot_num, "debounceGap", "ms", 0, 0, 60000));
 
-    /* Состояние мотора при включении устройства
-    0 - мотор выключен (по умолчанию), 1 - мотор включен
+    /* Состояние сканирования при включении устройства
+    0 - сканирование выключено (по умолчанию), 1 - сканирование включено
     Числовое значение 0-1, по умолчанию 0
     */
     lidar->defaultState = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
-    lidar->motorEnabled = lidar->defaultState;
+    lidar->scanEnabled = lidar->defaultState;
 
     // --- Topic setup ---
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
@@ -232,7 +230,7 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
 
     // --- Command registration ---
 
-    /* Включает/выключает мотор лидара
+    /* Включает/выключает сканирование лидара
     Значение 0 - выключить, 1 - включить
     */
     stdcommand_register(&lidar->cmds, LIDAR_CMD_ENABLE, "enable", PARAMT_int);
@@ -279,7 +277,6 @@ void rplidarS1_task(void* arg) {
 
     uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][0];
     uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][1];
-    uint8_t motor_pin = SLOTS_PIN_MAP[slot_num][2];
 
     // --- UART config (256000 baud for RPLIDAR S1) ---
     uart_config_t uart_config = {
@@ -302,55 +299,46 @@ void rplidarS1_task(void* arg) {
     // --- Command queue ---
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
-    // --- Motor PWM setup (25kHz on pin[2]) ---
-    ledc_timer_config_t motor_timer = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .timer_num = LEDC_TIMER_1,
-        .duty_resolution = LEDC_TIMER_8_BIT,
-        .freq_hz = MOTOR_PWM_FREQ,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&motor_timer));
-
-    int motor_channel = get_next_ledc_channel();
-    if (motor_channel < 0) {
-        char errorString[60];
-        sprintf(errorString, "slot num:%d ___ LEDC channels has ended", slot_num);
-        ESP_LOGE(TAG, "%s", errorString);
-        vTaskDelay(20);
-        vTaskDelete(NULL);
+    // --- LED PWM setup on pin[2] ---
+    uint8_t led_pin = SLOTS_PIN_MAP[slot_num][2];
+    lidar.ledc_chan.channel = get_next_ledc_channel();
+    if (lidar.ledc_chan.channel < 0) {
+        ESP_LOGW(TAG, "slot:%d No free LEDC channel for LED", slot_num);
+    } else {
+        if (lidar.ledc_chan.channel == 0) {
+            ledc_timer_config_t ledc_timer = {
+                .speed_mode = LEDC_MODE,
+                .timer_num = LEDC_TIMER,
+                .duty_resolution = LEDC_DUTY_RES,
+                .freq_hz = LEDC_FREQUENCY,
+                .clk_cfg = LEDC_AUTO_CLK
+            };
+            ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+            ESP_LOGD(TAG, "LEDC timer inited");
+        }
+        lidar.ledc_chan.speed_mode = LEDC_MODE;
+        lidar.ledc_chan.timer_sel = LEDC_TIMER;
+        lidar.ledc_chan.intr_type = LEDC_INTR_DISABLE;
+        lidar.ledc_chan.gpio_num = led_pin;
+        lidar.ledc_chan.duty = 0;
+        lidar.ledc_chan.hpoint = 0;
+        ESP_ERROR_CHECK(ledc_channel_config(&lidar.ledc_chan));
+        ESP_LOGD(TAG, "slot:%d LED PWM on pin:%d ch:%d", slot_num, led_pin, lidar.ledc_chan.channel);
     }
-
-    ledc_channel_config_t motor_chan = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = motor_channel,
-        .timer_sel = LEDC_TIMER_1,
-        .intr_type = LEDC_INTR_DISABLE,
-        .gpio_num = motor_pin,
-        .duty = lidar.motorEnabled ? MOTOR_PWM_DUTY : 0,
-        .hpoint = 0
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&motor_chan));
-    ESP_LOGD(TAG, "slot:%d Motor PWM on pin:%d ch:%d", slot_num, motor_pin, motor_channel);
 
     // --- Wait for work permit ---
     waitForWorkPermit(slot_num);
 
-    // --- Start motor and begin scan (only if defaultState=1) ---
-    if (lidar.motorEnabled) {
-        ESP_LOGD(TAG, "slot:%d Waiting for motor spin-up", slot_num);
+    // --- Start scan (only if defaultState=1) ---
+    if (lidar.scanEnabled) {
         vTaskDelay(pdMS_TO_TICKS(2000));
-
         if (rplidar_start_scan(uart_num, &lidar, slot_num) != 0) {
-            // Failed after all retries - disable motor, stay in loop waiting for enable cmd
-            lidar.motorEnabled = 0;
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, 0);
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel);
+            lidar.scanEnabled = 0;
         } else {
             ESP_LOGD(TAG, "slot:%d RPLIDAR scan started", slot_num);
         }
     } else {
-        ESP_LOGD(TAG, "slot:%d Motor off (defaultState=0), waiting for enable command", slot_num);
+        ESP_LOGD(TAG, "slot:%d Scan off (defaultState=0), waiting for enable command", slot_num);
     }
 
     // --- Main scan loop ---
@@ -364,36 +352,29 @@ void rplidarS1_task(void* arg) {
         int cmd = stdcommand_receive(&lidar.cmds, &params, 0);
         if (cmd == LIDAR_CMD_ENABLE) {
             uint8_t newEnable = params.p[0].i ? 1 : 0;
-            if (newEnable != lidar.motorEnabled) {
-                lidar.motorEnabled = newEnable;
+            if (newEnable != lidar.scanEnabled) {
+                lidar.scanEnabled = newEnable;
                 if (newEnable) {
-                    // Enable motor and restart scan
-                    ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, MOTOR_PWM_DUTY);
-                    ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel);
+                    // Start scan
                     vTaskDelay(pdMS_TO_TICKS(2000));
-
                     if (rplidar_start_scan(uart_num, &lidar, slot_num) != 0) {
-                        lidar.motorEnabled = 0;
-                        ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, 0);
-                        ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel);
+                        lidar.scanEnabled = 0;
                     }
                     bestDist = UINT16_MAX;
                     hasMeasurement = 0;
-                    ESP_LOGD(TAG, "slot:%d Motor enabled", slot_num);
+                    ESP_LOGD(TAG, "slot:%d Scan enabled", slot_num);
                 } else {
-                    // Stop scan and motor
+                    // Stop scan
                     rplidar_send_cmd(uart_num, RPLIDAR_CMD_STOP);
                     vTaskDelay(pdMS_TO_TICKS(10));
-                    ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, 0);
-                    ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel);
                     uart_flush(uart_num);
-                    ESP_LOGD(TAG, "slot:%d Motor disabled", slot_num);
+                    ESP_LOGD(TAG, "slot:%d Scan disabled", slot_num);
                 }
             }
         }
 
-        // --- If motor is off, idle ---
-        if (!lidar.motorEnabled) {
+        // --- If scan is off, idle ---
+        if (!lidar.scanEnabled) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -415,9 +396,7 @@ void rplidarS1_task(void* arg) {
             // Lost sync - flush and restart scan
             ESP_LOGW(TAG, "slot:%d Lost sync, restarting scan", slot_num);
             if (rplidar_start_scan(uart_num, &lidar, slot_num) != 0) {
-                lidar.motorEnabled = 0;
-                ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, 0);
-                ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel);
+                lidar.scanEnabled = 0;
             }
             bestDist = UINT16_MAX;
             hasMeasurement = 0;

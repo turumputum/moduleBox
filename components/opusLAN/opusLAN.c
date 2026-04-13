@@ -43,6 +43,21 @@ extern uint8_t led_segment;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "OPUS_LAN";
 
+// Helper: get device IP address string for reports
+static const char* _get_device_ip(void) {
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
+    if (!netif) netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif) {
+        static esp_netif_ip_info_t ip_info;
+        static char ip_str[16];
+        if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+            esp_ip4addr_ntoa(&ip_info.ip, ip_str, sizeof(ip_str));
+            return ip_str;
+        }
+    }
+    return "0.0.0.0";
+}
+
 typedef struct __tag_OPUSCONFIG{
 	uint8_t 				state;
 	int 				    defaultState;
@@ -53,11 +68,12 @@ typedef struct __tag_OPUSCONFIG{
     bool                    useMulticast;
     int                     sample_rate;
     int                     bits_per_sample;
-    int                     buf_size;
+    int                     jbuf_ms;         /* jitter buffer target in ms */
     int                     latency_ms;      /* target latency / sync delay in ms (40-500, default 240) */
     
     int                    stateReport;
     int                    volumeReport;
+    int                    addressReport;
 
     STDCOMMANDS             cmds;
 
@@ -201,7 +217,8 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     rtp_cfg.host = c->host;  /* NULL for unicast, multicast address for multicast */
     rtp_cfg.task_core = 1;        /* Core 1: drain task also on core 1, keeps core 0 for lwIP */
     rtp_cfg.task_prio = 23;       /* Higher than default 22 */
-    rtp_cfg.buf_size = c->buf_size;
+    rtp_cfg.buf_size = 1500;      /* audio element buffer: enough for max Opus frame */
+    rtp_cfg.jbuf_ms = c->jbuf_ms;
     rtp_cfg.sample_rate = c->sample_rate;
     rtp_cfg.bits_per_sample = c->bits_per_sample;
     rtp_cfg.latency_ms = c->latency_ms;
@@ -302,11 +319,11 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
     c->bits_per_sample = 16; /* Opus decoder always outputs 16-bit PCM, not configurable */
     ESP_LOGD(TAG, "[opusLAN_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
 
-    /* Размер буфера
-    - по умолчанию 2048
+    /* Размер буфера (jitter buffer) в миллисекундах
+    - по умолчанию 500мс
 	*/
-	c->buf_size = get_option_int_val(slot_num, "bufSize", "num", 5124, 1024, 8192);
-    ESP_LOGD(TAG, "[opusLAN_%d] bufSize:%d", slot_num, c->buf_size);
+	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 500, 50, 5000);
+    ESP_LOGD(TAG, "[opusLAN_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
 
     /* Target latency / sync delay in ms
     - default 240ms (synchronised across all devices with same latencyMs)
@@ -336,6 +353,9 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
     /* Рапортует при изменении громкости
 	*/
 	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "volume");
+
+    /* Рапортует текущий адрес потока */
+    c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "address");
 
     /* Команда включает/выключает плеер
     */
@@ -394,9 +414,12 @@ void opusLAN_task(void *arg){
 
     stdreport_i(c->stateReport, c->state);
     stdreport_i(c->volumeReport, c->volume);
+    { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
 
     int64_t last_blink_time = 0;
     int led_state = 0;
+    int64_t last_clk_adjust_us = esp_timer_get_time();
+    int32_t last_set_hz = c->sample_rate;
     while (1) {
         /* ----------------------------------------------------------------------- */
 
@@ -415,6 +438,20 @@ void opusLAN_task(void *arg){
             }
         }
         
+        /* Periodic I2S clock adjustment: match sender's actual sample rate */
+        {
+            int64_t now_adj = esp_timer_get_time();
+            if ((now_adj - last_clk_adjust_us) > 60000000LL && c->state == ENABLE && c->rtp_stream_reader) {
+                int32_t measured_hz = rtp_opus_stream_get_measured_hz(c->rtp_stream_reader);
+                if (measured_hz != last_set_hz && measured_hz > 0) {
+                    i2s_stream_set_clk(c->i2s_stream_writer, measured_hz, 16, 2);
+                    last_set_hz = measured_hz;
+                    ESP_LOGI(TAG, "I2S clk adjusted to %ld Hz", (long)measured_hz);
+                }
+                last_clk_adjust_us = now_adj;
+            }
+        }
+
         int cmd = stdcommand_receive(&c->cmds, &params, 150);
 		char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
 
@@ -459,6 +496,7 @@ void opusLAN_task(void *arg){
                         } else {
                             audio_pipeline_pause(c->pipeline);
                         }
+                        { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
                     } else {
                         /* Переключение на новый multicast адрес */
                         ESP_LOGI(TAG, "[opusLAN_%d] Switching to multicast: %s", slot_num, cmd_arg);
@@ -474,6 +512,7 @@ void opusLAN_task(void *arg){
                                 c->multicastAddress = new_addr;
                                 if (c->host) free(c->host);
                                 c->host = strdup(new_addr);
+                                { char _ab[32]; snprintf(_ab, sizeof(_ab), "%s:%d", new_addr, c->port); stdreport_s(c->addressReport, _ab); }
                             } else {
                                 ESP_LOGW(TAG, "[opusLAN_%d] Hot-switch failed, restarting pipeline", slot_num);
                                 free(new_addr);
@@ -487,6 +526,7 @@ void opusLAN_task(void *arg){
                                 } else {
                                     audio_pipeline_pause(c->pipeline);
                                 }
+                                { char _ab[32]; snprintf(_ab, sizeof(_ab), "%s:%d", c->multicastAddress, c->port); stdreport_s(c->addressReport, _ab); }
                             }
                         } else {
                             /* Был unicast или первый раз — полный перезапуск */
@@ -500,6 +540,7 @@ void opusLAN_task(void *arg){
                             } else {
                                 audio_pipeline_pause(c->pipeline);
                             }
+                            { char _ab[32]; snprintf(_ab, sizeof(_ab), "%s:%d", c->multicastAddress, c->port); stdreport_s(c->addressReport, _ab); }
                         }
                     }
                     ESP_LOGD(TAG, "[opusLAN_%d] setMulticastAddress done. multicast:%d host:%s Free heap:%d",

@@ -64,7 +64,7 @@ dependencies:
       type: service
     version: 1.10.1
   espressif/nghttp:
-    component_hash: 933b5b78c1e092dd04aba9c695c82fc29cb189a7d85a30bee4cfa8164affefc7
+    component_hash: e16db3335787c9104404d517236f2c98182038dd03227cacb78f614b5e7ba273
     dependencies:
     - name: idf
       require: private
@@ -72,9 +72,9 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.68.0
+    version: 1.68.1
   espressif/onewire_bus:
-    component_hash: 11729fd9a5de80225177a61e9cd77de91683b8ec300e83710d5327b666dbe884
+    component_hash: d709015ba466095259228521cf1bad9c0cdaaa42a92ea5d9c88ec6c28ae89e9b
     dependencies:
     - name: idf
       require: private
@@ -82,7 +82,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.0.4
+    version: 1.1.0
   espressif/zlib:
     component_hash: 64ea2fd6754c5a05951f1ddb312ac835cd782e68cb5bd9dfcd1c3a107c8fbfbc
     dependencies:
