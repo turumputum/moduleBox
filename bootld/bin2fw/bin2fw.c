@@ -1,7 +1,8 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "bootldsd/src/update.h"
+#include <stdlib.h>
+#include "../src/update.h"
 
 #define UPDC32(octet,crc) (crc_32_tab[((crc)\
      ^ ((uint8_t)octet)) & 0xff] ^ ((crc) >> 8))
@@ -75,6 +76,16 @@ int main(int argc, char *argv[])
     {
         if ((inf = fopen(argv[1], "rb")) != NULL)
         {
+            if (argc > 2)
+            {
+                hdr.platform = atoi(argv[2]);
+            }
+
+            if (argc > 3)
+            {
+                hdr.version = atoi(argv[3]);
+            }
+
             if ((outf = fopen(UPDATE_FILENAME, "w+b")) != NULL)
             {
                 fseek(outf, sizeof(UPDATEHEAD), SEEK_SET);

@@ -2,6 +2,8 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
+add_compile_definitions(CONFIG_BOOTLOADER_PROJECT_VER=1)
+
 # Check for -DBOARD=
 if(NOT (DEFINED BOARD AND EXISTS "${CMAKE_SOURCE_DIR}/boards/${BOARD}/board.h") )
   file(GLOB BOARD_LIST RELATIVE ${CMAKE_SOURCE_DIR}/boards "boards/*/board.h")
@@ -16,6 +18,7 @@ if(NOT (DEFINED BOARD AND EXISTS "${CMAKE_SOURCE_DIR}/boards/${BOARD}/board.h") 
 endif()
 
 include(${CMAKE_SOURCE_DIR}/boards/${BOARD}/board.cmake)
+
 
 # TOP is absolute path to root directory
 set(TOP "./")
@@ -40,4 +43,8 @@ string(STRIP ${GIT_SUBMODULE_VERSIONS} GIT_SUBMODULE_VERSIONS)
 add_compile_definitions(UF2_VERSION_BASE="${GIT_VERSION}")
 add_compile_definitions(UF2_VERSION="${GIT_VERSION} - ${GIT_SUBMODULE_VERSIONS}")
 
+
+
 project(bootldsd)
+
+
