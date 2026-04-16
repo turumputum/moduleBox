@@ -145,13 +145,18 @@ int update_check()
       {
           if ((fullSize - sizeof(UPDATEHEAD)) == head.size)
           {
-            printf("Checking update file ...\n");
-            if (checkFileCrc(fp, head.checksum))
+            if (UPDATE_PLATFORM_ESP32S3 == head.platform)
             {
-              result = 1;
+                printf("Checking update file ...\n");
+                if (checkFileCrc(fp, head.checksum))
+                {
+                  result = 1;
+                }
+                else
+                  printf("update_check: CRC failed\n");
             }
             else
-              printf("update_check: CRC failed\n");
+              printf("update_check: platform code mismatch\n");
           }
           else
             printf("update_check: size and header info mismatch\n");
