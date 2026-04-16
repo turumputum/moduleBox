@@ -32,6 +32,7 @@
 
 #include "audio_mem.h"
 #include "rtp_client_stream.h"
+#include "esp_heap_caps.h"
 
 #include "lwip/err.h"
 #include "lwip/sockets.h"
@@ -60,6 +61,18 @@ typedef struct {
     uint32_t min_thres;
     JBUF_STATE state;
 } jbuffer;
+
+/* --- Packet reorder buffer --- */
+#define REORDER_SLOTS      8
+#define REORDER_SLOT_SIZE  1500        /* max payload per slot (MTU-limited) */
+#define REORDER_MAX_WAIT_US 40000LL   /* 40 ms max wait for missing packet */
+
+typedef struct {
+    uint16_t seq;
+    uint16_t payload_len;
+    int64_t  arrival_us;
+    bool     occupied;
+} reorder_meta_t;
 
 typedef struct rtp_stream {
     //int                           hdr_init;
@@ -100,6 +113,20 @@ typedef struct rtp_stream {
     // === Period-aligned sync (inter-device synchronization) ===
     uint32_t                      sync_rtp_ts_start;    // Aligned RTP timestamp to begin buffering
     bool                          sync_ready;           // True once sync-aligned packet arrives
+
+    // === Stream identity tracking ===
+    uint32_t                      last_ssrc;
+    bool                          need_seq_seed;        // true = next packet seeds seq (no loss check)
+    int64_t                       last_overflow_log_us;
+
+    // === Drain task — reads socket independently of pipeline backpressure ===
+    TaskHandle_t                  drain_task_handle;
+    volatile bool                 drain_running;
+
+    // === Packet reorder buffer (drain task writes out-of-order packets here) ===
+    reorder_meta_t                reorder_meta[REORDER_SLOTS];
+    uint8_t                      *reorder_data;          /* REORDER_SLOTS * REORDER_SLOT_SIZE heap block */
+    uint16_t                      reorder_next_seq;      /* next seq expected for jbuf write */
 } rtp_stream_t;
 
 struct rtp_header {
@@ -437,6 +464,10 @@ static esp_err_t _dispatch_event(audio_element_handle_t el, rtp_stream_t *tcp, v
     return ESP_FAIL;
 }
 
+// Forward declarations
+static void rtp_drain_task(void *arg);
+static void reorder_reset(rtp_stream_t *rtp);
+
 static esp_err_t _rtp_open(audio_element_handle_t self)
 {
     AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
@@ -477,16 +508,31 @@ static esp_err_t _rtp_open(audio_element_handle_t self)
     // Reset drift tracking on each new connection
     rtp->drift_initialized = false;
     rtp->sync_ready = false;
+    rtp->sync_rtp_ts_start = 0;
     rtp->last_seq = 0;
+    rtp->need_seq_seed = true;
+    rtp->last_ssrc = 0;
+    rtp->last_overflow_log_us = 0;
+
+    /* Reset jitter buffer */
+    memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
+    rtp->jbuf.r_p = 0;
+    rtp->jbuf.w_p = 0;
+    rtp->jbuf.state = JBUF_IDLE;
+    /* Reset reorder buffer */
+    if (rtp->reorder_data) {
+        for (int i = 0; i < REORDER_SLOTS; i++)
+            rtp->reorder_meta[i].occupied = false;
+    }
+
+    /* Start drain task — reads socket into jitter buffer independently.
+     * Priority 24 = above audio element tasks — must never miss packets.
+     * Core 1 to keep core 0 free for lwIP/Ethernet stack. */
+    rtp->drain_running = true;
+    xTaskCreatePinnedToCore(rtp_drain_task, "rtp_pcm_drain", 4096, self, 24, &rtp->drain_task_handle, 1);
+    ESP_LOGI(TAG, "Drain task created (core 1, prio 24)");
+
     _dispatch_event(self, rtp, NULL, 0, RTP_STREAM_STATE_CONNECTED);
-
-
-    // struct timeval tv;
-    // tv.tv_sec = 5;  // Таймаут 5 секунд на любую операцию
-    // tv.tv_usec = 0;
-    // setsockopt(rtp->sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-    // setsockopt(rtp->sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
-
 
     return ESP_OK;
 
@@ -505,6 +551,12 @@ static esp_err_t _rtp_close(audio_element_handle_t self){
         ESP_LOGE(TAG, "Already closed");
         return ESP_FAIL;
     }
+
+    /* Stop drain task before closing socket */
+    rtp->drain_running = false;
+    vTaskDelay(pdMS_TO_TICKS(100));  /* drain task exits within ~50ms */
+    rtp->drain_task_handle = NULL;
+    ESP_LOGI(TAG, "Drain task stopped");
 
     ESP_LOGD(TAG, "Shutting down socket");
     shutdown(rtp->sock, 0);
@@ -526,6 +578,11 @@ static esp_err_t _rtp_destroy(audio_element_handle_t self){
 
     jbuf_free(&rtp->jbuf);
 
+    if (rtp->reorder_data) {
+        free(rtp->reorder_data);
+        rtp->reorder_data = NULL;
+    }
+
     // Note: The host string is managed by the caller (rtp_play.c),
     // so we don't free it here to avoid double-free issues
 
@@ -533,7 +590,8 @@ static esp_err_t _rtp_destroy(audio_element_handle_t self){
     return ESP_OK;
 }
 
-uint8_t packet_buf[1600]; //fixme todo
+static uint8_t *packet_buf = NULL;
+#define PACKET_BUF_SIZE 1600
 
 // Extract 32-bit RTP timestamp from packet bytes 4-7 (network byte order)
 static inline uint32_t rtp_get_timestamp(const uint8_t *pkt) {
@@ -541,49 +599,154 @@ static inline uint32_t rtp_get_timestamp(const uint8_t *pkt) {
            ((uint32_t)pkt[6] << 8)  | (uint32_t)pkt[7];
 }
 
-static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
+/* ---- Reorder-buffer helpers (used by drain task) ---- */
+
+static inline uint8_t *reorder_slot_ptr(rtp_stream_t *rtp, int slot) {
+    return rtp->reorder_data + slot * REORDER_SLOT_SIZE;
+}
+
+/* Flush all consecutive packets starting from reorder_next_seq into jbuf */
+static void reorder_flush_pcm(rtp_stream_t *rtp)
 {
+    while (1) {
+        int slot = rtp->reorder_next_seq % REORDER_SLOTS;
+        reorder_meta_t *m = &rtp->reorder_meta[slot];
+        if (!m->occupied || m->seq != rtp->reorder_next_seq)
+            break;
+        jbuf_write(reorder_slot_ptr(rtp, slot), m->payload_len, &rtp->jbuf);
+        m->occupied = false;
+        rtp->last_seq = rtp->reorder_next_seq;
+        rtp->reorder_next_seq++;
+    }
+}
+
+/* If oldest buffered packet waited > REORDER_MAX_WAIT_US, skip the gap */
+static void reorder_timeout_pcm(rtp_stream_t *rtp, int64_t now_us, uint32_t *total_lost)
+{
+    bool has_old = false;
+    for (int i = 0; i < REORDER_SLOTS; i++) {
+        if (rtp->reorder_meta[i].occupied &&
+            (now_us - rtp->reorder_meta[i].arrival_us) > REORDER_MAX_WAIT_US) {
+            has_old = true;
+            break;
+        }
+    }
+    if (!has_old) return;
+
+    /* Find the smallest seq among occupied slots */
+    uint16_t min_seq = rtp->reorder_next_seq;
+    bool found = false;
+    for (int i = 0; i < REORDER_SLOTS; i++) {
+        if (rtp->reorder_meta[i].occupied) {
+            if (!found || (int16_t)(rtp->reorder_meta[i].seq - min_seq) < 0) {
+                min_seq = rtp->reorder_meta[i].seq;
+                found = true;
+            }
+        }
+    }
+    if (found && min_seq != rtp->reorder_next_seq) {
+        uint16_t skipped = (uint16_t)(min_seq - rtp->reorder_next_seq);
+        *total_lost += skipped;
+        ESP_LOGW(TAG, "[reorder] Timeout: skipped %u missing (seq %u..%u)",
+                 skipped, rtp->reorder_next_seq, (uint16_t)(min_seq - 1));
+        rtp->reorder_next_seq = min_seq;
+    }
+    reorder_flush_pcm(rtp);
+}
+
+static void reorder_reset(rtp_stream_t *rtp)
+{
+    for (int i = 0; i < REORDER_SLOTS; i++)
+        rtp->reorder_meta[i].occupied = false;
+}
+
+/* ///////////////// Socket drain task /////////////////
+ *
+ * Continuously reads RTP packets from the socket and writes byte-swapped
+ * PCM data into the jitter buffer.  Runs independently of the audio
+ * pipeline, so pipeline backpressure (audio_element_output blocking on
+ * a full downstream ringbuffer) does NOT stall recvfrom().
+ */
+static void rtp_drain_task(void *arg)
+{
+    audio_element_handle_t self = (audio_element_handle_t)arg;
     rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
 
     struct sockaddr_in source_addr;
     socklen_t addr_len = sizeof(source_addr);
-    
-    int saved =0;
-    int ret = 0;
-    int wr = -4;
 
-    while (1)
-    {
-        if (audio_element_is_stopping(self)) {
-            ESP_LOGW(TAG, "_rtp_read: Received stop command, aborting.");
-            _rtp_close(self);
-            _rtp_destroy(self);
-            return ESP_FAIL;
-        }
+    /* Diagnostic tracking */
+    int64_t last_recv_us = esp_timer_get_time();
+    int64_t last_stats_us = last_recv_us;
+    int64_t max_gap_us = 0;
+    uint32_t total_packets = 0;
+    uint32_t total_lost = 0;
 
-        ret = recvfrom(rtp->sock, packet_buf, 1600, 0, (struct sockaddr *)&source_addr, &addr_len);
-        if (ret>0) 
-        {
-            rtp->last_packet_time = esp_timer_get_time();
-            if (ret%4!=0) 
-            {
-                ESP_LOGE(TAG, "Wrong packet size! %d", ret-12);
+    /* Use blocking socket with timeout instead of non-blocking + vTaskDelay.
+     * This way the task sleeps efficiently in lwIP and wakes immediately
+     * when a packet arrives - no polling delay, no CPU waste. */
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 50000;  /* 50ms timeout - wake up to check drain_running */
+    setsockopt(rtp->sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    /* Switch socket back to blocking mode (was set non-blocking in _rtp_open) */
+    int flags = fcntl(rtp->sock, F_GETFL, 0);
+    fcntl(rtp->sock, F_SETFL, flags & ~O_NONBLOCK);
+
+    ESP_LOGI(TAG, "Drain task started on core %d (blocking mode, 50ms timeout)", xPortGetCoreID());
+
+    while (rtp->drain_running) {
+        int ret = recvfrom(rtp->sock, packet_buf, PACKET_BUF_SIZE, 0,
+                           (struct sockaddr *)&source_addr, &addr_len);
+
+        if (ret > 0) {
+            if (ret < 12 || ret % 4 != 0) {
+                if (ret >= 12) ESP_LOGE(TAG, "Wrong packet size! %d", ret - 12);
                 continue;
             }
-            
-            uint16_t tseq = packet_buf[2] << 8 | packet_buf[3];
-            if ((uint16_t)tseq == (uint16_t)rtp->last_seq)  
-            {
-                ESP_LOGE(TAG, "Duplicated packet! %d", tseq);
-                continue;
-            }
 
-            // === Extract RTP timestamp and track clock drift ===
-            uint32_t rtp_ts = rtp_get_timestamp(packet_buf);
             int64_t now_us = esp_timer_get_time();
+            int64_t gap_us = now_us - last_recv_us;
+            last_recv_us = now_us;
+            if (gap_us > max_gap_us) max_gap_us = gap_us;
+            total_packets++;
 
+            rtp->last_packet_time = now_us;
+
+            /* --- RTP header parsing --- */
+            uint32_t rtp_ts = rtp_get_timestamp(packet_buf);
+
+            uint32_t ssrc = ((uint32_t)packet_buf[8]  << 24)
+                          | ((uint32_t)packet_buf[9]  << 16)
+                          | ((uint32_t)packet_buf[10] <<  8)
+                          |  (uint32_t)packet_buf[11];
+
+            /* Detect stream restart: SSRC change */
+            if (rtp->drift_initialized && ssrc != rtp->last_ssrc) {
+                ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
+                         (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
+                rtp->drift_initialized  = false;
+                rtp->sync_ready         = false;
+                rtp->sync_rtp_ts_start  = 0;
+                rtp->last_seq           = 0;
+                rtp->need_seq_seed      = true;
+                rtp->drift_window_valid = false;
+                rtp->drift_rate_mpps    = 0;
+                rtp->correction_debt    = 0;
+                /* Flush jitter buffer */
+                jbuffer *jb = &rtp->jbuf;
+                memset(jb->buf, 0, jb->bufsize);
+                jb->r_p   = 0;
+                jb->w_p   = 0;
+                jb->state = JBUF_IDLE;
+                reorder_reset(rtp);
+                ESP_LOGI(TAG, "jbuf flushed on SSRC change");
+            }
+            rtp->last_ssrc = ssrc;
+
+            /* --- Drift tracking initialization --- */
             if (!rtp->drift_initialized) {
-                // First packet — start drift tracking
                 rtp->first_rtp_ts = rtp_ts;
                 rtp->last_rtp_ts = rtp_ts;
                 rtp->total_samples_to_i2s = 0;
@@ -597,10 +760,11 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
                 rtp->last_correction_us = now_us;
                 rtp->correction_debt = 0;
                 rtp->drift_initialized = true;
+                rtp->need_seq_seed = true;
                 ESP_LOGI(TAG, "[drift] Initialized: rtp_ts=%lu sample_rate=%d",
                          (unsigned long)rtp_ts, rtp->sample_rate);
 
-                // Compute period-aligned sync point (identical on all devices)
+                /* Compute period-aligned sync point (identical on all devices) */
                 uint32_t align_period = (uint32_t)rtp->sample_rate;
                 rtp->sync_rtp_ts_start = ((rtp_ts / align_period) + 2) * align_period;
                 rtp->sync_ready = false;
@@ -609,18 +773,15 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
                          (unsigned long)rtp_ts,
                          (unsigned long)(rtp->sync_rtp_ts_start - rtp_ts));
             } else {
-                // Detect sender restart / RTP timestamp jump
-                // If rtp_ts jumps by more than 5 seconds worth of samples,
-                // treat this as a stream restart and re-initialize drift
+                /* Detect sender restart: timestamp jump > 5s */
                 int32_t ts_jump = (int32_t)(rtp_ts - rtp->last_rtp_ts);
-                int32_t max_jump = rtp->sample_rate * 5; // 5 seconds
+                int32_t max_jump = rtp->sample_rate * 5;
                 if (rtp->sync_ready && (ts_jump < -max_jump || ts_jump > max_jump)) {
-                    ESP_LOGW(TAG, "[drift] Stream restart detected! ts_jump=%ld (max=%ld), re-initializing",
-                             (long)ts_jump, (long)max_jump);
+                    ESP_LOGW(TAG, "[drift] Stream restart! ts_jump=%ld, re-init", (long)ts_jump);
                     rtp->first_rtp_ts = rtp_ts;
                     rtp->total_samples_to_i2s = 0;
                     rtp->drift_correction_total = 0;
-                    rtp->drift_start_us = esp_timer_get_time();
+                    rtp->drift_start_us = now_us;
                     rtp->drift_window_valid = false;
                     rtp->drift_rate_mpps = 0;
                     rtp->correction_debt = 0;
@@ -628,90 +789,217 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
                 rtp->last_rtp_ts = rtp_ts;
             }
 
-            for (uint16_t i=12; i< ret-1; i=i+2)
-            {
-                uint8_t t=packet_buf[i];
-                packet_buf[i]=packet_buf[i+1];
-                packet_buf[i+1]=t;
+            /* --- Parse sequence number --- */
+            uint16_t tseq = packet_buf[2] << 8 | packet_buf[3];
+
+            /* --- Byte-swap PCM (big-endian network -> little-endian ESP32) --- */
+            for (uint16_t i = 12; i < ret - 1; i += 2) {
+                uint8_t t = packet_buf[i];
+                packet_buf[i] = packet_buf[i + 1];
+                packet_buf[i + 1] = t;
             }
 
-            // Period-aligned sync: discard packets before sync point.
-            // Buffer starts empty; pre-sync packets are not written.
-            // State machine stays in FILLING until enough real audio
-            // accumulates after sync triggers.
+            /* --- Sync-start: discard pre-sync packets --- */
             if (!rtp->sync_ready) {
                 int32_t ts_diff = (int32_t)(rtp_ts - rtp->sync_rtp_ts_start);
                 if (ts_diff >= 0) {
                     rtp->sync_ready = true;
-                    // Re-anchor drift tracking from sync point
+                    /* Re-anchor drift tracking from sync point */
                     rtp->first_rtp_ts = rtp_ts;
                     rtp->total_samples_to_i2s = 0;
                     rtp->drift_correction_total = 0;
-                    rtp->drift_start_us = esp_timer_get_time();
+                    rtp->drift_start_us = now_us;
                     rtp->drift_window_valid = false;
                     rtp->correction_debt = 0;
+                    /* Seed reorder buffer from sync point */
+                    rtp->need_seq_seed = true;
                     ESP_LOGI(TAG, "[sync] Sync reached at rtp_ts=%lu (target=%lu)",
                              (unsigned long)rtp_ts, (unsigned long)rtp->sync_rtp_ts_start);
                 } else {
-                    // Pre-sync packet — discard, only update seq tracking
-                    if ((uint16_t)tseq != (uint16_t)(rtp->last_seq + 1))
-                        ESP_LOGE(TAG, "Missing packet! expected %d got %d", rtp->last_seq + 1, tseq);
-                    rtp->last_seq = tseq;
-                    continue;
+                    continue;  /* pre-sync - discard */
                 }
             }
 
-            // Write audio to jbuf (only reachable after sync point)
-            saved = jbuf_write(packet_buf+12, ret-12, &rtp->jbuf);
-            
-            if ((uint16_t)tseq != (uint16_t)(rtp->last_seq + 1))
-                ESP_LOGE(TAG, "Missing packet! expected %d got %d", rtp->last_seq + 1, tseq);
-            rtp->last_seq = tseq; 
-        }else if (ret < 0) 
-        {
-            // === ИСПРАВЛЕНИЕ 2: Обработка ошибок сокета/закрытия ===
-            // Проверяем код ошибки errno. EWOULDBLOCK/EAGAIN ожидаемы при использовании таймаутов/неблокирующего режима.
-            // Если сокет был закрыт извне (_rtp_close), recvfrom может вернуть другую ошибку (например, EBADF).
-            if (errno == EWOULDBLOCK || errno == EAGAIN || audio_element_is_stopping(self)) {
-                 vTaskDelay(pdMS_TO_TICKS(10)); // Небольшая задержка, чтобы не нагружать CPU в цикле ожидания
-                 continue; // Продолжаем ждать данные/сигнал останова
+            /* --- Reorder buffer: handle out-of-order packets --- */
+            if (rtp->need_seq_seed) {
+                rtp->reorder_next_seq = tseq;
+                rtp->need_seq_seed = false;
+                rtp->last_seq = tseq;
+                reorder_reset(rtp);
+            }
+
+            int16_t seq_diff = (int16_t)(tseq - rtp->reorder_next_seq);
+
+            if (seq_diff < 0) {
+                /* Late / duplicate — already flushed past this seq */
+                continue;
+            } else if (seq_diff == 0) {
+                /* Expected next packet: write directly to jbuf */
+                uint16_t payload_len = ret - 12;
+                int written = jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf);
+                if (written < payload_len) {
+                    if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
+                        ESP_LOGW(TAG, "Jitter buffer overflow! wrote=%d/%d avail=%d/%d",
+                                 written, payload_len,
+                                 jbuf_count(&rtp->jbuf), (int)rtp->jbuf.bufsize);
+                        rtp->last_overflow_log_us = now_us;
+                    }
+                }
+                rtp->last_seq = tseq;
+                rtp->reorder_next_seq++;
+                /* Flush any consecutive buffered packets */
+                reorder_flush_pcm(rtp);
+            } else if (seq_diff < REORDER_SLOTS) {
+                /* Future packet within reorder window: buffer it */
+                int slot = tseq % REORDER_SLOTS;
+                reorder_meta_t *m = &rtp->reorder_meta[slot];
+                if (m->occupied && m->seq == tseq) {
+                    continue;  /* duplicate already buffered */
+                }
+                uint16_t payload_len = ret - 12;
+                if (payload_len > REORDER_SLOT_SIZE) payload_len = REORDER_SLOT_SIZE;
+                memcpy(reorder_slot_ptr(rtp, slot), packet_buf + 12, payload_len);
+                m->seq = tseq;
+                m->payload_len = payload_len;
+                m->arrival_us = now_us;
+                m->occupied = true;
+                rtp->last_seq = tseq;
+                ESP_LOGD(TAG, "[reorder] Buffered seq=%u (expected=%u, diff=%d)",
+                         tseq, rtp->reorder_next_seq, seq_diff);
             } else {
-                 ESP_LOGE(TAG, "_rtp_read: recvfrom error: %d (%s)", errno, strerror(errno));
-                 return ESP_FAIL; // Критическая ошибка, можно вернуть FAIL или ABORT
+                /* Too far ahead: skip lost packets, flush buffered, handle new pkt */
+                uint16_t min_occ = tseq;
+                bool found_occ = false;
+                for (int i = 0; i < REORDER_SLOTS; i++) {
+                    if (rtp->reorder_meta[i].occupied) {
+                        if (!found_occ || (int16_t)(rtp->reorder_meta[i].seq - min_occ) < 0) {
+                            min_occ = rtp->reorder_meta[i].seq;
+                            found_occ = true;
+                        }
+                    }
+                }
+                if (found_occ) {
+                    uint16_t skipped = (uint16_t)(min_occ - rtp->reorder_next_seq);
+                    total_lost += skipped;
+                    ESP_LOGW(TAG, "[reorder] Skipping %u lost pkt(s) %u..%u, flushing %d buffered",
+                             skipped, rtp->reorder_next_seq, (uint16_t)(min_occ - 1),
+                             (int)(tseq - min_occ));
+                    rtp->reorder_next_seq = min_occ;
+                    reorder_flush_pcm(rtp);
+                }
+                /* Re-check diff after flush */
+                seq_diff = (int16_t)(tseq - rtp->reorder_next_seq);
+                if (seq_diff == 0) {
+                    uint16_t payload_len = ret - 12;
+                    jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf);
+                    rtp->last_seq = tseq;
+                    rtp->reorder_next_seq++;
+                    reorder_flush_pcm(rtp);
+                } else if (seq_diff > 0 && seq_diff < REORDER_SLOTS) {
+                    int slot = tseq % REORDER_SLOTS;
+                    reorder_meta_t *m = &rtp->reorder_meta[slot];
+                    uint16_t payload_len = ret - 12;
+                    if (payload_len > REORDER_SLOT_SIZE) payload_len = REORDER_SLOT_SIZE;
+                    memcpy(reorder_slot_ptr(rtp, slot), packet_buf + 12, payload_len);
+                    m->seq = tseq;
+                    m->payload_len = payload_len;
+                    m->arrival_us = now_us;
+                    m->occupied = true;
+                    rtp->last_seq = tseq;
+                } else {
+                    /* Still too far after flush — hard reset */
+                    total_lost += (uint16_t)(tseq - rtp->reorder_next_seq);
+                    ESP_LOGW(TAG, "[reorder] seq=%u still too far (expected=%u), hard reset",
+                             tseq, rtp->reorder_next_seq);
+                    reorder_reset(rtp);
+                    uint16_t payload_len = ret - 12;
+                    jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf);
+                    rtp->reorder_next_seq = tseq + 1;
+                    rtp->last_seq = tseq;
+                }
+            }
+
+            /* Timeout check: skip past gaps if oldest buffered pkt waited > 40ms */
+            reorder_timeout_pcm(rtp, now_us, &total_lost);
+
+            /* --- Periodic stats (every 60s) --- */
+            if ((now_us - last_stats_us) > 60000000LL) {
+                ESP_LOGI(TAG, "DRAIN: pkts=%lu lost=%lu max_gap=%lldms jbuf=%d/%d",
+                         (unsigned long)total_packets, (unsigned long)total_lost,
+                         max_gap_us / 1000,
+                         jbuf_count(&rtp->jbuf), (int)rtp->jbuf.bufsize);
+                max_gap_us = 0;
+                last_stats_us = now_us;
+            }
+
+        } else if (ret < 0) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                continue;  /* timeout - check drain_running and loop */
+            } else {
+                ESP_LOGE(TAG, "drain_task recvfrom error: %d (%s)", errno, strerror(errno));
+                break;
             }
         }
+    }
 
+    ESP_LOGI(TAG, "Drain task exiting");
+    vTaskDelete(NULL);
+}
 
-        switch (rtp->jbuf.state)
-        {
+static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
+{
+    rtp_stream_t *rtp = (rtp_stream_t *)audio_element_getdata(self);
+    jbuffer *jbuf = &rtp->jbuf;
+    int wr = -4;
+
+    /* Wait for data - drain task fills jbuf from socket independently */
+    while (1) {
+        if (audio_element_is_stopping(self)) {
+            return ESP_FAIL;
+        }
+
+        /* Wait for RTP sync point set by drain task */
+        if (!rtp->sync_ready) {
+            vTaskDelay(pdMS_TO_TICKS(5));
+            continue;
+        }
+
+        int avail = jbuf_count(jbuf);
+
+        switch (jbuf->state) {
             case JBUF_IDLE:
-                rtp->jbuf.state = JBUF_FILLING;
-                //break;
+                jbuf->state = JBUF_FILLING;
+                /* fall through */
             case JBUF_FILLING:
-                if (rtp->jbuf.read_thres > jbuf_count(&rtp->jbuf)) 
-                {
-                    if (ret == -1 && (errno == EWOULDBLOCK || errno == EAGAIN)) vTaskDelay(1);
+                if ((uint32_t)avail < jbuf->read_thres) {
+                    vTaskDelay(pdMS_TO_TICKS(2));
                     continue;
                 }
-                //jbuf is full
-                rtp->jbuf.state = JBUF_PLAYING;
+                jbuf->state = JBUF_PLAYING;
+                ESP_LOGI(TAG, "jbuf PLAYING: %d bytes available", avail);
                 break;
             case JBUF_PLAYING:
-                if (rtp->jbuf.min_thres > jbuf_count(&rtp->jbuf)) 
-                {
-                    rtp->jbuf.state = JBUF_FILLING;
+                /* Once playing, never go back to FILLING — the drain task
+                 * feeds data continuously.  If jbuf is momentarily low,
+                 * just wait a tick for more data rather than re-buffering
+                 * to read_thres (which causes rapid PLAYING↔FILLING cycling).
+                 * Threshold 8 bytes = 2 stereo frames — ensures readlen > 0
+                 * and avoids busy-loop / WDT trigger. */
+                if (avail < 8) {
+                    vTaskDelay(pdMS_TO_TICKS(2));
                     continue;
                 }
                 break;
         }
-        
-        break;
+
+        break; /* have data */
     }
+
     int available = jbuf_count(&rtp->jbuf);
     unsigned int r,w;
     r=rtp->jbuf.r_p;
     w=rtp->jbuf.w_p;
-    int readlen = available >4? (available > len ? len : (available/4-1)*4) : 0; //workaround shitty circbuf
+    int readlen = available >4? (available > len ? len : (available/4-1)*4) : 0;
 
     wr = jbuf_read((uint8_t *)buffer, readlen, &rtp->jbuf);
     
@@ -820,8 +1108,14 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
             // Apply corrections when debt reaches 1 full sample (1000 milli-samples)
             bool cooldown_ok = (now_us - rtp->last_correction_us) > DRIFT_CORRECTION_COOLDOWN_US;
 
+            /* Minimum jbuf level guard: don't DROP frames if jbuf is below 1/5
+             * (DROP speeds up consumption → jbuf drains faster → worse underrun).
+             * INSERT is always allowed (slows consumption → helps recovery). */
+            uint32_t jbuf_fill = jbuf_count(&rtp->jbuf);
+            uint32_t jbuf_min_for_drop = rtp->jbuf.bufsize / 5;
+
             if (cooldown_ok && wr >= bytes_per_frame * 4) {
-                if (rtp->correction_debt >= 1000) {
+                if (rtp->correction_debt >= 1000 && jbuf_fill > jbuf_min_for_drop) {
                     // Positive rate: sender faster than local → local clock SLOW → DROP one frame
                     int drop_pos = (wr / 2 / bytes_per_frame) * bytes_per_frame;
                     if (drop_pos + bytes_per_frame <= wr) {
@@ -910,6 +1204,12 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
     cfg.stack_in_ext = config->ext_stack;
     cfg.tag = "rtp_client";
     cfg.buffer_len = (config->buf_size > 0) ? config->buf_size : RTP_STREAM_BUF_SIZE;
+    /* Reduce downstream ringbuffer from default 8KB to 2KB.
+     * With 8KB the pipeline instantly drains jbuf at startup, leaving it
+     * near-empty despite pre-buffering.  With 2KB only ~10ms of audio
+     * migrates downstream, so jbuf retains most of its buffered data
+     * as a network-jitter cushion. */
+    cfg.out_rb_size = 2048;
 
     rtp_stream_t *rtp = audio_calloc(1, sizeof(rtp_stream_t));
     AUDIO_MEM_CHECK(TAG, rtp, return NULL);
@@ -944,20 +1244,42 @@ audio_element_handle_t rtp_stream_init(rtp_stream_cfg_t *config)
     AUDIO_MEM_CHECK(TAG, el, goto _rtp_init_exit);
     audio_element_setdata(el, rtp);
 
+    /* Allocate packet receive buffer — internal RAM for speed (used by drain task) */
+    if (packet_buf == NULL) {
+        packet_buf = heap_caps_malloc(PACKET_BUF_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (packet_buf == NULL) {
+            packet_buf = malloc(PACKET_BUF_SIZE);  /* fallback */
+        }
+        assert(packet_buf != NULL);
+    }
+
+    /* Allocate reorder buffer — REORDER_SLOTS × REORDER_SLOT_SIZE bytes */
+    rtp->reorder_data = heap_caps_malloc(REORDER_SLOTS * REORDER_SLOT_SIZE,
+                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (rtp->reorder_data == NULL) {
+        rtp->reorder_data = malloc(REORDER_SLOTS * REORDER_SLOT_SIZE);
+    }
+    assert(rtp->reorder_data != NULL);
+    reorder_reset(rtp);
+
     // Compute jitter buffer from milliseconds.
     // audio_bytes = exact amount of audio for jbuf_ms (controls latency via thresholds).
-    // Buffer allocated 2x larger for headroom against packet bursts / timing jitter.
+    // Buffer allocated 3x larger for headroom: at startup, the downstream
+    // inter-element ringbuffer (8 KB) instantly drains jbuf.  With 3x we
+    // ensure jbuf retains ~1/3 of its data as a cushion after that burst.
     int jbuf_ms = (config->jbuf_ms > 0) ? config->jbuf_ms : RTP_STREAM_DEFAULT_JBUF_MS;
     int channels = 2; // stereo
     int bytes_per_frame = (rtp->bits_per_sample / 8) * channels;
     int audio_bytes = (rtp->sample_rate * bytes_per_frame * jbuf_ms) / 1000;
     audio_bytes = (audio_bytes + 3) & ~3; // align to 4
-    int jbuf_bytes = audio_bytes * 2;     // 2x headroom
-    if (jbuf_bytes < 512) jbuf_bytes = 512;
+    int jbuf_bytes = audio_bytes * 3;     // 3x headroom (was 2x)
+    if (jbuf_bytes < 1024) jbuf_bytes = 1024;
     ESP_LOGI(TAG, "jbuf: %d ms, audio=%d bytes, buf=%d bytes", jbuf_ms, audio_bytes, jbuf_bytes);
     jbuf_init(&rtp->jbuf, jbuf_bytes);
-    // Override thresholds: read_thres = requested latency, min_thres = ~5ms
-    rtp->jbuf.read_thres = audio_bytes;
+    // Start playback when jbuf is half-full (gives ~jbuf_ms * 1.5 worth of data).
+    // After downstream ringbuffer (8KB) is filled during initial burst, jbuf
+    // retains audio_bytes/2 (~jbuf_ms/2) as a network jitter cushion.
+    rtp->jbuf.read_thres = jbuf_bytes / 2;
     rtp->jbuf.min_thres = bytes_per_frame * (rtp->sample_rate / 200); // ~5ms
 
     return el;
@@ -1030,6 +1352,11 @@ esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const
     // Reset drift tracking and sync for new stream
     rtp->drift_initialized = false;
     rtp->sync_ready = false;
+    rtp->last_ssrc = 0;
+    rtp->need_seq_seed = true;
+    rtp->drift_window_valid = false;
+    rtp->drift_rate_mpps = 0;
+    rtp->correction_debt = 0;
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;

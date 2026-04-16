@@ -84,7 +84,7 @@ typedef struct {
 
 #define RTP_STREAM_DEFAULT_SAMPLE_RATE       (48000)
 #define RTP_STREAM_DEFAULT_BITS_PER_SAMPLE   (16)
-#define RTP_STREAM_DEFAULT_JBUF_MS           (20)
+#define RTP_STREAM_DEFAULT_JBUF_MS           (40)
 
 #define RTP_STREAM_CFG_DEFAULT() {              \
     .type            = AUDIO_STREAM_READER,     \

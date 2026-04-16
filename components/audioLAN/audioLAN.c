@@ -314,7 +314,7 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     /* Размер jitter-буфера в миллисекундах
     - по умолчанию 20 мс
 	*/
-	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 20, 20, 200);
+	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 40, 20, 200);
     ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {

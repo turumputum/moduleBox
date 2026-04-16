@@ -176,7 +176,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     i2s_cfg.use_alc = false;
     i2s_cfg.task_core = 0;
     i2s_cfg.stack_in_ext = true;     /* Task stack in PSRAM to save internal RAM */
-    i2s_cfg.out_rb_size = 8 * 1024;  /* 8KB: ~42ms of 48kHz stereo PCM, Stage 1 latency reduction */
+    i2s_cfg.out_rb_size = 4096;      /* ~21ms of 48kHz stereo PCM — smaller = less desync between devices */
     i2s_cfg.buffer_len = 3600;       /* Default DMA buffer size */
     c->i2s_stream_writer = i2s_stream_init(&i2s_cfg);
     ESP_LOGI(TAG, "Free heap after i2s init: %u (internal: %u)",
@@ -191,7 +191,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
     opus_cfg.self_delimited = false;
     opus_cfg.enable_frame_length_prefix = true;
     opus_cfg.task_core = 1;           /* Core 1: keep core 0 free for lwIP/Ethernet — Opus decoding is CPU-heavy */
-    opus_cfg.out_rb_size = 8 * 1024;  /* 8KB: ~2 decoded frames, Stage 1 latency reduction */
+    opus_cfg.out_rb_size = 4096;      /* ~1 decoded frame (3840B) — smaller = less desync between devices */
     opus_cfg.task_stack = 30 * 1024;  /* Default, stack in PSRAM */
     opus_cfg.stack_in_ext = true;     /* Put decoder task stack in PSRAM */
     c->opus_decoder = raw_opus_decoder_init(&opus_cfg);
@@ -438,15 +438,22 @@ void opusLAN_task(void *arg){
             }
         }
         
-        /* Periodic I2S clock adjustment: match sender's actual sample rate */
+        /* Periodic I2S clock adjustment: match sender's actual sample rate.
+         * Step by ±1 Hz max per cycle to avoid audible click from I2S reconfig.
+         * Only apply when measured_hz differs from current. */
         {
             int64_t now_adj = esp_timer_get_time();
             if ((now_adj - last_clk_adjust_us) > 60000000LL && c->state == ENABLE && c->rtp_stream_reader) {
                 int32_t measured_hz = rtp_opus_stream_get_measured_hz(c->rtp_stream_reader);
-                if (measured_hz != last_set_hz && measured_hz > 0) {
-                    i2s_stream_set_clk(c->i2s_stream_writer, measured_hz, 16, 2);
-                    last_set_hz = measured_hz;
-                    ESP_LOGI(TAG, "I2S clk adjusted to %ld Hz", (long)measured_hz);
+                if (measured_hz > 0 && measured_hz != last_set_hz) {
+                    /* Clamp step to ±1 Hz for smooth transition */
+                    int32_t step = measured_hz - last_set_hz;
+                    if (step > 1) step = 1;
+                    else if (step < -1) step = -1;
+                    int32_t new_hz = last_set_hz + step;
+                    i2s_stream_set_clk(c->i2s_stream_writer, new_hz, 16, 2);
+                    last_set_hz = new_hz;
+                    ESP_LOGI(TAG, "I2S clk adjusted to %ld Hz (target %ld)", (long)new_hz, (long)measured_hz);
                 }
                 last_clk_adjust_us = now_adj;
             }

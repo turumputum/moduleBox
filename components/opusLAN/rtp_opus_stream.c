@@ -45,6 +45,18 @@ typedef struct {
     JBUF_STATE state;
 } jbuffer;
 
+/* --- Packet reorder buffer --- */
+#define REORDER_SLOTS      8
+#define REORDER_SLOT_SIZE  1500        /* max payload per slot (MTU-limited) */
+#define REORDER_MAX_WAIT_US 40000LL   /* 40 ms max wait for missing packet */
+
+typedef struct {
+    uint16_t seq;
+    uint16_t payload_len;
+    int64_t  arrival_us;
+    bool     occupied;
+} reorder_meta_t;
+
 typedef struct rtp_opus_stream {
     audio_stream_type_t           type;
     int                           sock;
@@ -84,6 +96,10 @@ typedef struct rtp_opus_stream {
     /* Drain task — reads socket independently of pipeline backpressure */
     TaskHandle_t                  drain_task_handle;
     volatile bool                 drain_running;
+    /* Packet reorder buffer (drain task writes out-of-order packets here) */
+    reorder_meta_t                reorder_meta[REORDER_SLOTS];
+    uint8_t                      *reorder_data;          /* REORDER_SLOTS * REORDER_SLOT_SIZE heap block */
+    uint16_t                      reorder_next_seq;      /* next seq expected for jbuf write */
 } rtp_opus_stream_t;
 
 struct rtp_header {
@@ -375,6 +391,7 @@ static int jbuf_peek(jbuffer *jbuf, uint8_t *data, uint32_t len)
 // ///////////////// Forward declarations /////////////////
 
 static void rtp_opus_drain_task(void *arg);
+static void reorder_reset_opus(rtp_opus_stream_t *rtp);
 
 // ///////////////// Audio element callbacks /////////////////
 
@@ -463,6 +480,10 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
     rtp->jbuf.state = JBUF_IDLE;
     rtp->sync_ready = false;          /* wait for RTP sync point before playback */
     rtp->sync_rtp_ts_start = 0;
+    /* Reset reorder buffer */
+    if (rtp->reorder_data) {
+        reorder_reset_opus(rtp);
+    }
 
     /* Start drain task — reads socket into jitter buffer independently.
      * Priority 24 = above audio element tasks — must never miss packets.
@@ -516,12 +537,137 @@ static esp_err_t _rtp_opus_destroy(audio_element_handle_t self)
     AUDIO_NULL_CHECK(TAG, rtp, return ESP_FAIL);
 
     jbuf_free(&rtp->jbuf);
+
+    if (rtp->reorder_data) {
+        free(rtp->reorder_data);
+        rtp->reorder_data = NULL;
+    }
+
     audio_free(rtp);
     return ESP_OK;
 }
 
 static uint8_t *opus_packet_buf = NULL;
 #define OPUS_PACKET_BUF_SIZE 1500  /* Must fit max Opus frame + 12-byte RTP header within MTU */
+
+/* ---- Reorder-buffer helpers (used by drain task) ---- */
+
+static inline uint8_t *reorder_slot_ptr_opus(rtp_opus_stream_t *rtp, int slot) {
+    return rtp->reorder_data + slot * REORDER_SLOT_SIZE;
+}
+
+static void reorder_reset_opus(rtp_opus_stream_t *rtp)
+{
+    for (int i = 0; i < REORDER_SLOTS; i++)
+        rtp->reorder_meta[i].occupied = false;
+}
+
+/* Write a single Opus frame (length-prefixed) into jbuf.
+ * On overflow: discard oldest frames to make room for the new one.
+ * This keeps fresh data and drops stale data (better for latency). */
+static void reorder_write_opus_frame(rtp_opus_stream_t *rtp, const uint8_t *payload, uint16_t payload_len)
+{
+    uint32_t total = 2 + payload_len;
+    uint8_t hdr[2] = { (payload_len >> 8) & 0xFF, payload_len & 0xFF };
+
+    /* If not enough space, discard oldest frames until there IS space */
+    int discard_count = 0;
+    while (jbuf_free_space(&rtp->jbuf) < total && jbuf_available(&rtp->jbuf) >= 2) {
+        /* Peek length header of oldest frame */
+        uint8_t old_hdr[2];
+        jbuf_peek(&rtp->jbuf, old_hdr, 2);
+        uint16_t old_len = (old_hdr[0] << 8) | old_hdr[1];
+        uint32_t old_total = 2 + old_len;
+        if (jbuf_available(&rtp->jbuf) >= old_total) {
+            /* Advance read pointer past the old frame */
+            rtp->jbuf.r_p = (rtp->jbuf.r_p + old_total) % rtp->jbuf.bufsize;
+            discard_count++;
+        } else {
+            /* Corrupted/partial frame — reset jbuf */
+            rtp->jbuf.r_p = rtp->jbuf.w_p;
+            break;
+        }
+    }
+    if (discard_count > 0) {
+        int64_t now_us = esp_timer_get_time();
+        if ((now_us - rtp->last_overflow_log_us) > 2000000LL) {
+            ESP_LOGW(TAG, "jbuf overflow: discarded %d old frame(s) to fit new %lu-byte frame",
+                     discard_count, (unsigned long)total);
+            rtp->last_overflow_log_us = now_us;
+        }
+    }
+
+    if (jbuf_free_space(&rtp->jbuf) >= total) {
+        jbuf_write(&rtp->jbuf, hdr, 2);
+        jbuf_write(&rtp->jbuf, payload, payload_len);
+    }
+}
+
+/* Flush all consecutive packets starting from reorder_next_seq into jbuf */
+static void reorder_flush_opus(rtp_opus_stream_t *rtp)
+{
+    while (1) {
+        int slot = rtp->reorder_next_seq % REORDER_SLOTS;
+        reorder_meta_t *m = &rtp->reorder_meta[slot];
+        if (!m->occupied || m->seq != rtp->reorder_next_seq)
+            break;
+        reorder_write_opus_frame(rtp, reorder_slot_ptr_opus(rtp, slot), m->payload_len);
+        m->occupied = false;
+        rtp->rtp_seq = rtp->reorder_next_seq;
+        rtp->reorder_next_seq++;
+    }
+}
+
+/* Inject PLC concealment frames for skipped packets, then advance next_seq */
+static void reorder_skip_with_plc(rtp_opus_stream_t *rtp, uint16_t new_next_seq, uint32_t *total_lost)
+{
+    uint16_t skipped = (uint16_t)(new_next_seq - rtp->reorder_next_seq);
+    *total_lost += skipped;
+    if (rtp->sync_ready && skipped > 0) {
+        uint16_t plc_count = (skipped > 5) ? 5 : skipped;
+        uint8_t plc_hdr[2] = { 0x00, 0x00 };
+        for (uint16_t p = 0; p < plc_count; p++) {
+            if (jbuf_free_space(&rtp->jbuf) >= 2)
+                jbuf_write(&rtp->jbuf, plc_hdr, 2);
+        }
+        if (plc_count > 0)
+            ESP_LOGI(TAG, "PLC: injected %d concealment frames (reorder skip %u)", plc_count, skipped);
+    }
+    rtp->reorder_next_seq = new_next_seq;
+    reorder_flush_opus(rtp);
+}
+
+/* If oldest buffered packet waited > REORDER_MAX_WAIT_US, skip the gap with PLC */
+static void reorder_timeout_opus(rtp_opus_stream_t *rtp, int64_t now_us, uint32_t *total_lost)
+{
+    bool has_old = false;
+    for (int i = 0; i < REORDER_SLOTS; i++) {
+        if (rtp->reorder_meta[i].occupied &&
+            (now_us - rtp->reorder_meta[i].arrival_us) > REORDER_MAX_WAIT_US) {
+            has_old = true;
+            break;
+        }
+    }
+    if (!has_old) return;
+
+    /* Find the smallest seq among occupied slots */
+    uint16_t min_seq = rtp->reorder_next_seq;
+    bool found = false;
+    for (int i = 0; i < REORDER_SLOTS; i++) {
+        if (rtp->reorder_meta[i].occupied) {
+            if (!found || (int16_t)(rtp->reorder_meta[i].seq - min_seq) < 0) {
+                min_seq = rtp->reorder_meta[i].seq;
+                found = true;
+            }
+        }
+    }
+    if (found && min_seq != rtp->reorder_next_seq) {
+        ESP_LOGW(TAG, "[reorder] Timeout: skipping %u missing (seq %u..%u)",
+                 (uint16_t)(min_seq - rtp->reorder_next_seq),
+                 rtp->reorder_next_seq, (uint16_t)(min_seq - 1));
+        reorder_skip_with_plc(rtp, min_seq, total_lost);
+    }
+}
 
 /* ///////////////// Socket drain task /////////////////
  *
@@ -619,6 +765,7 @@ static void rtp_opus_drain_task(void *arg)
                 jb->r_p   = 0;
                 jb->w_p   = 0;
                 jb->state = JBUF_IDLE;
+                reorder_reset_opus(rtp);
                 ESP_LOGI(TAG, "jbuf flushed on SSRC change");
             }
             rtp->last_ssrc = ssrc;
@@ -687,8 +834,14 @@ static void rtp_opus_drain_task(void *arg)
                             rtp->drift_window_valid = false;
                             rtp->drift_start_us = now_us - DRIFT_SETTLE_US;
                         } else {
-                            /* Update measured Hz from drift rate */
+                            /* Update measured Hz from drift rate.
+                             * No jbuf-level guard here: for compressed Opus, jbuf is
+                             * always near-empty (pipeline consumes each ~80-byte frame
+                             * almost instantly).  The effective jitter buffer is the
+                             * downstream PCM ringbuf + I2S DMA (~40-50ms).  Drift
+                             * correction via I2S clock is safe regardless of jbuf level. */
                             rtp->measured_sample_hz = rtp->sample_rate + rtp->drift_rate_mpps / 1000;
+
                             /* Slide window */
                             rtp->drift_window_raw = raw_drift;
                             rtp->drift_window_start_us = now_us;
@@ -739,65 +892,110 @@ static void rtp_opus_drain_task(void *arg)
                 }
             }
 
-            /* --- Sequence number tracking --- */
+            /* --- Parse sequence number --- */
             uint16_t tseq = opus_packet_buf[2] << 8 | opus_packet_buf[3];
+
+            /* --- Only buffer after sync point — pre-sync packets discarded --- */
+            if (!rtp->sync_ready) {
+                loop_top_us = esp_timer_get_time();
+                continue;
+            }
+
+            /* --- Reorder buffer: handle out-of-order packets --- */
             if (rtp->need_seq_seed) {
-                /* First packet after open or SSRC change — seed seq, no loss check */
-                rtp->rtp_seq       = tseq;
+                rtp->reorder_next_seq = tseq;
                 rtp->need_seq_seed = false;
-            } else {
-                if ((uint16_t)tseq == rtp->rtp_seq) {
-                    continue;  /* duplicate */
-                }
-                if ((uint16_t)tseq != (uint16_t)(rtp->rtp_seq + 1)) {
-                    uint16_t lost = (uint16_t)(tseq - rtp->rtp_seq - 1);
-                    total_lost += lost;
-                    ESP_LOGW(TAG, "Missing %d packets! expected %d got %d (recv_gap=%lldms jbuf=%lu/%lu)",
-                             lost, rtp->rtp_seq + 1, tseq,
-                             gap_us / 1000,
-                             (unsigned long)jbuf_available(&rtp->jbuf),
-                             (unsigned long)rtp->jbuf.bufsize);
-
-                    /* PLC: only inject after sync point (no point buffering
-                     * concealment audio for pre-sync data that will be discarded). */
-                    if (rtp->sync_ready) {
-                        uint16_t plc_count = (lost > 5) ? 5 : lost;
-                        uint8_t plc_hdr[2] = { 0x00, 0x00 };
-                        for (uint16_t p = 0; p < plc_count; p++) {
-                            if (jbuf_free_space(&rtp->jbuf) >= 2) {
-                                jbuf_write(&rtp->jbuf, plc_hdr, 2);
-                            }
-                        }
-                        if (plc_count > 0) {
-                            ESP_LOGI(TAG, "PLC: injected %d concealment frames", plc_count);
-                        }
-                    }
-                }
                 rtp->rtp_seq = tseq;
+                reorder_reset_opus(rtp);
             }
 
-            /* --- Write length-prefixed Opus frame into jitter buffer --- */
-            /* Only buffer after sync point — pre-sync packets are discarded
-             * to ensure all devices start from the same RTP timestamp. */
-            if (rtp->sync_ready) {
-                uint16_t opus_frame_len = ret - 12;
-                uint32_t total = 2 + opus_frame_len;
-                uint8_t hdr[2] = { (opus_frame_len >> 8) & 0xFF, opus_frame_len & 0xFF };
+            int16_t seq_diff = (int16_t)(tseq - rtp->reorder_next_seq);
 
-                if (jbuf_free_space(&rtp->jbuf) >= total) {
-                    jbuf_write(&rtp->jbuf, hdr, 2);
-                    jbuf_write(&rtp->jbuf, opus_packet_buf + 12, opus_frame_len);
-                } else {
-                    /* Rate-limit overflow warnings to once per second */
-                    if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
-                        ESP_LOGW(TAG, "Jitter buffer overflow! avail:%lu free:%lu need:%lu",
-                                 (unsigned long)jbuf_available(&rtp->jbuf),
-                                 (unsigned long)jbuf_free_space(&rtp->jbuf),
-                                 (unsigned long)total);
-                        rtp->last_overflow_log_us = now_us;
+            if (seq_diff < 0) {
+                /* Late / duplicate — already flushed past this seq */
+                loop_top_us = esp_timer_get_time();
+                continue;
+            } else if (seq_diff == 0) {
+                /* Expected next packet: write directly to jbuf */
+                uint16_t opus_frame_len = ret - 12;
+                reorder_write_opus_frame(rtp, opus_packet_buf + 12, opus_frame_len);
+                rtp->rtp_seq = tseq;
+                rtp->reorder_next_seq++;
+                /* Flush any consecutive buffered packets */
+                reorder_flush_opus(rtp);
+            } else if (seq_diff < REORDER_SLOTS) {
+                /* Future packet within reorder window: buffer it */
+                int slot = tseq % REORDER_SLOTS;
+                reorder_meta_t *m = &rtp->reorder_meta[slot];
+                if (m->occupied && m->seq == tseq) {
+                    loop_top_us = esp_timer_get_time();
+                    continue;  /* duplicate already buffered */
+                }
+                uint16_t payload_len = ret - 12;
+                if (payload_len > REORDER_SLOT_SIZE) payload_len = REORDER_SLOT_SIZE;
+                memcpy(reorder_slot_ptr_opus(rtp, slot), opus_packet_buf + 12, payload_len);
+                m->seq = tseq;
+                m->payload_len = payload_len;
+                m->arrival_us = now_us;
+                m->occupied = true;
+                rtp->rtp_seq = tseq;
+                ESP_LOGD(TAG, "[reorder] Buffered seq=%u (expected=%u, diff=%d)",
+                         tseq, rtp->reorder_next_seq, seq_diff);
+            } else {
+                /* Too far ahead: skip lost packets with PLC, flush buffered, handle new pkt */
+                uint16_t min_occ = tseq;
+                bool found_occ = false;
+                for (int i = 0; i < REORDER_SLOTS; i++) {
+                    if (rtp->reorder_meta[i].occupied) {
+                        if (!found_occ || (int16_t)(rtp->reorder_meta[i].seq - min_occ) < 0) {
+                            min_occ = rtp->reorder_meta[i].seq;
+                            found_occ = true;
+                        }
                     }
                 }
+                if (found_occ) {
+                    /* PLC only for truly missing packets (next_seq..min_occ-1) */
+                    ESP_LOGW(TAG, "[reorder] Skipping %u lost pkt(s) %u..%u, flushing %d buffered",
+                             (uint16_t)(min_occ - rtp->reorder_next_seq),
+                             rtp->reorder_next_seq, (uint16_t)(min_occ - 1),
+                             (int)(tseq - min_occ));
+                    reorder_skip_with_plc(rtp, min_occ, &total_lost);
+                    /* reorder_skip_with_plc already calls reorder_flush_opus */
+                }
+                /* Re-check diff after flush */
+                seq_diff = (int16_t)(tseq - rtp->reorder_next_seq);
+                if (seq_diff == 0) {
+                    uint16_t opus_frame_len = ret - 12;
+                    reorder_write_opus_frame(rtp, opus_packet_buf + 12, opus_frame_len);
+                    rtp->rtp_seq = tseq;
+                    rtp->reorder_next_seq++;
+                    reorder_flush_opus(rtp);
+                } else if (seq_diff > 0 && seq_diff < REORDER_SLOTS) {
+                    int slot = tseq % REORDER_SLOTS;
+                    reorder_meta_t *m = &rtp->reorder_meta[slot];
+                    uint16_t payload_len = ret - 12;
+                    if (payload_len > REORDER_SLOT_SIZE) payload_len = REORDER_SLOT_SIZE;
+                    memcpy(reorder_slot_ptr_opus(rtp, slot), opus_packet_buf + 12, payload_len);
+                    m->seq = tseq;
+                    m->payload_len = payload_len;
+                    m->arrival_us = now_us;
+                    m->occupied = true;
+                    rtp->rtp_seq = tseq;
+                } else {
+                    /* Still too far after flush — hard skip+reset */
+                    ESP_LOGW(TAG, "[reorder] seq=%u still too far (expected=%u), hard reset",
+                             tseq, rtp->reorder_next_seq);
+                    reorder_reset_opus(rtp);
+                    reorder_skip_with_plc(rtp, tseq, &total_lost);
+                    uint16_t opus_frame_len = ret - 12;
+                    reorder_write_opus_frame(rtp, opus_packet_buf + 12, opus_frame_len);
+                    rtp->reorder_next_seq = tseq + 1;
+                    rtp->rtp_seq = tseq;
+                }
             }
+
+            /* Timeout check: skip past gaps (with PLC) if oldest buffered > 40ms */
+            reorder_timeout_opus(rtp, now_us, &total_lost);
 
             /* --- Periodic stats (every 60s) --- */
             if ((now_us - last_stats_us) > 60000000LL) {
@@ -827,18 +1025,13 @@ static void rtp_opus_drain_task(void *arg)
  * _rtp_opus_read — pulls one complete Opus frame from the jitter buffer.
  * The drain task fills the jitter buffer from the socket independently.
  *
- * Initial pre-buffering: waits until jbuf reaches read_thres (~6000 bytes,
- * ~1.5s of Opus) before serving any data. This gives the pipeline enough
- * to fill all downstream ringbuffers in one burst.
+ * Pre-buffering: after sync_ready, waits until jbuf reaches read_thres
+ * before serving any data. This ensures the pipeline starts with a
+ * healthy jbuf level so downstream rb fill doesn't drain it to 0.
  *
- * After that: serve frames as fast as pipeline requests.  At startup the
- * pipeline drains jbuf rapidly to fill downstream ringbuffers (~16+16KB
- * of PCM); jbuf will drop to 0 and that is NORMAL — downstream buffers
- * now hold ~200ms of decoded PCM.  In steady state, drain task writes
- * ~80 bytes/20ms and pipeline reads ~80 bytes/20ms → balanced.
- * If jbuf is momentarily empty, we just wait — drain task will deliver
- * the next frame within 20ms, well within downstream buffer margin.
- * No underrun/refill cycling — once PLAYING, stay PLAYING.
+ * In steady state: drain task writes ~80 bytes/20ms, pipeline reads
+ * ~80 bytes/20ms → balanced. If jbuf is momentarily empty we wait.
+ * Once PLAYING, stay PLAYING — no FILLING/PLAYING oscillation.
  */
 static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int len, TickType_t ticks_to_wait, void *context)
 {
@@ -852,16 +1045,24 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
 
         uint32_t avail = jbuf_available(jbuf);
 
-        /* Wait for RTP sync point set by drain task (latency_ms ahead of first packet) */
+        /* Wait for RTP sync point set by drain task */
         if (!rtp->sync_ready) {
             vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
 
-        /* Mark jbuf as playing once sync is ready (keeps overflow/underflow logic happy) */
+        /* Pre-buffer: wait until jbuf reaches read_thres before first playback.
+         * Without this, the pipeline instantly drains jbuf into downstream
+         * ringbuffers at startup, leaving jbuf permanently empty. */
         if (jbuf->state != JBUF_PLAYING) {
-            ESP_LOGI(TAG, "Sync reached, starting playback: %lu bytes in jbuf", (unsigned long)avail);
+            if (avail < jbuf->read_thres) {
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
             jbuf->state = JBUF_PLAYING;
+            ESP_LOGI(TAG, "Pre-buffer done, starting playback: %lu/%lu bytes (thres=%lu)",
+                     (unsigned long)avail, (unsigned long)jbuf->bufsize,
+                     (unsigned long)jbuf->read_thres);
         }
 
         /* Try to read one complete frame */
@@ -926,6 +1127,11 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     cfg.stack_in_ext = config->ext_stack;
     cfg.tag = "rtp_opus";
     cfg.buffer_len = (config->buf_size > 0) ? config->buf_size : RTP_OPUS_STREAM_BUF_SIZE;
+    /* Must hold at least one max-size Opus frame (up to ~1500 bytes from MTU).
+     * Too small → pipeline throughput drops → jbuf overflow.
+     * Too large → data sits in rb instead of jbuf → uncontrolled latency.
+     * 2048 = comfortably fits any single frame. */
+    cfg.out_rb_size = 2048;
 
     rtp_opus_stream_t *rtp = audio_calloc(1, sizeof(rtp_opus_stream_t));
     AUDIO_MEM_CHECK(TAG, rtp, return NULL);
@@ -985,6 +1191,15 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
         }
         assert(opus_packet_buf != NULL);
     }
+
+    /* Allocate reorder buffer — REORDER_SLOTS × REORDER_SLOT_SIZE bytes */
+    rtp->reorder_data = heap_caps_malloc(REORDER_SLOTS * REORDER_SLOT_SIZE,
+                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (rtp->reorder_data == NULL) {
+        rtp->reorder_data = malloc(REORDER_SLOTS * REORDER_SLOT_SIZE);
+    }
+    assert(rtp->reorder_data != NULL);
+    reorder_reset_opus(rtp);
 
     /*
      * Jitter buffer in PSRAM — absorbs pipeline backpressure stalls.
