@@ -12,7 +12,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION "3.52"
+#define VERSION "3.53"
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -142,6 +142,9 @@ typedef struct {
 	char *mqttBrokerAdress;
 	char *mqttLogin;
 	char *mqttPass;
+	uint8_t mqttQOS;
+	uint16_t mqttWatchdogTimeout;
+	uint8_t mqttTLS;
 
 	uint8_t boardVersion;
 

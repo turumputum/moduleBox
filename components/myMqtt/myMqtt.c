@@ -8,6 +8,8 @@
 
 #include "esp_netif.h"
 #include "mdns.h"
+#include "esp_timer.h"
+#include "esp_crt_bundle.h"
 
 
 
@@ -24,15 +26,48 @@ esp_mqtt_client_handle_t client;
 
 char willTopic[255];
 
+static esp_timer_handle_t mqtt_watchdog_timer = NULL;
+static bool mqtt_watchdog_running = false;  // флаг: таймер уже тикает
+
+static void mqtt_watchdog_timer_cb(void *arg) {
+    ESP_LOGE(TAG, "MQTT watchdog timeout! No connection for %d sec. Restarting...", me_config.mqttWatchdogTimeout);
+    esp_restart();
+}
+
+static void mqtt_watchdog_start(void) {
+    if (me_config.mqttWatchdogTimeout == 0) return;
+    // Не перезапускаем таймер если уже тикает — иначе каждый неудачный
+    // reconnect (DISCONNECTED каждые ~10с) будет сбрасывать watchdog
+    if (mqtt_watchdog_running) return;
+    if (mqtt_watchdog_timer == NULL) {
+        const esp_timer_create_args_t timer_args = {
+            .callback = mqtt_watchdog_timer_cb,
+            .name = "mqtt_wd"
+        };
+        esp_timer_create(&timer_args, &mqtt_watchdog_timer);
+    }
+    esp_timer_start_once(mqtt_watchdog_timer, (uint64_t)me_config.mqttWatchdogTimeout * 1000000ULL);
+    mqtt_watchdog_running = true;
+    ESP_LOGD(TAG, "MQTT watchdog started: %d sec", me_config.mqttWatchdogTimeout);
+}
+
+static void mqtt_watchdog_stop(void) {
+    if (mqtt_watchdog_timer != NULL && mqtt_watchdog_running) {
+        esp_timer_stop(mqtt_watchdog_timer);
+        mqtt_watchdog_running = false;
+        ESP_LOGD(TAG, "MQTT watchdog stopped");
+    }
+}
+
 extern QueueHandle_t exec_mailbox;
 
 void mqtt_pub(const char *topic, const char *string){
-    int msg_id = esp_mqtt_client_publish(client, topic, string, 0, 0, 1);
+    int msg_id = esp_mqtt_client_publish(client, topic, string, 0, me_config.mqttQOS, 0);
     //ESP_LOGD(TAG, "sent publish successful, msg_id=%d", msg_id);
 }
 
 void mqtt_sub(const char *topic){
-	esp_mqtt_client_subscribe(client, topic, 0);
+	esp_mqtt_client_subscribe(client, topic, me_config.mqttQOS);
 	ESP_LOGD(TAG, "Subcribed successful, topic:%s", topic);
 }
 
@@ -56,6 +91,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_CONNECTED");
 		me_state.MQTT_init_res = ESP_OK;
+		mqtt_watchdog_stop();
 
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
 			if(memcmp(me_state.action_topic_list[i],"none", 4)){
@@ -120,7 +156,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_DISCONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_DISCONNECTED");
 		me_state.MQTT_init_res = ESP_FAIL;
-		//esp_restart();
+		mqtt_watchdog_start();
 		break;
 
 	case MQTT_EVENT_SUBSCRIBED:
@@ -191,8 +227,11 @@ int mqtt_app_start(void)
 		}
 	}
 
-	char brokerUri[strlen("mqtt://")+strlen(me_config.mqttBrokerAdress)+strlen(":1883")];
-	sprintf(brokerUri, "mqtt://%s:1883", me_config.mqttBrokerAdress);
+	// Build broker URI: mqtts:// for TLS, mqtt:// otherwise
+	const char *scheme = me_config.mqttTLS ? "mqtts" : "mqtt";
+	int default_port = me_config.mqttTLS ? 8883 : 1883;
+	char brokerUri[16 + strlen(me_config.mqttBrokerAdress)];
+	sprintf(brokerUri, "%s://%s:%d", scheme, me_config.mqttBrokerAdress, default_port);
 	ESP_LOGD(TAG, "Set brokerUri:%s", brokerUri);
 	
     esp_mqtt_client_config_t mqtt_cfg = {
@@ -202,6 +241,24 @@ int mqtt_app_start(void)
 		.session.last_will.topic = willTopic,
 		.session.last_will.msg = "0",
     };
+
+	// Set login/password if configured
+	if (me_config.mqttLogin[0] != 0) {
+		mqtt_cfg.credentials.username = me_config.mqttLogin;
+	}
+	if (me_config.mqttPass[0] != 0) {
+		mqtt_cfg.credentials.authentication.password = me_config.mqttPass;
+	}
+
+	// TLS: шифрование без проверки сертификата сервера (self-signed friendly)
+	if (me_config.mqttTLS) {
+		mqtt_cfg.broker.verification.skip_cert_common_name_check = true;
+		// Не используем crt_bundle_attach — позволяет подключаться к серверам
+		// с самоподписанными сертификатами (шифрование без верификации CA).
+		// Для production с проверкой CA: раскомментировать строку ниже.
+		// mqtt_cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+		ESP_LOGI(TAG, "MQTT TLS enabled (port %d, no CA verify)", default_port);
+	}
 
 	//ESP_LOGD(TAG, "Broker addr:%s", mqtt_cfg.uri);
 
@@ -213,6 +270,12 @@ int mqtt_app_start(void)
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
 	esp_mqtt_client_start(client);
 
+	mqtt_watchdog_start();
+
+	ESP_LOGI(TAG, "MQTT QOS=%d, WatchdogTimeout=%d sec, retain=false, TLS=%s, auth=%s",
+		me_config.mqttQOS, me_config.mqttWatchdogTimeout,
+		me_config.mqttTLS ? "on" : "off",
+		me_config.mqttLogin[0] ? "yes" : "no");
     ESP_LOGD(TAG, "MQTT init complite. Duration: %ld ms. Heap usage: %lu", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());
 
     return ESP_OK;

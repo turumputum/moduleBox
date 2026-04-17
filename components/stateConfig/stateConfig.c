@@ -181,6 +181,17 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->oscMyPort = atoi(value);
 	} else if (MATCH("MQTT", "mqttBrokerAdress")) {//-----------------------------------------------
 		pconfig->mqttBrokerAdress = strdup(value);
+	} else if (MATCH("MQTT", "mqttLogin")) {
+		pconfig->mqttLogin = strdup(value);
+	} else if (MATCH("MQTT", "mqttPass")) {
+		pconfig->mqttPass = strdup(value);
+	} else if (MATCH("MQTT", "mqttQOS")) {
+		pconfig->mqttQOS = atoi(value);
+		if(pconfig->mqttQOS > 2) pconfig->mqttQOS = 0;
+	} else if (MATCH("MQTT", "mqttWatchdogTimeout")) {
+		pconfig->mqttWatchdogTimeout = atoi(value);
+	} else if (MATCH("MQTT", "mqttTLS")) {
+		pconfig->mqttTLS = atoi(value);
 	} else if (MATCH("SCHEDULE", "ntpServer")) {//-----------------------------------------------
 		pconfig->ntpServer = strdup(value);
 	} else if (MATCH("SCHEDULE", "time")) {//-----------------------------------------------
@@ -239,6 +250,11 @@ void load_Default_Config(void) {
 	me_state.FTP_init_res = ESP_FAIL;
 
 	me_config.mqttBrokerAdress = strdup("");
+	me_config.mqttLogin = strdup("");
+	me_config.mqttPass = strdup("");
+	me_config.mqttQOS = 0;
+	me_config.mqttWatchdogTimeout = 0;
+	me_config.mqttTLS = 0;
 	
     me_config.udpServerAdress = strdup("");
     me_config.udpServerPort = 0;
@@ -402,6 +418,21 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "mqttBrokerAdress = %s \r\n", me_config.mqttBrokerAdress);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "mqttLogin = %s \r\n", me_config.mqttLogin);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "mqttPass = %s \r\n", me_config.mqttPass);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "mqttQOS = %d \r\n", me_config.mqttQOS);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "mqttWatchdogTimeout = %d \r\n", me_config.mqttWatchdogTimeout);
+	fprintf(configFile, tmp);
+	memset(tmp, 0, strlen(tmp));
+	sprintf(tmp, "mqttTLS = %d \r\n", me_config.mqttTLS);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
