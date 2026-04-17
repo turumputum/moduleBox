@@ -95,6 +95,16 @@ typedef struct __tag_ADC1_CHANNEL
 	int 					currentReport;
 	int 					ratioReport;
 	int 					rawReport;
+	int 					thresholdReport;
+
+	int 					threshold;
+	int 					thresholdHyst;
+	int 					thresholdRiseLag;
+	int 					thresholdFallLag;
+
+	int 					threshState;
+	TickType_t				threshPendingTick;
+	int 					threshPendingTarget;
 
 	TickType_t				lastReportTime;
 
@@ -111,7 +121,7 @@ extern 	stateStruct 		me_state;
 extern uint8_t 				led_segment;
 
 
-
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *			TAG 				= "ADC1";
 
 static xSemaphoreHandle 	startSemaphore		= NULL; 
@@ -157,7 +167,6 @@ static int gpio_to_adc1_channel(uint8_t gpio)
 		return (int)(gpio - 1);
 	return -1;
 }
-
 
 // ---------------------------------------------------------------------------
 // -------------------------------- FUNCTIONS --------------------------------
@@ -325,16 +334,54 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 		ch->divider = 0;
 	}
 
+	/* Задаёт пороговое значение - при превышении рапортует 1, иначе 0
+	   Если задан - режим float игнорируется
+	*/
+	ch->threshold = get_option_int_val(slot_num, "threshold", "", -1, -1, 4095);
+
+	/* Ширина зоны гистерезиса порога
+	   Для перехода в 1 значение должно превысить threshold + hysteresis/2
+	   Для перехода в 0 значение должно опуститься ниже threshold - hysteresis/2
+	*/
+	ch->thresholdHyst = get_option_int_val(slot_num, "thresholdHysteresis", "", 0, 0, 2048);
+
+	/* Задержка подтверждения перехода в состояние 1 (мс)
+	   Если за это время уровень не удержался - переход игнорируется
+	*/
+	ch->thresholdRiseLag = get_option_int_val(slot_num, "thresholdRiseLag", "ms", 0, 0, 10000);
+
+	/* Задержка подтверждения перехода в состояние 0 (мс)
+	   Если за это время уровень не удержался - переход игнорируется
+	*/
+	ch->thresholdFallLag = get_option_int_val(slot_num, "thresholdFallLag", "ms", 0, 0, 10000);
+
+	ch->threshState = 0;
+	ch->threshPendingTarget = -1;
+
+	if (ch->threshold >= 0) {
+		ESP_LOGD(TAG, "S%d: threshold:%d hyst:%d riseLag:%d fallLag:%d",
+				 slot_num, ch->threshold, ch->thresholdHyst,
+				 ch->thresholdRiseLag, ch->thresholdFallLag);
+	}
+
 
 	/* Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале
 	*/
-	ch->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "", (int)ch->MIN_VAL, (int)ch->MAX_VAL);
+	ch->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "ratio", (int)ch->MIN_VAL, (int)ch->MAX_VAL);
 
 	/* Возвращает текущее сырое целочисленное значение канала
 	*/
-	ch->rawReport 	= stdreport_register(RPTT_int, slot_num, "unit", "");
+	ch->rawReport 	= stdreport_register(RPTT_int, slot_num, "unit", "rawVal");
 
-	ch->currentReport = flag_float_output ?  ch->ratioReport : ch->rawReport;
+	/* Рапортует 0/1 при пороговом режиме
+	*/
+	ch->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+
+	if (ch->threshold >= 0) {
+		ch->currentReport = ch->thresholdReport;
+	} else {
+		ch->currentReport = flag_float_output ? ch->ratioReport : ch->rawReport;
+	}
 }
 
 void adc1_task(void *arg)
@@ -445,18 +492,74 @@ void adc1_task(void *arg)
 
 
 								ch->result = ch->result * (1 - ch->k) + raw_val * ch->k;
-							
-								if (  (abs(ch->result - ch->prev_result)>ch->dead_band)  	|| 
-							      ((ch->periodic != 0) && ((xTaskGetTickCount() - ch->lastReportTime) >= pdMS_TO_TICKS(ch->periodic))) 
-								   													 	)
-							{
-								ch->prev_result = ch->result;
 
-								stdreport_i(ch->currentReport, ch->result);
+								if (ch->prev_result == 0xFFFF) {
+									// --- Initial report (first sample) ---
+									ch->prev_result = ch->result;
+									if (ch->threshold >= 0) {
+										int halfHyst = ch->thresholdHyst / 2;
+										ch->threshState = (ch->result >= (ch->threshold + halfHyst)) ? 1 : 0;
+										stdreport_i(ch->thresholdReport, ch->threshState);
+									} else {
+										stdreport_i(ch->currentReport, ch->result);
+									}
+								} else if (ch->threshold >= 0) {
+									// --- Threshold mode ---
+									int halfHyst = ch->thresholdHyst / 2;
+									int riseLevel = ch->threshold + halfHyst;
+									int fallLevel = ch->threshold - halfHyst;
+									int newState = ch->threshState;
 
-								ch->lastReportTime = xTaskGetTickCount();
+									if (ch->threshState == 0 && ch->result >= riseLevel) {
+										newState = 1;
+									} else if (ch->threshState == 1 && ch->result < fallLevel) {
+										newState = 0;
+									}
+
+									if (newState != ch->threshState) {
+										int lagMs = (newState == 1) ? ch->thresholdRiseLag : ch->thresholdFallLag;
+
+										if (lagMs <= 0) {
+											ch->threshState = newState;
+											ch->threshPendingTarget = -1;
+											stdreport_i(ch->thresholdReport, ch->threshState);
+										} else if (ch->threshPendingTarget != newState) {
+											ch->threshPendingTarget = newState;
+											ch->threshPendingTick = xTaskGetTickCount();
+										}
+									} else {
+										ch->threshPendingTarget = -1;
+									}
+
+									if (ch->threshPendingTarget >= 0) {
+										int lagMs = (ch->threshPendingTarget == 1) ? ch->thresholdRiseLag : ch->thresholdFallLag;
+										if ((xTaskGetTickCount() - ch->threshPendingTick) >= pdMS_TO_TICKS(lagMs)) {
+											int stillMet = 0;
+											if (ch->threshPendingTarget == 1 && ch->result >= riseLevel) stillMet = 1;
+											if (ch->threshPendingTarget == 0 && ch->result < fallLevel) stillMet = 1;
+
+											if (stillMet) {
+												ch->threshState = ch->threshPendingTarget;
+												stdreport_i(ch->thresholdReport, ch->threshState);
+											}
+											ch->threshPendingTarget = -1;
+										}
+									}
+								} else {
+									// --- Normal (raw / ratio) mode ---
+									if (  (abs(ch->result - ch->prev_result)>ch->dead_band)  	|| 
+									  ((ch->periodic != 0) && ((xTaskGetTickCount() - ch->lastReportTime) >= pdMS_TO_TICKS(ch->periodic))) 
+									   																	)
+									{
+										ch->prev_result = ch->result;
+
+										stdreport_i(ch->currentReport, ch->result);
+
+										ch->lastReportTime = xTaskGetTickCount();
+									}
 								}
 							}
+
 // ======================================================================================================
 						}
 					}

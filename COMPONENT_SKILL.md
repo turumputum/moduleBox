@@ -552,7 +552,48 @@ if (distanceSens->flag_float_output == 1) {
 
 **⚠️ ОБЯЗАТЕЛЬНОЕ ПРАВИЛО:**
 
-✅ **ПРАВИЛЬНО - Регистрируйте ВСЕ отчеты заранее, используйте только нужные:**
+Все возможные варианты `stdreport_register()` должны вызываться **безусловно** в функции конфигурации.
+Выбор активного отчета происходит в рабочем цикле (или через указатель `currentReport`).
+
+Это нужно потому что `manifesto` парсит исходный код **статически** и собирает описания
+всех `stdreport_register()` для генерации манифеста. Если вызов обёрнут в `if` —
+он не попадёт в манифест.
+
+✅ **ПРАВИЛЬНО — Регистрируйте ВСЕ отчеты, выбирайте нужный через currentReport:**
+
+```c
+/* Возвращает значение в виде отношения к шкале (float 0-1)
+*/
+ctx->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "", min, max);
+
+/* Возвращает сырое целочисленное значение
+*/
+ctx->rawReport = stdreport_register(RPTT_int, slot_num, "unit", "");
+
+/* Рапортует 0/1 при пороговом режиме
+*/
+ctx->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+
+// Выбор активного отчета по режиму — БЕЗ ветвления регистрации
+if (ctx->threshold >= 0) {
+    ctx->currentReport = ctx->thresholdReport;
+} else {
+    ctx->currentReport = flag_float_output ? ctx->ratioReport : ctx->rawReport;
+}
+```
+
+В рабочем цикле:
+```c
+// Threshold mode — отдельная логика
+if (ctx->threshold >= 0) {
+    stdreport_i(ctx->thresholdReport, threshState);
+} else {
+    // Normal mode — используем currentReport (raw или ratio)
+    stdreport_i(ctx->currentReport, result);
+}
+```
+
+✅ **ПРАВИЛЬНО — Многоканальный пример:**
 
 ```c
 // Регистрируем ВСЕ возможные отчеты
@@ -569,23 +610,24 @@ if (ctx->logic == INDEPENDENT_MODE) {
 }
 ```
 
-❌ **НЕПРАВИЛЬНО - Избегайте ветвления при регистрации:**
+❌ **НЕПРАВИЛЬНО — Ветвление при регистрации:**
 
 ```c
-// ПЛОХО! Ветвление при регистрации отчетов
-if (ctx->logic == INDEPENDENT_MODE) {
-    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", topic_0);
-    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", topic_1);
+// ПЛОХО! manifesto не увидит отчеты внутри if/else
+if (ctx->threshold >= 0) {
+    ctx->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+} else if (flag_float_output) {
+    ctx->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "", min, max);
 } else {
-    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", topic_main);
+    ctx->rawReport = stdreport_register(RPTT_int, slot_num, "unit", "");
 }
 ```
 
 **Почему это важно:**
 1. Система генерации манифестов анализирует вызовы `stdreport_register()` статически
-2. Ветвление при регистрации усложняет автоматическое создание документации
-3. Регистрация всех отчетов занимает минимум памяти, но делает код понятнее
-4. Неиспользуемые отчеты не создают нагрузку - они просто не вызываются
+2. Ветвление при регистрации скрывает отчеты от manifesto — они не попадут в JSON
+3. Регистрация всех отчетов занимает минимум памяти, но делает манифест полным
+4. Неиспользуемые отчеты не создают нагрузку — они просто не вызываются
 
 **Примеры логики работы с многоканальными входами:**
 
