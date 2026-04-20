@@ -46,7 +46,11 @@ esp_err_t get_i2s_pins(int port, board_i2s_pin_t *i2s_config)
     AUDIO_NULL_CHECK(TAG, i2s_config, return ESP_FAIL);
     if (port == 0) {
         i2s_config->mck_io_num = -1;
-        if(ab_ver==4){
+        if(ab_ver==6){
+            i2s_config->bck_io_num = GPIO_NUM_5;
+            i2s_config->ws_io_num = GPIO_NUM_4;
+            i2s_config->data_out_num = GPIO_NUM_6;
+        }else if(ab_ver==4){
             i2s_config->bck_io_num = GPIO_NUM_1;
             i2s_config->ws_io_num = GPIO_NUM_7;
             i2s_config->data_out_num = GPIO_NUM_17;

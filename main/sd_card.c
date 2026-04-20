@@ -13,6 +13,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "freertos/semphr.h"
+#include "stateConfig.h"
 #include "diskio_impl.h"
 #include "diskio_sdmmc.h"
 
@@ -182,40 +183,57 @@ int spisd_init() {
 
 	ESP_LOGD(TAG, "Initializing SD card");
 
-	uint8_t clk_pin = 47;
-	uint8_t cmd_pin = 21;
-	uint8_t d0_pin = 40;
-	uint8_t led_pin = 48;
+	extern configuration me_config;
+	uint8_t clk_pin, cmd_pin, d0_pin, led_pin;
 
-	ESP_LOGD(TAG, "Try old board pinout");
-	gpio_pad_select_gpio(clk_pin);
-	gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
+	// Три набора пинов: v3 (old), v4 (new), v6
+	const uint8_t pin_sets[][4] = {
+		// {clk, cmd, d0, led}
+		{ 8,  9,  7,  0},  // v6
+		{47, 21, 40, 48},  // v3
+		{41, 40,  3, 48},  // v4
+		
+	};
+	int set_order[3];
+	int n_sets;
 
-	gpio_pad_select_gpio(d0_pin);
-	gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
+	if(me_config.boardVersion == 6){
+		set_order[0] = 2; set_order[1] = 0; set_order[2] = 1;  // v6 → v3 → v4
+		n_sets = 3;
+	}else if(me_config.boardVersion == 4){
+		set_order[0] = 1; set_order[1] = 0; set_order[2] = 2;  // v4 → v3 → v6
+		n_sets = 3;
+	}else{
+		set_order[0] = 0; set_order[1] = 1; set_order[2] = 2;  // v3 → v4 → v6
+		n_sets = 3;
+	}
 
-	gpio_pad_select_gpio(cmd_pin);
-	gpio_set_direction(cmd_pin, GPIO_MODE_INPUT);
-
-	if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
-		ESP_LOGD(TAG, "old board pinout notFound( lets try new bord pinout");
-		clk_pin = 41;//21;//18;
-	 	cmd_pin = 40;//10;//8;
-	 	d0_pin = 3;//6;//2;
+	int found = 0;
+	for(int s = 0; s < n_sets; s++){
+		int idx = set_order[s];
+		clk_pin = pin_sets[idx][0];
+		cmd_pin = pin_sets[idx][1];
+		d0_pin  = pin_sets[idx][2];
+		led_pin = pin_sets[idx][3];
 
 		gpio_pad_select_gpio(clk_pin);
 		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
-	 
-		gpio_pad_select_gpio(d0_pin);
-		gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
-	 
 		gpio_pad_select_gpio(cmd_pin);
 		gpio_set_direction(cmd_pin, GPIO_MODE_INPUT);
+		gpio_pad_select_gpio(d0_pin);
+		gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
 
-		if((gpio_get_level(clk_pin)!=1)||(gpio_get_level(d0_pin)!=1)||(gpio_get_level(cmd_pin)!=1)){
-			ESP_LOGW(TAG, "SD card module notFound(");
-			return ESP_FAIL;
+		if((gpio_get_level(clk_pin)==1)&&(gpio_get_level(d0_pin)==1)&&(gpio_get_level(cmd_pin)==1)){
+			ESP_LOGD(TAG, "SD card found on pin set %d (clk=%d cmd=%d d0=%d)", idx, clk_pin, cmd_pin, d0_pin);
+			found = 1;
+			break;
 		}
+		ESP_LOGD(TAG, "Pin set %d (clk=%d cmd=%d d0=%d) notFound", idx, clk_pin, cmd_pin, d0_pin);
+	}
+
+	if(!found){
+		ESP_LOGW(TAG, "SD card module notFound(");
+		return ESP_FAIL;
 	}
 
 	gpio_pad_select_gpio(led_pin);
@@ -242,7 +260,7 @@ int spisd_init() {
 				xPortGetFreeHeapSize());
 
 	if(res==ESP_OK){
-		gpio_set_level(48, 0);
+		gpio_set_level(led_pin, 0);
 	}
 	return res;
 }

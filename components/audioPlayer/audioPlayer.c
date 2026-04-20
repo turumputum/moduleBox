@@ -318,6 +318,8 @@ void audio_task(void *arg) {
 
 	if(me_config.boardVersion==4){
 		ab_ver = 4;
+	}else if(me_config.boardVersion==6){
+		ab_ver = 6;
 	}
 	//ESP_LOGD(TAG, "Create i2s stream to write data to codec chip");
 	i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
