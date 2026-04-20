@@ -206,11 +206,12 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
 	}
 
-	/* Использовать затухание
+	/* Период затухания громкости в мс (0 - выключено)
+	   Если во время затухания приходит play с текущим треком - продолжаем играть
 	*/
-	c->attenuation = get_option_flag_val(slot_num, "attenuation");
+	c->attenuation = get_option_int_val(slot_num, "attenuation", "", 0, 0, 10000);
 	if (c->attenuation != 0) {
-		ESP_LOGD(TAG, "Enable attenuation");
+		ESP_LOGD(TAG, "Enable attenuation: %d ms", c->attenuation);
 	}
 	
 	/* Пауза перед проигрыванием
@@ -412,6 +413,7 @@ void audio_task(void *arg) {
 
 	int att_flag=0;
 	uint8_t att_vol=c->volume;
+	uint32_t att_start_tick=0;
 
 	char reportStr[strlen("/endOfTrack")+10];
 	//listen audio event
@@ -438,13 +440,26 @@ void audio_task(void *arg) {
 					ESP_LOGD(TAG, "Module disabled, ignoring play");
 					break;
 				}
-				//ESP_LOGD(TAG, "AEL status:%d currentTrack:%d", audio_element_get_state(i2s_stream_writer), c->currentTrack);
 				if((audio_element_get_state(i2s_stream_writer)==AEL_STATE_RUNNING)&&(c->play_to_end==1)){
 					ESP_LOGD(TAG, "skip restart track");
 				}else{
+					uint8_t prev_track = me_state.currentTrack;
 					ESP_LOGD(TAG, "before shift:%d, cmd_arg = '%s'", me_state.currentTrack, cmd_arg);
 					trackShift(cmd_arg);
 					ESP_LOGD(TAG, "after shift:%d", me_state.currentTrack);
+					// Если идёт затухание и play пришёл на тот же трек — отменяем затухание
+					if(att_flag && me_state.currentTrack == prev_track){
+						att_flag = 0;
+						att_vol = c->volume;
+						setVolume_num(c->volume);
+						ESP_LOGD(TAG, "Attenuation cancelled - continue playing same track");
+						break;
+					}
+					// Если идёт затухание но другой трек — сбрасываем затухание
+					if(att_flag){
+						att_flag = 0;
+						att_vol = c->volume;
+					}
 					vTaskDelay(pdMS_TO_TICKS(c->play_delay));
 					if(audioPlay(me_state.currentTrack)==ESP_OK){
 						audioSetIndicator(slot_num, 1);
@@ -472,7 +487,9 @@ void audio_task(void *arg) {
 				}else{
 					if(c->attenuation!=0){
 						att_flag=1;
-						//ESP_LOGD(TAG, "attenuation start");
+						att_start_tick = xTaskGetTickCount();
+						att_vol = c->volume;
+						ESP_LOGD(TAG, "Attenuation start, period: %d ms", c->attenuation);
 					}else{
 						audioStop();
 						audioSetIndicator(slot_num, 0);
@@ -545,14 +562,19 @@ void audio_task(void *arg) {
 
 
 		if(att_flag==1){
-			att_vol-=1;
-			//ESP_LOGD(TAG, "attenuation vol:%d", att_vol);
+			uint32_t elapsed_ms = (xTaskGetTickCount() - att_start_tick) * portTICK_PERIOD_MS;
+			if(elapsed_ms >= (uint32_t)c->attenuation){
+				att_vol = 0;
+			}else{
+				att_vol = c->volume - (uint8_t)(c->volume * elapsed_ms / c->attenuation);
+			}
 			setVolume_num(att_vol);
-			if(att_vol==0){
+			if(att_vol == 0){
 				audioStop();
 				audioSetIndicator(slot_num, 0);
 				att_vol = c->volume;
-				att_flag=0;
+				att_flag = 0;
+				ESP_LOGD(TAG, "Attenuation complete, stopped");
 			}
 		}
 

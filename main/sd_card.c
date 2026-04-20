@@ -13,6 +13,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "freertos/semphr.h"
+#include "stateConfig.h"
 #include "diskio_impl.h"
 #include "diskio_sdmmc.h"
 

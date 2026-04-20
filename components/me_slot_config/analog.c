@@ -116,7 +116,7 @@ void configure_analog(analog_context_t *ctx, int slot_num)
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         /* Определяет топик для MQTT сообщений */
-        ctx->custom_topic = get_option_string_val(slot_num, "topic", "/adc_0");
+        ctx->custom_topic = get_option_string_val(slot_num, "topic", "/analog_0");
         ESP_LOGD(TAG, "S%d: custom topic:%s", slot_num, ctx->custom_topic);
         ctx->flag_custom_topic = 1;
     }
