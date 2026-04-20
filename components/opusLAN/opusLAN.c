@@ -160,11 +160,13 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
         audio_board_deinit(c->board_handle);
         c->board_handle = NULL;
     }
+#ifdef BOARD_PINOUT_V6
+    ab_ver = 6;
+#else
     if(me_config.boardVersion==4){
         ab_ver = 4;
-    }else if(me_config.boardVersion==6){
-        ab_ver = 6;
     }
+#endif
     c->board_handle = audio_board_init();
     audio_hal_ctrl_codec(c->board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_DECODE, AUDIO_HAL_CTRL_START);
 

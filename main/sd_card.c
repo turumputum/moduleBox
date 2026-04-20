@@ -186,30 +186,25 @@ int spisd_init() {
 	extern configuration me_config;
 	uint8_t clk_pin, cmd_pin, d0_pin, led_pin;
 
-	// Три набора пинов: v3 (old), v4 (new), v6
+#ifdef BOARD_PINOUT_V6
+	clk_pin = 8; cmd_pin = 9; d0_pin = 7; led_pin = 0;
+#else
+	// Два набора пинов: v3 (old), v4 (new)
 	const uint8_t pin_sets[][4] = {
 		// {clk, cmd, d0, led}
-		{ 8,  9,  7,  0},  // v6
 		{47, 21, 40, 48},  // v3
 		{41, 40,  3, 48},  // v4
-		
 	};
-	int set_order[3];
-	int n_sets;
+	int set_order[2];
 
-	if(me_config.boardVersion == 6){
-		set_order[0] = 2; set_order[1] = 0; set_order[2] = 1;  // v6 → v3 → v4
-		n_sets = 3;
-	}else if(me_config.boardVersion == 4){
-		set_order[0] = 1; set_order[1] = 0; set_order[2] = 2;  // v4 → v3 → v6
-		n_sets = 3;
+	if(me_config.boardVersion == 4){
+		set_order[0] = 1; set_order[1] = 0;  // v4 → v3
 	}else{
-		set_order[0] = 0; set_order[1] = 1; set_order[2] = 2;  // v3 → v4 → v6
-		n_sets = 3;
+		set_order[0] = 0; set_order[1] = 1;  // v3 → v4
 	}
 
 	int found = 0;
-	for(int s = 0; s < n_sets; s++){
+	for(int s = 0; s < 2; s++){
 		int idx = set_order[s];
 		clk_pin = pin_sets[idx][0];
 		cmd_pin = pin_sets[idx][1];
@@ -235,6 +230,7 @@ int spisd_init() {
 		ESP_LOGW(TAG, "SD card module notFound(");
 		return ESP_FAIL;
 	}
+#endif
 
 	gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
