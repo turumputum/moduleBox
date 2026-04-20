@@ -70,6 +70,7 @@ uint8_t SLOTS_PIN_MAP[10][4];
 
 const uint8_t PIN_MAP_v3[10][4] = {{4,5,10,38},{40,21,47,48},{17,18,15,0},{3,8,39,0},{2,1,41,0},{7,6,42,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};//v3.2x
 const uint8_t PIN_MAP_v4[10][4] = {{1,7,17,47},{2,8,18,48},{6,10,21,0},{4,15,38,0},{5,39,42,0},{3,40,41,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
+const uint8_t PIN_MAP_v6[10][4] = {{5,4,6,0},{7,9,8,0},{1,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
 
 adc_channel_t SLOT_ADC_MAP[6]={
     ADC1_CHANNEL_3,
@@ -88,6 +89,8 @@ int init_slots(void){
 	
 	if(me_config.boardVersion==4){
 		memcpy(SLOTS_PIN_MAP, PIN_MAP_v4, sizeof(PIN_MAP_v4));
+	}else if(me_config.boardVersion==6){
+		memcpy(SLOTS_PIN_MAP, PIN_MAP_v6, sizeof(PIN_MAP_v6));
 	}else{
 		memcpy(SLOTS_PIN_MAP, PIN_MAP_v3, sizeof(PIN_MAP_v3));
 	}

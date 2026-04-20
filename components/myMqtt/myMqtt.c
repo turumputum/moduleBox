@@ -125,25 +125,31 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		//---print to arrray
 		char tmpStr[100];
 		char topic_list[1024] = { 0 };
-		strcat(topic_list,"{\n\"triggers\":[\n");
+		int count;
+
+		strcat(topic_list, "{ \"triggers\":[ ");
+		count = 0;
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
 			if(memcmp(me_state.trigger_topic_list[i],"none", 4)!=0){
+				if (count > 0) strcat(topic_list, ", ");
 				memset(tmpStr, 0, sizeof(tmpStr));
-				sprintf(tmpStr, "\"%s\",\n", me_state.trigger_topic_list[i]);
+				sprintf(tmpStr, "\"%s\"", me_state.trigger_topic_list[i]);
 				strcat(topic_list, tmpStr);
+				count++;
 			}
 		}
-		topic_list[strlen(topic_list) - 2] = '\0';
-		strcat(topic_list, "\n],\n\"actions\":[\n");
+		strcat(topic_list, " ], \"actions\":[ ");
+		count = 0;
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
 			if(memcmp(me_state.action_topic_list[i],"none", 4)!=0){
+				if (count > 0) strcat(topic_list, ", ");
 				memset(tmpStr, 0, sizeof(tmpStr));
-				sprintf(tmpStr, "\"%s\",\n", me_state.action_topic_list[i]);
+				sprintf(tmpStr, "\"%s\"", me_state.action_topic_list[i]);
 				strcat(topic_list, tmpStr);
+				count++;
 			}
 		}
-		topic_list[strlen(topic_list) - 2] = '\0';
-		strcat(topic_list, "\n]\n}");
+		strcat(topic_list, " ] }");
 
 		char topicList_topic[255];
 		sprintf(topicList_topic, "clients/%s/topics", me_config.deviceName);
