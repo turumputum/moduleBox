@@ -316,9 +316,13 @@ void audio_task(void *arg) {
 	pipeline = audio_pipeline_init(&pipeline_cfg);
 	mem_assert(pipeline);
 
+#ifdef BOARD_PINOUT_V6
+	ab_ver = 6;
+#else
 	if(me_config.boardVersion==4){
 		ab_ver = 4;
 	}
+#endif
 	//ESP_LOGD(TAG, "Create i2s stream to write data to codec chip");
 	i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
 	i2s_cfg.out_rb_size = 8 * 1024;  // Уменьшено с 12 КБ — экономия 4 КБ

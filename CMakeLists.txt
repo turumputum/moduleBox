@@ -20,3 +20,7 @@ project(${ProjectId})
 
 idf_build_set_property(COMPILE_OPTIONS "-fdiagnostics-color=always" APPEND)
 idf_build_set_property(COMPILE_OPTIONS -DBRANCH="${BRANCH}" APPEND)
+
+# Board pinout version: uncomment ONE line
+#idf_build_set_property(COMPILE_OPTIONS -DBOARD_PINOUT_V3_V4 APPEND)
+#idf_build_set_property(COMPILE_OPTIONS -DBOARD_PINOUT_V6 APPEND)

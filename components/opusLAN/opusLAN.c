@@ -39,6 +39,7 @@ extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
 extern uint8_t led_segment;
+extern uint8_t ab_ver;
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "OPUS_LAN";
@@ -159,6 +160,13 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
         audio_board_deinit(c->board_handle);
         c->board_handle = NULL;
     }
+#ifdef BOARD_PINOUT_V6
+    ab_ver = 6;
+#else
+    if(me_config.boardVersion==4){
+        ab_ver = 4;
+    }
+#endif
     c->board_handle = audio_board_init();
     audio_hal_ctrl_codec(c->board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_DECODE, AUDIO_HAL_CTRL_START);
 

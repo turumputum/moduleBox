@@ -87,13 +87,15 @@ int init_slots(void){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	
+#ifdef BOARD_PINOUT_V6
+	memcpy(SLOTS_PIN_MAP, PIN_MAP_v6, sizeof(PIN_MAP_v6));
+#else
 	if(me_config.boardVersion==4){
 		memcpy(SLOTS_PIN_MAP, PIN_MAP_v4, sizeof(PIN_MAP_v4));
-	}else if(me_config.boardVersion==6){
-		memcpy(SLOTS_PIN_MAP, PIN_MAP_v6, sizeof(PIN_MAP_v6));
 	}else{
 		memcpy(SLOTS_PIN_MAP, PIN_MAP_v3, sizeof(PIN_MAP_v3));
 	}
+#endif
 
 	stdreport_initialize();
 	reporter_init();
