@@ -255,7 +255,7 @@ int spisd_init() {
 				xPortGetFreeHeapSize());
 
 	if(res==ESP_OK){
-		gpio_set_level(48, 0);
+		gpio_set_level(led_pin, 0);
 	}
 	return res;
 }
