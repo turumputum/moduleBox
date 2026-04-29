@@ -302,7 +302,7 @@ void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass,
 
 void button_ledBar_task(void *arg)
 {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
     setup_button_hw(slot_num, ctx);
     configure_button_ledBar(ctx, slot_num);
@@ -374,7 +374,7 @@ void button_ledBar_task(void *arg)
 void start_button_ledBar_task(int slot_num) {
     char tmpString[60];
     sprintf(tmpString, "task_button_ledBar_%d", slot_num);
-    xTaskCreate(button_ledBar_task, tmpString, 1024*6, &slot_num, configMAX_PRIORITIES-5, NULL);
+    xTaskCreate(button_ledBar_task, tmpString, 1024*6, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-5, NULL);
 }
 
 const char * get_manifest_button_ledBar()

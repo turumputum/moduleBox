@@ -28,7 +28,7 @@ extern stateStruct me_state;
 static const char *TAG = "RFID";
 
 void pn532Uart_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     int uart_num = UART_NUM_1; // Начинаем с минимального порта
     while (uart_is_driver_installed(uart_num)) {
@@ -100,6 +100,6 @@ void pn532Uart_task(void* arg) {
 
 void start_pn532Uart_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(pn532Uart_task, "pn532Uart_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
+    xTaskCreate(pn532Uart_task, "pn532Uart_task", 1024 * 4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-12, NULL);
     ESP_LOGD(TAG, "pn532Uart_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

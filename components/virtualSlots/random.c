@@ -85,7 +85,7 @@ void configure_random(PRND_CONFIG ch, int slot_num){
 }
 
 void random_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
     RND_CONFIG c = {0};
@@ -112,10 +112,9 @@ void random_task(void *arg) {
 
 void start_random_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "random_task_%d", slot_num);
-    xTaskCreatePinnedToCore(random_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    xTaskCreatePinnedToCore(random_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "random_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

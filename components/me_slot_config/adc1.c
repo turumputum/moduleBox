@@ -387,7 +387,7 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 void adc1_task(void *arg)
 {
     uint32_t 		ret_num 		= 0;
-    int 			slot_num 		= *(int *)arg;
+    int 			slot_num 		= (int)(intptr_t)arg;
 	PADC1_CHANNEL	ch 				= &adc1_channels[slot_num];
 	uint8_t 		result			[ EXAMPLE_READ_LEN ] = {0};
 
@@ -592,12 +592,11 @@ void start_adc1_task(int slot_num)
 	}
 
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 
 	if (!startSemaphore)
 		startSemaphore = xSemaphoreCreateMutex();
 
-	xTaskCreatePinnedToCore(adc1_task, "adc1_task", 1024 * 4, &t_slot_num, 12, NULL,1);
+	xTaskCreatePinnedToCore(adc1_task, "adc1_task", 1024 * 4, (void*)(intptr_t)slot_num, 12, NULL,1);
 
 	ESP_LOGD(TAG, "adc1_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

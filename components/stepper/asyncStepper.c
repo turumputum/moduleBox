@@ -194,7 +194,7 @@ static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt
 }
 
 
-void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth){
+esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth){
 	stepper->stepPin = step_pin;
     stepper->dirPin = dir_pin;
 
@@ -204,7 +204,10 @@ void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, u
         .low_limit = INT16_MIN,
         .flags.accum_count = true, // accumulate the counter value
     };
-    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &stepper->pcntUnit));
+    esp_err_t pcnt_err = pcnt_new_unit(&unit_config, &stepper->pcntUnit);
+    if (pcnt_err != ESP_OK) {
+        return pcnt_err;
+    }
 
     // PCNT channel configuration
     pcnt_chan_config_t chan_config = {
@@ -284,6 +287,7 @@ void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, u
     // Запуск таймера
     ESP_ERROR_CHECK(mcpwm_timer_enable(stepper->mcpwmTimer));
     ESP_LOGD(TAG, "init speedStepper end");
+    return ESP_OK;
 }
 
 

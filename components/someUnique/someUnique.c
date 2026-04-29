@@ -35,208 +35,6 @@ static const char *TAG = "SOME_UNIQUE";
 
 
 
-void buttonMatrix_task(void* arg) {
-    int slot_num = *(int*)arg;
-
-    int outSlots[5] = {0};
-    int outSlotsCount = 0;
-
-    if (strstr(me_config.slot_options[slot_num], "outSlots:") != NULL) {
-        char *strPtr=strstr(me_config.slot_options[slot_num], "outSlots:")+strlen("outSlots:");
-        char strDup[strlen(strPtr)];
-        strcpy(strDup, strPtr);
-        char* rest = NULL;
-        char* payload = strtok_r(strDup, ",", &rest);
-        
-        if (payload != NULL) {
-            char* token = strtok(payload, " ");
-            while (token != NULL && outSlotsCount < 5) {
-                outSlots[outSlotsCount++] = atoi(token);
-                token = strtok(NULL, " ");
-            }
-        }
-    }else{
-        outSlots[0]=slot_num;
-        outSlotsCount=1;
-    }
-    uint8_t out_pin[outSlotsCount+3];
-    for(int i=0; i<outSlotsCount; i++){
-        out_pin[i*3] = SLOTS_PIN_MAP[outSlots[i]][0];
-        out_pin[i*3+1] = SLOTS_PIN_MAP[outSlots[i]][1];
-        out_pin[i*3+2] = SLOTS_PIN_MAP[outSlots[i]][2];
-    }
-    
-
-    int inSlots[5] = {0};
-    int inSlotsCount = 0;
-    if (strstr(me_config.slot_options[slot_num], "inSlots:") != NULL) {
-        char *strPtr=strstr(me_config.slot_options[slot_num], "inSlots:")+strlen("inSlots:");
-        char strDup[strlen(strPtr)];
-        strcpy(strDup, strPtr);
-        char* rest = NULL;
-        char* payload = strtok_r(strDup, ",", &rest);
-        
-        if (payload != NULL) {
-            char* token = strtok(payload, " ");
-            while (token != NULL && inSlotsCount < 5) {
-                inSlots[inSlotsCount++] = atoi(token);
-                token = strtok(NULL, " ");
-            }
-        }
-    }else{
-        inSlots[0]=slot_num+1;
-        inSlotsCount=1;
-    }
-    uint8_t in_pin[inSlotsCount+3];
-    for(int i=0; i<inSlotsCount; i++){
-        in_pin[i*3] = SLOTS_PIN_MAP[inSlots[i]][0];
-        in_pin[i*3+1] = SLOTS_PIN_MAP[inSlots[i]][1];
-        in_pin[i*3+2] = SLOTS_PIN_MAP[inSlots[i]][2];
-    }
-
-    for(int x=0; x<outSlotsCount*3; x++){
-        for(int y=0; y<inSlotsCount*3; y++){
-            if(out_pin[x]==in_pin[y]){
-                char errorString[50];
-                sprintf(errorString,  "buttonMatrix_%d wrong slots config", slot_num);
-                ESP_LOGE(TAG, "%s", errorString);
-                mblog(E, errorString);
-                vTaskDelete(NULL);
-            }
-        }
-    }
-
-    for(int i=0; i<(outSlotsCount*3); i++){
-        gpio_config_t io_conf = {};
-        io_conf.intr_type = GPIO_INTR_DISABLE;
-        io_conf.mode = GPIO_MODE_OUTPUT;
-        io_conf.pin_bit_mask = 1ULL<<out_pin[i];
-        io_conf.pull_down_en = 0;
-        io_conf.pull_up_en = 0;
-        esp_err_t ret = gpio_config(&io_conf);
-        if(ret!= ESP_OK){
-            ESP_LOGE(TAG, "gpio_config failed");
-        }
-        ESP_LOGD(TAG, "Set output pin: %d", out_pin[i]);
-    }
-
-    for(int i=0; i<(inSlotsCount*3); i++){
-        gpio_config_t io_conf = {};
-        io_conf.intr_type = GPIO_INTR_DISABLE;
-        io_conf.mode = GPIO_MODE_INPUT;
-        io_conf.pin_bit_mask = 1ULL<<in_pin[i];
-        io_conf.pull_down_en = 1;
-        io_conf.pull_up_en = 0;
-        esp_err_t ret = gpio_config(&io_conf);
-        if(ret!= ESP_OK){
-            ESP_LOGE(TAG, "gpio_config failed");
-        }
-        ESP_LOGD(TAG, "Set input pin: %d", in_pin[i]);
-    }
-
-    char charMap[(inSlotsCount*3*outSlotsCount*3)+1];
-    memset(charMap, 0, sizeof(charMap));
-    if (strstr(me_config.slot_options[slot_num], "mapping:") != NULL) {
-        char *strPtr=strstr(me_config.slot_options[slot_num], "mapping:")+strlen("mapping:");
-        if(strstr(strPtr, ",")!=NULL){
-            char* pt = strchr(strPtr, ',');
-            pt[0] = "\0";
-        }
-        int len=strlen(strPtr);
-        if(len>(inSlotsCount*3*outSlotsCount*3)){
-            len=inSlotsCount*3*outSlotsCount*3;
-        }
-        strPtr[len]='\0';
-        strcpy(charMap, strPtr);
-    }
-    ESP_LOGD(TAG, "mapping:%s", charMap);
-
-
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/buttonMatrix_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "dialerTopic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/buttonMatrix_0")+3];
-		sprintf(t_str, "%s/buttonMatrix_%d",me_config.deviceName, slot_num);
-		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart buttonMatrixTopic:%s", me_state.trigger_topic_list[slot_num]);
-	}
-
-    for(int i=0; i<(outSlotsCount*3); i++){
-        gpio_set_level(out_pin[i],0);
-    }
-
-
-    int countMatrix[outSlotsCount*3][inSlotsCount*3];
-    memset(countMatrix, 0, sizeof(countMatrix));
-    uint8_t resMatrix[outSlotsCount*3][inSlotsCount*3];
-    memset(resMatrix, 0, sizeof(resMatrix));
-    uint8_t _resMatrix[outSlotsCount*3][inSlotsCount*3];
-    memset(_resMatrix, 0, sizeof(_resMatrix));
-    uint8_t maxCount=6;
-
-    waitForWorkPermit(slot_num);
-
-    while (1){
-        vTaskDelay(15/portTICK_PERIOD_MS);
-
-        for(int r=0; r<(outSlotsCount*3); r++){
-            // for(int a=0; a<(outSlotsCount*3); a++){
-            //      gpio_set_level(out_pin[a],0);
-            // }
-            // vTaskDelay(1/portTICK_PERIOD_MS);
-            gpio_set_level(out_pin[r],1);
-            vTaskDelay(1/portTICK_PERIOD_MS);
-            for(int c=0; c<(inSlotsCount*3); c++){
-                if(gpio_get_level(in_pin[c])==1){
-                    countMatrix[r][c]+=1;
-                    if(countMatrix[r][c]>maxCount) countMatrix[r][c]=maxCount;
-                }else{
-                    countMatrix[r][c]-=1;
-                    if(countMatrix[r][c]<0) countMatrix[r][c]=0;
-                }
-
-                if(countMatrix[r][c]>(maxCount/2)+1){ 
-                    resMatrix[r][c]=1;
-                }else if(countMatrix[r][c]<(maxCount/2)-1) resMatrix[r][c]=0;
-            }
-            gpio_set_level(out_pin[r],0);
-            //vTaskDelay(1/portTICK_PERIOD_MS);
-        }
-
-        if(memcmp(resMatrix, _resMatrix, sizeof(resMatrix))!=0){
-            for(int r=0; r<(outSlotsCount*3); r++){
-                for(int c=0; c<(inSlotsCount*3); c++){
-                    //printf("%d ", resMatrix[r][c]);
-                    _resMatrix[r][c]=resMatrix[r][c];
-                    if(resMatrix[r][c]==1){
-                        ESP_LOGD(TAG, "ButtonMatrix4_task: slot:%d, row:%d, col:%d", slot_num, r, c);
-                        char str[2];
-                        memset(str, 0, strlen(str));
-				        sprintf(str, "%c",charMap[r*inSlotsCount*3+c]);
-                        ESP_LOGD(TAG, "report:%s", str);
-                        report(str, slot_num);
-                    }
-                }
-                //printf("\n");
-            }           
-        }
-
-    }
-    
-
-}
-
-void start_buttonMatrix_task(int slot_num) {
-    uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(buttonMatrix_task, "buttonMatrix_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-12, NULL);
-    ESP_LOGD(TAG, "buttonMatrix_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-}
-
-
-
 //---------------------UART logger----------------
 static int uart_read(uint8_t UART_NUM, uint8_t *data, const int length)
 {
@@ -252,7 +50,7 @@ static int uart_read(uint8_t UART_NUM, uint8_t *data, const int length)
 }
 
 void uartLogger_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     int uart_num = UART_NUM_1; // Начинаем с минимального порта
     while (uart_is_driver_installed(uart_num)) {
@@ -325,10 +123,9 @@ void uartLogger_task(void* arg) {
 
 void start_uartLogger_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "uartLogger_task_%d", slot_num);
-	xTaskCreatePinnedToCore(uartLogger_task, tmpString, 1024*5, &t_slot_num,12, NULL, 1);
+	xTaskCreatePinnedToCore(uartLogger_task, tmpString, 1024*5, (void*)(intptr_t)slot_num,12, NULL, 1);
 
 	ESP_LOGD(TAG,"uartLogger_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -347,7 +144,7 @@ int hex_to_dec(char high, char low) {
 }
 
 void academKick_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     int uart_num = UART_NUM_1; // Начинаем с минимального порта
     while (uart_is_driver_installed(uart_num)) {
@@ -426,14 +223,14 @@ void academKick_task(void* arg) {
 
 void start_academKick_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(academKick_task, "academKick_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
+    xTaskCreate(academKick_task, "academKick_task", 1024 * 4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-18, NULL);
     ESP_LOGD(TAG, "academKick_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 //-------------------academia-kick---------------------
 
 void volnaKolya_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
@@ -568,14 +365,14 @@ void volnaKolya_task(void* arg) {
 
 void start_volnaKolya_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(volnaKolya_task, "volnaKolya_task", 1024 * 4, &slot_num, configMAX_PRIORITIES-18, NULL);
+    xTaskCreate(volnaKolya_task, "volnaKolya_task", 1024 * 4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-18, NULL);
     ESP_LOGD(TAG, "volnaKolya_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 //---------------------furbyEye----------------
 
 void furbyEye_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     int uart_num = UART_NUM_1; // Начинаем с минимального порта
     while (uart_is_driver_installed(uart_num)) {
@@ -655,10 +452,9 @@ void furbyEye_task(void* arg) {
 
 void start_furbyEye_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "furbyEye_task_%d", slot_num);
-	xTaskCreatePinnedToCore(furbyEye_task, tmpString, 1024*8, &t_slot_num,12, NULL, 1);
+	xTaskCreatePinnedToCore(furbyEye_task, tmpString, 1024*8, (void*)(intptr_t)slot_num,12, NULL, 1);
 
 	ESP_LOGD(TAG,"furbyEye_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -808,7 +604,7 @@ char** scan_jpg_files(const char* mount_point, int* file_count) {
 
 
 void st7789_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
@@ -830,15 +626,18 @@ void st7789_task(void* arg) {
 
     int file_count = 0;
     char** jpg_files = scan_jpg_files("/sdcard", &file_count);
-    
-    
+
+    if (jpg_files == NULL || file_count <= 0) {
+        ESP_LOGE(TAG, "No JPG files found on SD for st7789 slot:%d, task terminated", slot_num);
+        vTaskDelete(NULL);
+        return;
+    }
+
     int val=0;
-    JPEGTest(&screen, jpg_files[val], 240, 240); 
+    JPEGTest(&screen, jpg_files[val], 240, 240);
     waitForWorkPermit(slot_num);
-    
-   
-    
-    TickType_t lastWakeTime = xTaskGetTickCount(); 
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
     while(1){
         command_message_t temp_msg;
         command_message_t msg;
@@ -856,11 +655,9 @@ void st7789_task(void* arg) {
             cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
             if(strstr(cmd, "setPic")!=NULL){
                 val = atoi(payload);
-                if (val>file_count-1){
-                    val = file_count-1;
-                }
+                if (val < 0) val = 0;
+                if (val > file_count-1) val = file_count-1;
                 JPEGTest(&screen, jpg_files[val], 240, 240);
-
             }
         }
         vTaskDelayUntil(&lastWakeTime, 10);
@@ -869,10 +666,9 @@ void st7789_task(void* arg) {
 
 void start_st7789_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "st7789_task_%d", slot_num);
-	xTaskCreatePinnedToCore(st7789_task, tmpString, 1024*8, &t_slot_num,12, NULL, 1);
+	xTaskCreatePinnedToCore(st7789_task, tmpString, 1024*8, (void*)(intptr_t)slot_num,12, NULL, 1);
 
 	ESP_LOGD(TAG,"st7789_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

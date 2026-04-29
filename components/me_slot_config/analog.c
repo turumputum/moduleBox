@@ -175,12 +175,12 @@ void configure_analog(analog_context_t *ctx, int slot_num)
 
 void analog_task(void *arg)
 {
-    int slot_num = *(int *)arg;
+    int slot_num = (int)(intptr_t)arg;
     uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
 
     if (slot_num == 1) {
-        ESP_LOGE(TAG, "S%d: no ADC on SLOT_1, use another slot", slot_num);
-        mblog(E, "no ADC on SLOT_1, use another slot");
+        ESP_LOGW(TAG, "S%d: no ADC on SLOT_1, use another slot", slot_num);
+        mblog(W, "no ADC on SLOT_1, use another slot");
         vTaskDelay(pdMS_TO_TICKS(200));
         vTaskDelete(NULL);
     }
@@ -367,11 +367,10 @@ void analog_task(void *arg)
 void start_analog_task(int slot_num)
 {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
 
     char taskName[32];
     sprintf(taskName, "analog_%d", slot_num);
-    xTaskCreatePinnedToCore(analog_task, taskName, 1024 * 4, &t_slot_num, 12, NULL, 1);
+    xTaskCreatePinnedToCore(analog_task, taskName, 1024 * 4, (void*)(intptr_t)slot_num, 12, NULL, 1);
 
     ESP_LOGD(TAG, "S%d: analog_task started, heap usage: %lu free: %u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

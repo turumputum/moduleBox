@@ -36,7 +36,7 @@ static const char *TAG = "SWIPER";
 
 
 void swiper_task(void *arg) {
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	//---init hardware---
 	uint8_t sda_pin = SLOTS_PIN_MAP[slot_num][0];
@@ -123,10 +123,9 @@ void swiper_task(void *arg) {
 
 void start_swiper_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_swiper_%d", slot_num);
-	xTaskCreatePinnedToCore(swiper_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-12, NULL, 1);
+	xTaskCreatePinnedToCore(swiper_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-12, NULL, 1);
 
 	ESP_LOGD(TAG,"swiper task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

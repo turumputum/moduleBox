@@ -348,7 +348,7 @@ void button_task(void *arg)
 	PBUTTONLEDCONFIG 		c 	= calloc(1, sizeof(BUTTONLEDCONFIG));
 	TickType_t 			now;
 
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
 
 	c->isrCfgs[0].slot_num 	= slot_num;
@@ -531,10 +531,9 @@ void button_task(void *arg)
 
 void start_button_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_button_%d", slot_num);
-	xTaskCreatePinnedToCore(button_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
+	xTaskCreatePinnedToCore(button_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-5, NULL, 0);
 
 	ESP_LOGD(TAG,"Button task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -561,7 +560,7 @@ void checkBright(int16_t *currentBright, uint8_t targetBright, uint8_t fade_incr
 void led_task(void *arg){
 	BUTTONLEDCONFIG c;
     uint32_t startTick = xTaskGetTickCount();
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
     //uint8_t state = 0;
     STDCOMMAND_PARAMS       params = { 0 };
@@ -670,7 +669,7 @@ void led_task(void *arg){
 
 void start_led_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(led_task, "led_task", 1024*4, &slot_num,12, NULL);
+    xTaskCreate(led_task, "led_task", 1024*4, (void*)(intptr_t)slot_num,12, NULL);
 	ESP_LOGD(TAG,"led_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 // const char * get_manifest_buttonLed()

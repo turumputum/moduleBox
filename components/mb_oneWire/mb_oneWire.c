@@ -24,7 +24,7 @@ extern stateStruct me_state;
 static const char *TAG = "ONE_WIRE";
 
 void ds18b20_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     uint8_t pin_DS18B20 = SLOTS_PIN_MAP[slot_num][0];
     onewire_bus_handle_t bus;
     onewire_bus_config_t bus_config = {
@@ -169,10 +169,9 @@ void ds18b20_task(void* arg) {
 
 void start_ds18b20_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "ds18b20_task_%d", slot_num);
-	xTaskCreatePinnedToCore(ds18b20_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+	xTaskCreatePinnedToCore(ds18b20_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "ds18b20_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

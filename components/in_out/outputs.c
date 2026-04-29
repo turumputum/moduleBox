@@ -164,7 +164,7 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
 
 static void out_2ch_task(void *arg) {
     
-    int slot_num =  *(int*)arg;
+    int slot_num =  (int)(intptr_t)arg;
 
     out_context_t ctx;
     configure_out_2ch(&ctx, slot_num);
@@ -257,7 +257,7 @@ void start_out_2ch_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
     char tmpString[60];
     sprintf(tmpString, "task_out_2ch_%d", slot_num);
-    xTaskCreatePinnedToCore(out_2ch_task, tmpString, 1024 * 5, &slot_num, 12, NULL, 1);
+    xTaskCreatePinnedToCore(out_2ch_task, tmpString, 1024 * 5, (void*)(intptr_t)slot_num, 12, NULL, 1);
 
     ESP_LOGD(TAG, "Out_2ch task created for slot: %d Heap usage: %lu free heap:%u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
@@ -359,7 +359,7 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
 
 static void out_3ch_task(void *arg) {
     
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     out_context_t ctx;
     configure_out_3ch(&ctx, slot_num);
@@ -471,7 +471,7 @@ void start_out_3ch_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
     char tmpString[60];
     sprintf(tmpString, "task_out_3ch_%d", slot_num);
-    xTaskCreatePinnedToCore(out_3ch_task, tmpString, 1024 * 5, &slot_num, 12, NULL, 1);
+    xTaskCreatePinnedToCore(out_3ch_task, tmpString, 1024 * 5, (void*)(intptr_t)slot_num, 12, NULL, 1);
 
     ESP_LOGD(TAG, "Out_3ch task created for slot: %d Heap usage: %lu free heap:%u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
@@ -551,7 +551,7 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
 
 static void relay_task(void *arg) {
 
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     relay_context_t ctx;
     configure_relay(&ctx, slot_num);
@@ -617,7 +617,7 @@ void start_relay_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
     char tmpString[60];
     sprintf(tmpString, "task_relay_%d", slot_num);
-    xTaskCreatePinnedToCore(relay_task, tmpString, 1024 * 4, &slot_num, 12, NULL, 1);
+    xTaskCreatePinnedToCore(relay_task, tmpString, 1024 * 4, (void*)(intptr_t)slot_num, 12, NULL, 1);
 
     ESP_LOGD(TAG, "Relay task created for slot: %d Heap usage: %lu free heap:%u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

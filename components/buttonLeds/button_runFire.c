@@ -361,7 +361,7 @@ void update_runFire(PLEDCONFIG c, uint8_t *current_pixels, uint8_t *target_pixel
 
 void button_runFire_task(void *arg)
 {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
     setup_button_hw(slot_num, ctx);
     configure_button_runFire(ctx, slot_num);
@@ -424,7 +424,7 @@ void button_runFire_task(void *arg)
 void start_button_runFire_task(int slot_num) {
     char tmpString[60];
     sprintf(tmpString, "task_button_runFire_%d", slot_num);
-    xTaskCreate(button_runFire_task, tmpString, 1024*6, &slot_num, configMAX_PRIORITIES-5, NULL);
+    xTaskCreate(button_runFire_task, tmpString, 1024*6, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-5, NULL);
 }
 
 const char * get_manifest_button_runFire()

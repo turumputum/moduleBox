@@ -329,7 +329,7 @@ void update_led_ring(PLEDCONFIG c, uint8_t *current_pixels, uint8_t *target_pixe
 
 void button_ledRing_task(void *arg)
 {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
     setup_button_hw(slot_num, ctx);
     configure_button_ledRing(ctx, slot_num);
@@ -406,7 +406,7 @@ void button_ledRing_task(void *arg)
 void start_button_ledRing_task(int slot_num) {
     char tmpString[60];
     sprintf(tmpString, "task_button_ledRing_%d", slot_num);
-    xTaskCreate(button_ledRing_task, tmpString, 1024*4, &slot_num, configMAX_PRIORITIES-5, NULL);
+    xTaskCreate(button_ledRing_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-5, NULL);
 }
 
 const char * get_manifest_button_ledRing()

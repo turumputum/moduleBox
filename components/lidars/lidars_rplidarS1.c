@@ -259,7 +259,7 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
 // ---------------------------------------------------------------------------
 
 void rplidarS1_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     // --- Find free UART ---
     int uart_num = UART_NUM_1;
@@ -447,7 +447,7 @@ void rplidarS1_task(void* arg) {
 
 void start_rplidarS1_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(rplidarS1_task, "rplidarS1_task", 1024 * 5, &slot_num, 5, NULL);
+    xTaskCreate(rplidarS1_task, "rplidarS1_task", 1024 * 5, (void*)(intptr_t)slot_num, 5, NULL);
     ESP_LOGD(TAG, "rplidarS1_task init ok: %d Heap usage: %lu free heap:%u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

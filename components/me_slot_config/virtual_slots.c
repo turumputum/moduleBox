@@ -30,7 +30,7 @@
 
 // //-----------------------------------------startUp--------------------------------
 // void startup_task(void *arg) {
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     int delay = 50; // 
 //     if (strstr(me_config.slot_options[slot_num], "delay") != NULL) {
@@ -69,7 +69,7 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "startup_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(startup_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+// 	xTaskCreatePinnedToCore(startup_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
 //     ESP_LOGD(TAG, "startup_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
@@ -148,7 +148,7 @@
 // }
 
 // void counter_task(void *arg) {
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     int32_t counter = 0; //
 
@@ -226,7 +226,7 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "counter_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(counter_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+// 	xTaskCreatePinnedToCore(counter_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
 //     ESP_LOGD(TAG, "counter_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
@@ -296,7 +296,7 @@
 // }
 
 // void random_task(void *arg) {
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
@@ -337,7 +337,7 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "random_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(random_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+// 	xTaskCreatePinnedToCore(random_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
 //     ESP_LOGD(TAG, "random_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
@@ -402,7 +402,7 @@
 // }
 
 // void timer_task(void *arg) {
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 //     STDCOMMAND_PARAMS       params = { 0 };
 // 	params.skipTypeChecking = true;
     
@@ -478,13 +478,13 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "timer_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(timer_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+// 	xTaskCreatePinnedToCore(timer_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
 //     ESP_LOGD(TAG, "timer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
 // //---------------------------------FLYWHEEL--------------------------------
 // void flywheel_task(void *arg){
-// 	int slot_num = *(int*) arg;
+// 	int slot_num = (int)(intptr_t)arg;
 
 // 	me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
 
@@ -610,7 +610,7 @@
 // 	int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "flywheel_task_%d", slot_num);
-// 	xTaskCreate(flywheel_task, tmpString, 1024*4, &t_slot_num,12, NULL);
+// 	xTaskCreate(flywheel_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,12, NULL);
 
 // 	ESP_LOGD(TAG,"flywheel_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
@@ -624,7 +624,7 @@
 // }
 
 // void watchdog_task(void *arg) {
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
 //     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
@@ -693,7 +693,7 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "watchdog_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(watchdog_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+// 	xTaskCreatePinnedToCore(watchdog_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
 //     ESP_LOGD(TAG, "watchdog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
@@ -767,7 +767,7 @@
 // void whitelist_task(void *arg) {
    
 
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
@@ -840,7 +840,7 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "whitelist_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(whitelist_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 20, NULL, 0);
+// 	xTaskCreatePinnedToCore(whitelist_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 20, NULL, 0);
 //     ESP_LOGD(TAG, "whitelist_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
@@ -851,7 +851,7 @@
 // void collector_task(void *arg) {
 //     #define MAX_LINE_LENGTH 256
 
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
@@ -942,7 +942,7 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "collector_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(collector_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 20, NULL, 0);
+// 	xTaskCreatePinnedToCore(collector_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 20, NULL, 0);
 //     ESP_LOGD(TAG, "collector_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
@@ -950,7 +950,7 @@
 // //------------------------SCALER-------------------------
 
 // void scaler_task(void* arg) {
-//     int slot_num = *(int*)arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
 
@@ -1043,13 +1043,13 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "scaler_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(scaler_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+// 	xTaskCreatePinnedToCore(scaler_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 1);
 //     ESP_LOGD(TAG, "scaler_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
 // //------------------------tankControl----------------------
 // void tankControl_task(void* arg) {
-//     int slot_num = *(int*)arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
 
@@ -1162,14 +1162,14 @@
 //     int t_slot_num = slot_num;
 // 	char tmpString[60];
 // 	sprintf(tmpString, "tankControl_task_%d", slot_num);
-// 	xTaskCreatePinnedToCore(tankControl_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+// 	xTaskCreatePinnedToCore(tankControl_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 1);
 //     ESP_LOGD(TAG, "tankControl_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 
 
 // //---------------------------------STEPPER_conductor---------------------------------
 // void stepper_conductor_task(void *arg) {
-//     int slot_num = *(int*) arg;
+//     int slot_num = (int)(intptr_t)arg;
 
 //     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
@@ -1327,7 +1327,7 @@
 //     int t_slot_num = slot_num;
 //     char tmpString[60];
 //     sprintf(tmpString, "stepper_conductor_task_%d", slot_num);
-//     xTaskCreatePinnedToCore(stepper_conductor_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+//     xTaskCreatePinnedToCore(stepper_conductor_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 0);
 //     ESP_LOGD(TAG, "stepper_conductor_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 // }
 

@@ -219,7 +219,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 // =============================================================================
 
 static void in_out_task(void *arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     // Create interrupt queue for input
     me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
@@ -359,10 +359,9 @@ static void in_out_task(void *arg) {
 
 void start_in_out_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "task_in_out_%d", slot_num);
-    xTaskCreatePinnedToCore(in_out_task, tmpString, 1024 * 4, &t_slot_num, 12, NULL, 1);
+    xTaskCreatePinnedToCore(in_out_task, tmpString, 1024 * 4, (void*)(intptr_t)slot_num, 12, NULL, 1);
 
     ESP_LOGD(TAG, "Unified IN/OUT task created for slot: %d Heap usage: %lu free heap:%u", 
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

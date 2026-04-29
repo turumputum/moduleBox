@@ -259,11 +259,12 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
 	return ESP_OK;
 }
 
-/* Модуль звук через сеть. 
+/* Модуль звук через сеть.
 - Поддерживает как unicast, так и multicast режимы (настраивается через конфиг)
 - Читает аудио данные из RTP потока и выводит на I2S
 - Поддерживает горячее переключение multicast адреса на лету через команду setMulticastAddress
 - задержка порядка 70мс
+slots: 0-0
 */
 void configure_audioLAN(PRTPCONFIG c, int slot_num)
 {
@@ -320,7 +321,7 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     ESP_LOGD(TAG, "[LANplayer_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
 
     /* Размер jitter-буфера в миллисекундах
-    - по умолчанию 20 мс
+    - по умолчанию 40 мс
 	*/
 	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 40, 20, 200);
     ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
@@ -328,13 +329,13 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         /* Топик 
         */
-        char * custom_topic = get_option_string_val(slot_num, "topic", "/audioLAN_0");
+        char * custom_topic = get_option_string_val(slot_num, "topic", "/audioStream_0");
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/audioLAN_0")+3];
-		sprintf(t_str, "%s/audioLAN_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/audioStream_0")+3];
+		sprintf(t_str, "%s/audioStream_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
         me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -369,7 +370,7 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 }
 
 void audioLAN_task(void *arg){
-	int slot_num = *(int *)arg;
+	int slot_num = (int)(intptr_t)arg;
     if(slot_num!=0){
         char tmpStr[100];
 		sprintf(tmpStr, "Wrong slot, only for SLOT_0, task terminated");
@@ -519,6 +520,18 @@ void audioLAN_task(void *arg){
 
                             if (switch_result == ESP_OK) {
                                 ESP_LOGI(TAG, "[audioLAN_%d] Hot-switched to %s", slot_num, new_addr);
+
+                                /* Flush downstream — rtp_stream's jbuf was cleared
+                                 * inside switch_multicast_address, but i2s_stream_writer
+                                 * still holds residual PCM (out_rb_size=2048 = ~10ms +
+                                 * DMA buffer). Without this, the tail of the previous
+                                 * stream plays out before the new stream starts —
+                                 * audible glitch. I2S DMA cannot be flushed and will
+                                 * drain naturally (residual click on switch). */
+                                if (c->i2s_stream_writer) {
+                                    audio_element_reset_input_ringbuf(c->i2s_stream_writer);
+                                }
+
                                 if (c->multicastAddress) free(c->multicastAddress);
                                 c->multicastAddress = new_addr;
                                 if (c->host) free(c->host);
@@ -561,31 +574,17 @@ void audioLAN_task(void *arg){
         }
 
         audio_event_iface_msg_t msg;
-        esp_err_t ret = audio_event_iface_listen(c->evt, &msg, 120);
-        if (ret != ESP_OK) {
-            //ESP_LOGE(TAG, "[ * ] Event interface error : %d cmd:%d", ret, msg.cmd);
-            continue;
-        }
-
-        // /* Stop when the last pipeline element (i2s_stream_writer in this case) receives stop event */
-        // if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT && msg.source == (void *) i2s_stream_writer
-        //     && msg.cmd == AEL_MSG_CMD_REPORT_STATUS
-        //     && (((int)msg.data == AEL_STATUS_STATE_STOPPED) || ((int)msg.data == AEL_STATUS_STATE_FINISHED))) {
-        //     ESP_LOGW(TAG, "[ * ] Stop event received");
-        //  //   break;
-        // }
+        audio_event_iface_listen(c->evt, &msg, 120);
     }
-
 }
 
 void start_audioLAN_task(int slot_num){
 
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
     char tmpString[60];
 	sprintf(tmpString, "task_audioLAN_%d", slot_num);
-	//xTaskCreatePinnedToCore(button_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
-	xTaskCreate(audioLAN_task, tmpString, 1024 * 16, &t_slot_num, configMAX_PRIORITIES - 20, NULL);
+	//xTaskCreatePinnedToCore(button_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-5, NULL, 0);
+	xTaskCreate(audioLAN_task, tmpString, 1024 * 16, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 20, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "audioLAN_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

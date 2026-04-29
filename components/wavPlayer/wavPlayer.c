@@ -240,7 +240,7 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 void wavplayer_task(void *arg) {
     PWAVPLAYERCONFIG c = calloc(1, sizeof(WAVPLAYERCONFIG));
 	
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
     STDCOMMAND_PARAMS       params = { 0 };
@@ -424,11 +424,10 @@ void wavplayer_task(void *arg) {
 
 void wavPlayerInit(uint8_t slot_num){
 	//uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 
 	sprintf(tmpString, "task_wavplayer_%d", slot_num);
-	xTaskCreatePinnedToCore(wavplayer_task, tmpString, 1024*8, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
+	xTaskCreatePinnedToCore(wavplayer_task, tmpString, 1024*8, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-5, NULL, 0);
 }
 
 void wavPlayerDeinit(PWAVPLAYERCONFIG c) {

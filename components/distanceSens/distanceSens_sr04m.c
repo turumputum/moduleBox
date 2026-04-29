@@ -98,7 +98,7 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
         distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 4500);
         if (distanceSens->threshold <= 0) {
-            ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
+            ESP_LOGW(TAG, "threshold not set, using default. Slot:%d", slot_num);
             distanceSens->threshold = 0;
         } else {
             ESP_LOGD(TAG, "threshold:%d. Slot:%d", distanceSens->threshold, slot_num);
@@ -188,7 +188,7 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 }
 
 void sr04m_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     // --- Find free UART ---
     int uart_num = UART_NUM_1;
@@ -268,7 +268,7 @@ void sr04m_task(void* arg) {
 
 void start_sr04m_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(sr04m_task, "sr04m_task", 1024 * 4, &slot_num, 5, NULL);
+    xTaskCreate(sr04m_task, "sr04m_task", 1024 * 4, (void*)(intptr_t)slot_num, 5, NULL);
     ESP_LOGD(TAG, "sr04m_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

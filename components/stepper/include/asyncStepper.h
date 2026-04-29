@@ -136,7 +136,7 @@ typedef struct {
   .state = STOP,\
 }
 
-void stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);
+esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);
 void stepper_getCurrentPos(stepper_t *stepper);
 void stepper_moveTo(stepper_t *stepper, int32_t pos);
 void stepper_speedUpdate(stepper_t *stepper, int32_t period);

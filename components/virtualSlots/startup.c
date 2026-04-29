@@ -66,7 +66,7 @@ void configure_startup(PSTARTUP_CONFIG ch, int slot_num)
 }
 
 void startup_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
@@ -85,10 +85,9 @@ void startup_task(void *arg) {
 
 void start_startup_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "startup_task_%d", slot_num);
-    xTaskCreatePinnedToCore(startup_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    xTaskCreatePinnedToCore(startup_task, tmpString, 1024*4, (void *)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "startup_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

@@ -87,6 +87,9 @@ typedef enum
 
 /*
     Модуль управления шаговым двигателем сигналами step/dir
+    Использует PCNT периферию (ESP32-S3 имеет всего 4 PCNT unit'а суммарно
+    на encoderInc + tachometer + stepper).
+    slots: 0-3
 */
 void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     stdcommand_init(&c->cmds, slot_num);
@@ -168,9 +171,9 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
     /* Скорость базирование
     - шагов в секунду
+	- по умолчанию maxSpeed/4
 	*/
-    c->homingSpeed = c->maxSpeed / 4;
-	c->homingSpeed =  get_option_int_val(slot_num, "homingSpeed", "step/sek", 100, 1, 100);
+	c->homingSpeed =  get_option_int_val(slot_num, "homingSpeed", "step/sek", c->maxSpeed / 4, 1, UINT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingSpeed:%ld", slot_num, c->homingSpeed);
 
     /* Максимальное значение положения
@@ -279,7 +282,7 @@ void stepper_task(void *arg){
     STDCOMMAND_PARAMS       params = { 0 };
 
     char str[255];
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 	
     configure_stepper(c, slot_num);
     c->homingSensorState = -1;
@@ -293,7 +296,12 @@ void stepper_task(void *arg){
     stepper.accel = c->accel;
     stepper.maxSpeed = c->maxSpeed;
 
-	stepper_init(&stepper, stepper.stepPin, stepper.dirPin, 10);
+	esp_err_t step_err = stepper_init(&stepper, stepper.stepPin, stepper.dirPin, 10);
+	if (step_err != ESP_OK) {
+		ESP_LOGW(TAG, "PCNT unit limit reached (slot:%d), task terminated. err:%d",
+		         slot_num, step_err);
+		vTaskDelete(NULL);
+	}
     
     int32_t prevState=0;
     int32_t prevPos=0;
@@ -467,11 +475,10 @@ void stepper_task(void *arg){
 
 void start_stepper_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_stepper_%d", slot_num);
-	//xTaskCreate(stepper_task, tmpString, 1024*12, &t_slot_num,configMAX_PRIORITIES, NULL);
-    xTaskCreatePinnedToCore(stepper_task, tmpString, 1024*12, &t_slot_num,configMAX_PRIORITIES-6, NULL,1);
+	//xTaskCreate(stepper_task, tmpString, 1024*12, (void*)(intptr_t)slot_num,configMAX_PRIORITIES, NULL);
+    xTaskCreatePinnedToCore(stepper_task, tmpString, 1024*12, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-6, NULL,1);
 
 	ESP_LOGD(TAG,"stepper task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

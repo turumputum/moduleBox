@@ -468,6 +468,30 @@ static esp_err_t _dispatch_event(audio_element_handle_t el, rtp_stream_t *tcp, v
 static void rtp_drain_task(void *arg);
 static void reorder_reset(rtp_stream_t *rtp);
 
+/* Common RTP/jbuf state reset shared by _rtp_open, switch_multicast_address
+ * and SSRC-change handler in drain task. NOTE: does NOT touch drift_rate_mpps —
+ * the receiver crystal does not change between switches/restarts, so the
+ * previous rate estimate is a better starting point than 0. _rtp_open clears
+ * it explicitly (first-time open has no prior estimate). */
+static void _rtp_full_reset(rtp_stream_t *rtp)
+{
+    rtp->jbuf.r_p   = 0;
+    rtp->jbuf.w_p   = 0;
+    rtp->jbuf.state = JBUF_IDLE;
+    if (rtp->reorder_data) {
+        for (int i = 0; i < REORDER_SLOTS; i++)
+            rtp->reorder_meta[i].occupied = false;
+    }
+    rtp->drift_initialized  = false;
+    rtp->sync_ready         = false;
+    rtp->sync_rtp_ts_start  = 0;
+    rtp->last_seq           = 0;
+    rtp->need_seq_seed      = true;
+    rtp->last_ssrc          = 0;
+    rtp->drift_window_valid = false;
+    rtp->correction_debt    = 0;
+}
+
 static esp_err_t _rtp_open(audio_element_handle_t self)
 {
     AUDIO_NULL_CHECK(TAG, self, return ESP_FAIL);
@@ -505,25 +529,18 @@ static esp_err_t _rtp_open(audio_element_handle_t self)
     }
     rtp->is_open = true;
     rtp->last_packet_time = esp_timer_get_time();
-    // Reset drift tracking on each new connection
-    rtp->drift_initialized = false;
-    rtp->sync_ready = false;
-    rtp->sync_rtp_ts_start = 0;
-    rtp->last_seq = 0;
-    rtp->need_seq_seed = true;
-    rtp->last_ssrc = 0;
-    rtp->last_overflow_log_us = 0;
 
-    /* Reset jitter buffer */
+    /* One-time init only on first open: zero the jbuf storage in case it
+     * holds garbage from allocation. Subsequent opens (after _close) skip
+     * this — JBUF_IDLE + r_p=w_p=0 already represents an empty buffer. */
     memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
-    rtp->jbuf.r_p = 0;
-    rtp->jbuf.w_p = 0;
-    rtp->jbuf.state = JBUF_IDLE;
-    /* Reset reorder buffer */
-    if (rtp->reorder_data) {
-        for (int i = 0; i < REORDER_SLOTS; i++)
-            rtp->reorder_meta[i].occupied = false;
-    }
+
+    _rtp_full_reset(rtp);
+
+    /* Open-only: clear drift_rate_mpps (no prior estimate exists on first
+     * open) and per-session log throttle. */
+    rtp->drift_rate_mpps      = 0;
+    rtp->last_overflow_log_us = 0;
 
     /* Start drain task — reads socket into jitter buffer independently.
      * Priority 24 = above audio element tasks — must never miss packets.
@@ -726,21 +743,8 @@ static void rtp_drain_task(void *arg)
             if (rtp->drift_initialized && ssrc != rtp->last_ssrc) {
                 ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
                          (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
-                rtp->drift_initialized  = false;
-                rtp->sync_ready         = false;
-                rtp->sync_rtp_ts_start  = 0;
-                rtp->last_seq           = 0;
-                rtp->need_seq_seed      = true;
-                rtp->drift_window_valid = false;
-                rtp->drift_rate_mpps    = 0;
-                rtp->correction_debt    = 0;
-                /* Flush jitter buffer */
-                jbuffer *jb = &rtp->jbuf;
-                memset(jb->buf, 0, jb->bufsize);
-                jb->r_p   = 0;
-                jb->w_p   = 0;
-                jb->state = JBUF_IDLE;
-                reorder_reset(rtp);
+                _rtp_full_reset(rtp);
+                /* drift_rate_mpps preserved — receiver crystal unchanged. */
                 ESP_LOGI(TAG, "jbuf flushed on SSRC change");
             }
             rtp->last_ssrc = ssrc;
@@ -783,7 +787,7 @@ static void rtp_drain_task(void *arg)
                     rtp->drift_correction_total = 0;
                     rtp->drift_start_us = now_us;
                     rtp->drift_window_valid = false;
-                    rtp->drift_rate_mpps = 0;
+                    /* drift_rate_mpps preserved — receiver crystal unchanged. */
                     rtp->correction_debt = 0;
                 }
                 rtp->last_rtp_ts = rtp_ts;
@@ -1044,13 +1048,16 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
 
         // Phase 1: Settle — wait for pipeline to stabilize
         if (!rtp->drift_window_valid && elapsed_us >= DRIFT_SETTLE_US) {
-            // Take first snapshot to start measurement window
+            // Take first snapshot to start measurement window.
+            // drift_rate_mpps NOT reset — preserves estimate from previous
+            // session/stream so corrections can apply during the 30s before
+            // first window completes. _rtp_open zeros it on first start.
             rtp->drift_window_raw = raw_drift;
             rtp->drift_window_start_us = now_us;
             rtp->drift_window_valid = true;
-            rtp->drift_rate_mpps = 0;
             rtp->correction_debt = 0;
-            ESP_LOGI(TAG, "[drift] Window started: raw=%ld", (long)raw_drift);
+            ESP_LOGD(TAG, "[drift] Window started: raw=%ld rate=%ld mpps (preserved)",
+                     (long)raw_drift, (long)rtp->drift_rate_mpps);
         }
 
         // Phase 2: Measure drift rate and apply corrections
@@ -1064,7 +1071,7 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
                 // delta_raw is in samples, window_elapsed_us is in microseconds
                 rtp->drift_rate_mpps = (int32_t)((int64_t)delta_raw * 1000000000LL / window_elapsed_us);
 
-                ESP_LOGI(TAG, "[drift] Window: delta_raw=%ld over %.1fs → rate=%ld mpps (%.2f samp/s)",
+                ESP_LOGD(TAG, "[drift] Window: delta_raw=%ld over %.1fs → rate=%ld mpps (%.2f samp/s)",
                          (long)delta_raw,
                          (float)window_elapsed_us / 1000000.0f,
                          (long)rtp->drift_rate_mpps,
@@ -1146,7 +1153,7 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
         // Log drift statistics every 10 seconds
         if ((now_us - rtp->last_drift_log_us) > 10000000) {
             int jbuf_fill = jbuf_count(&rtp->jbuf);
-            ESP_LOGI(TAG, "[drift] rtp_el=%lu exp=%lld raw=%ld rate=%ld.%03ld samp/s debt=%ld corr=%ld jbuf=%d/%d %s",
+            ESP_LOGD(TAG, "[drift] rtp_el=%lu exp=%lld raw=%ld rate=%ld.%03ld samp/s debt=%ld corr=%ld jbuf=%d/%d %s",
                      (unsigned long)rtp_elapsed,
                      expected_local_samples,
                      (long)raw_drift,
@@ -1342,21 +1349,15 @@ esp_err_t rtp_stream_switch_multicast_address(audio_element_handle_t self, const
         return ESP_FAIL;
     }
 
-    // Reset the buffer to clear any old data
-    jbuffer *jbuf = &rtp->jbuf;
-    memset(jbuf->buf, 0, jbuf->bufsize);
-    jbuf->r_p = 0;
-    jbuf->w_p = 0;              // start empty
-    jbuf->state = JBUF_IDLE;
-
-    // Reset drift tracking and sync for new stream
-    rtp->drift_initialized = false;
-    rtp->sync_ready = false;
-    rtp->last_ssrc = 0;
-    rtp->need_seq_seed = true;
-    rtp->drift_window_valid = false;
-    rtp->drift_rate_mpps = 0;
-    rtp->correction_debt = 0;
+    /* Reset jbuf and sync state via shared helper.
+     * memset of jbuf storage is intentionally NOT called here — JBUF_IDLE +
+     * r_p=w_p=0 is enough to mark empty, and skipping the bulk memset keeps
+     * the switch path fast (no PSRAM zero-fill of multi-KB buffer).
+     * drift_rate_mpps is preserved — receiver crystal didn't change, the
+     * existing rate estimate gives faster convergence than restarting
+     * from 0 (would otherwise cost ~45s of settle+window before any
+     * correction kicks in). */
+    _rtp_full_reset(rtp);
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;

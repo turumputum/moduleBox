@@ -58,7 +58,7 @@ static int read_dwin_message(uart_port_t uart_num, uint8_t *message_buffer) {
 }
 
 void dwinUart_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
     // if (slot_num > 1) {
@@ -161,12 +161,12 @@ void dwinUart_task(void* arg) {
 
 void start_dwinUart_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(dwinUart_task, "dwinUart_task", 1024 * 4, &slot_num, 5, NULL);
+    xTaskCreate(dwinUart_task, "dwinUart_task", 1024 * 4, (void*)(intptr_t)slot_num, 5, NULL);
     ESP_LOGD(TAG, "dwinUart_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
 void testUart_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
     // if (slot_num > 1) {
@@ -249,6 +249,6 @@ void testUart_task(void* arg) {
 
 void start_testUart_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(testUart_task, "dwinUart_task", 1024 * 4, &slot_num, 5, NULL);
+    xTaskCreate(testUart_task, "dwinUart_task", 1024 * 4, (void*)(intptr_t)slot_num, 5, NULL);
     ESP_LOGD(TAG, "dwinUart_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

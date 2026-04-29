@@ -57,9 +57,7 @@ void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
     }
     
     if (access(ch->filename, F_OK) != 0) {
-        char errorString[300];
-        sprintf(errorString, "whitelist file: %s, does not exist", ch->filename);
-        ESP_LOGE(TAG, "%s", errorString);
+        ESP_LOGW(TAG, "whitelist file: %s, does not exist, task terminated", ch->filename);
         vTaskDelay(200);
         vTaskDelete(NULL);
     }
@@ -93,7 +91,7 @@ void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
 }
 
 void whitelist_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
     WHITELIST_CONFIG c = {0};
@@ -111,19 +109,19 @@ void whitelist_task(void *arg) {
             case -1: // none
                 break;
 
-            case WHITELISTCMD_check: 
+            case WHITELISTCMD_check:
                 int count = 0;
                 if(cmd_arg != NULL){
                     FILE* file = fopen(c.filename, "r");
                     if (file == NULL) {
                         ESP_LOGE(TAG, "Failed to open file");
-                        goto end;
+                        break;
                     }
                     char line[MAX_LINE_LENGTH];
-                    
+
                     while (fgets(line, sizeof(line), file)) {
                         line[strcspn(line, "\n")] = '\0';
-                        
+
                         char* validValue = NULL;
                         char* command = NULL;
                         if(strstr(line, "->") != NULL){
@@ -133,7 +131,7 @@ void whitelist_task(void *arg) {
                             ESP_LOGW(TAG, "whitelist wrong format");
                             goto end;
                         }
-                        
+
                         if (strcmp(validValue, cmd_arg) == 0) {
                             char output_action[strlen(me_config.deviceName) + strlen(command) + 2];
                             sprintf(output_action, "%s/%s", me_config.deviceName, command);
@@ -143,7 +141,7 @@ void whitelist_task(void *arg) {
                     }
                     end:
                     fclose(file);
-                    
+
                     if(count == 0){
                         stdreport_i(c.report, 1);
                     }
@@ -155,10 +153,9 @@ void whitelist_task(void *arg) {
 
 void start_whitelist_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "whitelist_task_%d", slot_num);
-    xTaskCreatePinnedToCore(whitelist_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 20, NULL, 0);
+    xTaskCreatePinnedToCore(whitelist_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 20, NULL, 0);
     ESP_LOGD(TAG, "whitelist_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

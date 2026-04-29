@@ -125,13 +125,13 @@ void ppm_generator_stop(ppm_generator_t *ppm) {
 }
 
 void ppm_generator_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
     uint16_t inputMaxVal = 255;
 	if (strstr(me_config.slot_options[slot_num], "inputMaxVal") != NULL) {
-		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal", "", 10, 1, 4096);
+		inputMaxVal = get_option_int_val(slot_num, "inputMaxVal", "", 255, 1, 4096);
 		ESP_LOGD(TAG, "Set inputMaxVal:%d for slot:%d",inputMaxVal, slot_num);
 	}
 
@@ -148,13 +148,13 @@ void ppm_generator_task(void *arg) {
 
 	uint16_t minPulseWidth = 1000;
 	if (strstr(me_config.slot_options[slot_num], "minPulseWidth") != NULL) {
-		minPulseWidth = get_option_int_val(slot_num, "minPulseWidth", "", 10, 1, 4096);
+		minPulseWidth = get_option_int_val(slot_num, "minPulseWidth", "", 1000, 1, 4096);
 		ESP_LOGD(TAG, "Set minPulseWidth:%d for slot:%d",minPulseWidth, slot_num);
 	}
     uint16_t maxPulseWidth = 2000;
 	if (strstr(me_config.slot_options[slot_num], "maxPulseWidth") != NULL) {
-		maxPulseWidth = get_option_int_val(slot_num, "maxPulseWidth", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set maxPulseWidth:%d for slot:%d",minPulseWidth, slot_num);
+		maxPulseWidth = get_option_int_val(slot_num, "maxPulseWidth", "", 2000, 1, 4096);
+		ESP_LOGD(TAG, "Set maxPulseWidth:%d for slot:%d",maxPulseWidth, slot_num);
 	}
 
 
@@ -219,9 +219,8 @@ void ppm_generator_task(void *arg) {
 
 void start_ppm_generator_task(uint8_t slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "ppm_generator_%d", slot_num);
-	xTaskCreatePinnedToCore(ppm_generator_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+	xTaskCreatePinnedToCore(ppm_generator_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 1);
     ESP_LOGD(TAG, "ppm_generator_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

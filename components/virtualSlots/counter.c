@@ -100,7 +100,7 @@ void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
 }
 
 void counter_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
     int32_t counter = 0;
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
@@ -166,10 +166,9 @@ void counter_task(void *arg) {
 
 void start_counter_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "counter_task_%d", slot_num);
-    xTaskCreatePinnedToCore(counter_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    xTaskCreatePinnedToCore(counter_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "counter_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

@@ -367,7 +367,7 @@ void smartLed_task(void *arg){
     SMARTLEDCONFIG c_struct = {0};
     PSMARTLEDCONFIG c = &c_struct;
     uint32_t startTick = xTaskGetTickCount();
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
     uint8_t flag_ledUpdate = 0;
     STDCOMMAND_PARAMS       params = { 0 };
@@ -553,7 +553,7 @@ void start_smartLed_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
     char tmpString[strlen("smartLed_task_")+4];
 	sprintf(tmpString, "smartLed_task_%d", slot_num);
-    xTaskCreatePinnedToCore(smartLed_task, tmpString, 1024*8, &slot_num,configMAX_PRIORITIES-12, NULL,1);
+    xTaskCreatePinnedToCore(smartLed_task, tmpString, 1024*8, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-12, NULL,1);
 	ESP_LOGD(TAG,"smartLed_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
@@ -825,7 +825,7 @@ void swiperLed_task(void *arg)
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
     STDCOMMAND_PARAMS       params = { 0 };
    
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
 
 	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
@@ -918,7 +918,7 @@ void swiperLed_task(void *arg)
 void start_swiperLed_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
 
-    xTaskCreatePinnedToCore(swiperLed_task, "swiperLed_task", 1024*4, &slot_num,12, NULL,1);
+    xTaskCreatePinnedToCore(swiperLed_task, "swiperLed_task", 1024*4, (void*)(intptr_t)slot_num,12, NULL,1);
 	ESP_LOGD(TAG,"swiperLed_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
@@ -1117,7 +1117,7 @@ void ledRing_task(void *arg){
     
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
     uint8_t prevState=255;
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
     STDCOMMAND_PARAMS       params = { 0 };
 
@@ -1256,7 +1256,7 @@ void ledRing_task(void *arg){
 void start_ledRing_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
 
-    xTaskCreatePinnedToCore(ledRing_task, "ledRing_task", 1024*4, &slot_num,12, NULL,1);
+    xTaskCreatePinnedToCore(ledRing_task, "ledRing_task", 1024*4, (void*)(intptr_t)slot_num,12, NULL,1);
 	ESP_LOGD(TAG,"ledRing_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
@@ -1378,7 +1378,7 @@ void ledBar_task(void *arg)
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
     STDCOMMAND_PARAMS       params = { 0 };
     
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
 
 	me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
@@ -1565,7 +1565,7 @@ void ledBar_task(void *arg)
 void start_ledBar_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
 
-    xTaskCreatePinnedToCore(ledBar_task, "ledBar_task", 1024*4, &slot_num,12, NULL,1);
+    xTaskCreatePinnedToCore(ledBar_task, "ledBar_task", 1024*4, (void*)(intptr_t)slot_num,12, NULL,1);
 	ESP_LOGD(TAG,"ledBar_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 // const char * get_manifest_smartLed()

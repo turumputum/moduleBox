@@ -63,7 +63,7 @@ static void UnpackChannels(uint8_t const * const payload, int32_t * const dest){
 
 
 void crsf_rx_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     crsf_frame_t frame;
 
     uint16_t minVal = 0;
@@ -71,7 +71,7 @@ void crsf_rx_task(void* arg) {
 
     uint16_t deadBand = 1;
 	if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
-		deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
+		deadBand = get_option_int_val(slot_num, "deadBand", "", 1, 1, 4096);
 		ESP_LOGD(TAG, "Set deadBand:%d for slot:%d",deadBand, slot_num);
 	}
 
@@ -185,9 +185,8 @@ void crsf_rx_task(void* arg) {
 
 void start_crsf_rx_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "crsf_rx_task_%d", slot_num);
-	xTaskCreatePinnedToCore(crsf_rx_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+	xTaskCreatePinnedToCore(crsf_rx_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 1);
     ESP_LOGD(TAG, "crsf_rx_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

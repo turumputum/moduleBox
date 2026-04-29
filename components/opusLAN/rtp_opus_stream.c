@@ -8,6 +8,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "esp_log.h"
 #include "esp_err.h"
@@ -66,6 +69,7 @@ typedef struct rtp_opus_stream {
     rtp_opus_stream_event_handle_cb    hook;
     void                          *ctx;
     jbuffer                       jbuf;
+    SemaphoreHandle_t             jbuf_mutex;
     bool                          is_multicast;
     char                          prev_host[16];
     int64_t                       last_packet_time;
@@ -79,6 +83,11 @@ typedef struct rtp_opus_stream {
     int32_t                       measured_sample_hz;   /* sender's measured audio clock rate */
     /* Stream identity tracking for restart detection */
     uint32_t                      last_ssrc;
+    uint32_t                      pending_ssrc;
+    int                           pending_ssrc_count;
+    int64_t                       pending_ssrc_start_us;
+    uint32_t                      ignored_ssrc;        /* SSRC to ignore after multicast switch */
+    int64_t                       ignored_until_us;    /* time until ignore expires */
     uint16_t                      rtp_seq;
     bool                          need_seq_seed;       /* true = next packet seeds seq (no loss check) */
     int64_t                       last_overflow_log_us; /* for rate-limiting overflow warnings */
@@ -92,7 +101,15 @@ typedef struct rtp_opus_stream {
     /* Sync-start: all devices with same latency_ms start at same RTP timestamp position */
     uint32_t                      target_delay_ms;     /* latency target from config */
     uint32_t                      sync_rtp_ts_start;   /* RTP ts threshold set on first packet */
+    bool                          hot_switching;       /* true when new multicast stream was hot-switched */
+    bool                          first_sync_done;     /* per-instance: false until first sync anchor set */
     volatile bool                 sync_ready;          /* set by drain task when ts threshold reached */
+    /* Phase correction: when jbuf level diverges far from read_thres after
+     * rate matching converged, drop or insert a frame to restore phase.
+     * Set by drain task (under jbuf_mutex), applied by _rtp_opus_read. */
+    volatile int                  phase_correction_pending;  /* 0=none, +1=drop frame, -1=insert silence */
+    int64_t                       last_phase_correction_us;
+    int64_t                       last_phase_check_us;
     /* Drain task — reads socket independently of pipeline backpressure */
     TaskHandle_t                  drain_task_handle;
     volatile bool                 drain_running;
@@ -387,6 +404,15 @@ static int jbuf_peek(jbuffer *jbuf, uint8_t *data, uint32_t len)
     return 0;
 }
 
+/* Advance read pointer without copying — used by phase correction to
+ * drop a frame from the playback path. */
+static int jbuf_skip(jbuffer *jbuf, uint32_t len)
+{
+    if (jbuf_available(jbuf) < len) return -1;
+    jbuf->r_p = (jbuf->r_p + len) % jbuf->bufsize;
+    return 0;
+}
+
 
 // ///////////////// Forward declarations /////////////////
 
@@ -423,6 +449,38 @@ static esp_err_t _dispatch_event(audio_element_handle_t el, rtp_opus_stream_t *r
         return rtp->hook(&msg, state, rtp->ctx);
     }
     return ESP_FAIL;
+}
+
+/* Common RTP/jbuf state reset shared by _rtp_opus_open, switch_multicast_address
+ * and SSRC-change handler in drain task. Takes jbuf_mutex internally — caller
+ * must NOT hold it. Resets only state that is safe to clear in all three
+ * contexts; per-context fields (memset on first open, hot_switching/ignored_ssrc
+ * in switch, etc.) stay with the caller. */
+static void _rtp_opus_full_reset_locked(rtp_opus_stream_t *rtp)
+{
+    if (rtp->jbuf_mutex) {
+        xSemaphoreTake(rtp->jbuf_mutex, portMAX_DELAY);
+    }
+    rtp->jbuf.r_p   = 0;
+    rtp->jbuf.w_p   = 0;
+    rtp->jbuf.state = JBUF_IDLE;
+    if (rtp->reorder_data) {
+        reorder_reset_opus(rtp);
+    }
+    rtp->sync_initialized   = false;
+    rtp->sync_ready         = false;
+    rtp->sync_rtp_ts_start  = 0;
+    rtp->last_ssrc          = 0;
+    rtp->rtp_seq            = 0;
+    rtp->need_seq_seed      = true;
+    rtp->drift_window_valid = false;
+    rtp->drift_rate_mpps    = 0;
+    rtp->phase_correction_pending = 0;
+    rtp->last_phase_correction_us = 0;
+    rtp->last_phase_check_us      = 0;
+    if (rtp->jbuf_mutex) {
+        xSemaphoreGive(rtp->jbuf_mutex);
+    }
 }
 
 static esp_err_t _rtp_opus_open(audio_element_handle_t self)
@@ -462,28 +520,28 @@ static esp_err_t _rtp_opus_open(audio_element_handle_t self)
     }
     rtp->is_open = true;
     rtp->last_packet_time = esp_timer_get_time();
-    rtp->sync_initialized = false;  /* reset RTP timestamp sync on each open */
-    rtp->last_ssrc        = 0;
-    rtp->rtp_seq          = 0;
-    rtp->need_seq_seed    = true;
-    rtp->drift_start_us       = 0;
-    rtp->drift_window_valid   = false;
-    rtp->drift_window_raw     = 0;
-    rtp->drift_window_start_us = 0;
-    rtp->drift_rate_mpps      = 0;
-    rtp->last_drift_log_us    = 0;
 
-    /* Reset jitter buffer */
-    memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
-    rtp->jbuf.r_p = 0;
-    rtp->jbuf.w_p = 0;
-    rtp->jbuf.state = JBUF_IDLE;
-    rtp->sync_ready = false;          /* wait for RTP sync point before playback */
-    rtp->sync_rtp_ts_start = 0;
-    /* Reset reorder buffer */
-    if (rtp->reorder_data) {
-        reorder_reset_opus(rtp);
+    /* One-time init only on first open: zero the jbuf storage in case it
+     * holds garbage from allocation. Subsequent opens (after _close) skip
+     * this — JBUF_IDLE + r_p=w_p=0 already represents an empty buffer. */
+    if (rtp->jbuf_mutex) {
+        xSemaphoreTake(rtp->jbuf_mutex, portMAX_DELAY);
     }
+    memset(rtp->jbuf.buf, 0, rtp->jbuf.bufsize);
+    if (rtp->jbuf_mutex) {
+        xSemaphoreGive(rtp->jbuf_mutex);
+    }
+
+    _rtp_opus_full_reset_locked(rtp);
+
+    /* Open-only fields: drift measurement window is anchored at first
+     * received packet, so clear baselines here. first_sync_done makes
+     * the next sync use the 1-second aligned anchor (multi-room sync). */
+    rtp->drift_start_us         = 0;
+    rtp->drift_window_raw       = 0;
+    rtp->drift_window_start_us  = 0;
+    rtp->last_drift_log_us      = 0;
+    rtp->first_sync_done        = false;
 
     /* Start drain task — reads socket into jitter buffer independently.
      * Priority 24 = above audio element tasks — must never miss packets.
@@ -543,6 +601,11 @@ static esp_err_t _rtp_opus_destroy(audio_element_handle_t self)
         rtp->reorder_data = NULL;
     }
 
+    if (rtp->jbuf_mutex) {
+        vSemaphoreDelete(rtp->jbuf_mutex);
+        rtp->jbuf_mutex = NULL;
+    }
+
     audio_free(rtp);
     return ESP_OK;
 }
@@ -567,6 +630,9 @@ static void reorder_reset_opus(rtp_opus_stream_t *rtp)
  * This keeps fresh data and drops stale data (better for latency). */
 static void reorder_write_opus_frame(rtp_opus_stream_t *rtp, const uint8_t *payload, uint16_t payload_len)
 {
+    if (rtp->jbuf_mutex) {
+        xSemaphoreTake(rtp->jbuf_mutex, portMAX_DELAY);
+    }
     uint32_t total = 2 + payload_len;
     uint8_t hdr[2] = { (payload_len >> 8) & 0xFF, payload_len & 0xFF };
 
@@ -601,6 +667,9 @@ static void reorder_write_opus_frame(rtp_opus_stream_t *rtp, const uint8_t *payl
         jbuf_write(&rtp->jbuf, hdr, 2);
         jbuf_write(&rtp->jbuf, payload, payload_len);
     }
+    if (rtp->jbuf_mutex) {
+        xSemaphoreGive(rtp->jbuf_mutex);
+    }
 }
 
 /* Flush all consecutive packets starting from reorder_next_seq into jbuf */
@@ -626,12 +695,18 @@ static void reorder_skip_with_plc(rtp_opus_stream_t *rtp, uint16_t new_next_seq,
     if (rtp->sync_ready && skipped > 0) {
         uint16_t plc_count = (skipped > 5) ? 5 : skipped;
         uint8_t plc_hdr[2] = { 0x00, 0x00 };
+        if (rtp->jbuf_mutex) {
+            xSemaphoreTake(rtp->jbuf_mutex, portMAX_DELAY);
+        }
         for (uint16_t p = 0; p < plc_count; p++) {
             if (jbuf_free_space(&rtp->jbuf) >= 2)
                 jbuf_write(&rtp->jbuf, plc_hdr, 2);
         }
+        if (rtp->jbuf_mutex) {
+            xSemaphoreGive(rtp->jbuf_mutex);
+        }
         if (plc_count > 0)
-            ESP_LOGI(TAG, "PLC: injected %d concealment frames (reorder skip %u)", plc_count, skipped);
+            ESP_LOGD(TAG, "PLC: injected %d concealment frames (reorder skip %u)", plc_count, skipped);
     }
     rtp->reorder_next_seq = new_next_seq;
     reorder_flush_opus(rtp);
@@ -748,25 +823,51 @@ static void rtp_opus_drain_task(void *arg)
                           | ((uint32_t)opus_packet_buf[10] <<  8)
                           |  (uint32_t)opus_packet_buf[11];
 
+            /* Ignore packets from old SSRC after multicast switch */
+            if (ssrc == rtp->ignored_ssrc && now_us < rtp->ignored_until_us) {
+                ESP_LOGD(TAG, "Ignoring packet from ignored SSRC 0x%08lx", (unsigned long)ssrc);
+                loop_top_us = esp_timer_get_time();
+                continue;
+            }
+
             /* Detect stream restart: SSRC change */
             if (rtp->sync_initialized && ssrc != rtp->last_ssrc) {
-                ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
-                         (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
-                rtp->sync_initialized  = false;
-                rtp->sync_ready        = false;
-                rtp->sync_rtp_ts_start = 0;
-                rtp->rtp_seq           = 0;
-                rtp->need_seq_seed    = true;
-                rtp->drift_window_valid = false;
-                rtp->drift_rate_mpps    = 0;
-                /* Flush jitter buffer — two simultaneous sources would otherwise
-                 * fill it at 2× the drain rate and cause permanent overflow. */
-                jbuffer *jb = &rtp->jbuf;
-                jb->r_p   = 0;
-                jb->w_p   = 0;
-                jb->state = JBUF_IDLE;
-                reorder_reset_opus(rtp);
-                ESP_LOGI(TAG, "jbuf flushed on SSRC change");
+                if (rtp->pending_ssrc != ssrc) {
+                    rtp->pending_ssrc = ssrc;
+                    rtp->pending_ssrc_count = 1;
+                    rtp->pending_ssrc_start_us = now_us;
+                    ESP_LOGD(TAG, "SSRC candidate change 0x%08lx -> 0x%08lx, waiting for stability",
+                             (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
+                } else {
+                    rtp->pending_ssrc_count++;
+                }
+
+                if (rtp->pending_ssrc_count >= 10 || (now_us - rtp->pending_ssrc_start_us) >= 1000000LL) {
+                    ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
+                             (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
+
+                    _rtp_opus_full_reset_locked(rtp);
+
+                    /* Re-sync context: keep configured target_delay_ms (do NOT
+                     * shrink to 50ms — that disabled the pre-buffer and caused
+                     * underruns immediately after re-sync). Release any prior
+                     * ignored-ssrc filter set by a preceding hot-switch — old
+                     * source is gone now. */
+                    rtp->hot_switching         = true;
+                    rtp->ignored_ssrc          = 0;
+                    rtp->ignored_until_us      = 0;
+                    rtp->pending_ssrc          = 0;
+                    rtp->pending_ssrc_count    = 0;
+                    rtp->pending_ssrc_start_us = 0;
+                    ESP_LOGI(TAG, "jbuf flushed on SSRC change");
+                } else {
+                    loop_top_us = esp_timer_get_time();
+                    continue;
+                }
+            } else {
+                rtp->pending_ssrc = 0;
+                rtp->pending_ssrc_count = 0;
+                rtp->pending_ssrc_start_us = 0;
             }
             rtp->last_ssrc = ssrc;
 
@@ -780,15 +881,19 @@ static void rtp_opus_drain_task(void *arg)
             }
 
             /* --- RTP clock rate tracking + wall-clock drift measurement --- */
-            #define DRIFT_SETTLE_US         (15 * 1000000LL)   /* 15s settle before measuring */
-            #define DRIFT_WINDOW_US         (30 * 1000000LL)   /* 30s measurement window */
+            #define DRIFT_SETTLE_US         (2 * 1000000LL)    /* 2s settle before measuring */
+            #define DRIFT_WINDOW_US         (30 * 1000000LL)   /* 30s window — long enough for ±25 sps measurement noise to average out */
+            #define DRIFT_UPDATE_US         (10 * 1000000LL)   /* secondary update every 10s (was 2s — too noisy) */
             #define DRIFT_MAX_RATE_MPPS     500000             /* max plausible: 500 samp/s */
 
             if (!rtp->sync_initialized) {
                 rtp->rtp_ts_base            = rtp_ts;
                 rtp->local_time_base_us     = now_us;
                 rtp->last_clk_update_us     = now_us;
-                rtp->measured_sample_hz     = rtp->sample_rate;
+                /* DO NOT reset measured_sample_hz — receiver crystal does not
+                 * change between SSRC events, so the previous estimate is a
+                 * better starting point than nominal sample_rate. EWMA in
+                 * later updates will adapt to the new sender. */
                 rtp->sync_initialized       = true;
                 rtp->drift_start_us         = now_us;
                 rtp->drift_window_valid     = false;
@@ -797,13 +902,31 @@ static void rtp_opus_drain_task(void *arg)
                  * 1-second boundary in RTP timestamp space, so they begin
                  * playback at the same stream position regardless of join time.
                  * Pre-sync packets are NOT written to jbuf (see below). */
-                uint32_t align_period = (uint32_t)rtp->sample_rate;  /* 1-second boundary */
-                rtp->sync_rtp_ts_start = ((rtp_ts / align_period) + 2) * align_period;
-                ESP_LOGI(TAG, "RTP sync: ts_base=%lu sync_start=%lu (align=%lu wait~%ldms)",
-                         (unsigned long)rtp->rtp_ts_base,
-                         (unsigned long)rtp->sync_rtp_ts_start,
-                         (unsigned long)align_period,
-                         (long)((int32_t)(rtp->sync_rtp_ts_start - rtp_ts) * 1000 / rtp->sample_rate));
+                uint32_t delay_ts;
+                if (rtp->first_sync_done) {
+                    delay_ts = (uint32_t)((int64_t)rtp->target_delay_ms * rtp->sample_rate / 1000LL);
+                    if (delay_ts < (uint32_t)(rtp->sample_rate / 50)) {
+                        delay_ts = (uint32_t)(rtp->sample_rate / 50);
+                    }
+                    if (delay_ts > (uint32_t)rtp->sample_rate) {
+                        delay_ts = (uint32_t)rtp->sample_rate;
+                    }
+                    rtp->sync_rtp_ts_start = rtp_ts + delay_ts;
+                    ESP_LOGI(TAG, "RTP sync (re-sync): ts_base=%lu sync_start=%lu (delay=%lums)",
+                             (unsigned long)rtp->rtp_ts_base,
+                             (unsigned long)rtp->sync_rtp_ts_start,
+                             (unsigned long)((int32_t)delay_ts * 1000 / rtp->sample_rate));
+                } else {
+                    uint32_t align_period = (uint32_t)rtp->sample_rate;  /* 1-second boundary */
+                    rtp->sync_rtp_ts_start = ((rtp_ts / align_period) + 1) * align_period;
+                    ESP_LOGI(TAG, "RTP sync: ts_base=%lu sync_start=%lu (align=%lu wait~%ldms)",
+                             (unsigned long)rtp->rtp_ts_base,
+                             (unsigned long)rtp->sync_rtp_ts_start,
+                             (unsigned long)align_period,
+                             (long)((int32_t)(rtp->sync_rtp_ts_start - rtp_ts) * 1000 / rtp->sample_rate));
+                }
+                rtp->first_sync_done = true;
+                rtp->hot_switching = false;
             } else {
                 int64_t elapsed_us = now_us - rtp->drift_start_us;
                 int64_t rtp_elapsed = (int32_t)(rtp_ts - rtp->rtp_ts_base);
@@ -816,7 +939,7 @@ static void rtp_opus_drain_task(void *arg)
                     rtp->drift_window_start_us = now_us;
                     rtp->drift_window_valid = true;
                     rtp->drift_rate_mpps = 0;
-                    ESP_LOGI(TAG, "[drift] Window started: raw=%ld", (long)raw_drift);
+                    ESP_LOGD(TAG, "[drift] Window started: raw=%ld", (long)raw_drift);
                 }
 
                 /* Phase 2: Measure drift rate over windows */
@@ -840,13 +963,20 @@ static void rtp_opus_drain_task(void *arg)
                              * almost instantly).  The effective jitter buffer is the
                              * downstream PCM ringbuf + I2S DMA (~40-50ms).  Drift
                              * correction via I2S clock is safe regardless of jbuf level. */
-                            rtp->measured_sample_hz = rtp->sample_rate + rtp->drift_rate_mpps / 1000;
+                            int32_t new_hz = rtp->sample_rate + rtp->drift_rate_mpps / 1000;
+                        if (new_hz < rtp->sample_rate - 200) new_hz = rtp->sample_rate - 200;
+                        if (new_hz > rtp->sample_rate + 200) new_hz = rtp->sample_rate + 200;
+                        /* EWMA 31/32: ~32x more inertia than 7/8. Each 30s window
+                         * contributes 1/32 → full convergence on a step takes
+                         * ~5 windows = 2.5min. Slow but rate-stable, which keeps
+                         * I2S clock from oscillating in response to network jitter. */
+                        rtp->measured_sample_hz = (int32_t)((rtp->measured_sample_hz * 31LL + new_hz) / 32LL);
 
                             /* Slide window */
                             rtp->drift_window_raw = raw_drift;
                             rtp->drift_window_start_us = now_us;
 
-                            ESP_LOGI(TAG, "[drift] delta=%ld over %.1fs → rate=%ld mpps (%.2f samp/s) hz=%ld",
+                            ESP_LOGD(TAG, "[drift] delta=%ld over %.1fs → rate=%ld mpps (%.2f samp/s) hz=%ld",
                                      (long)delta_raw,
                                      (float)window_elapsed_us / 1000000.0f,
                                      (long)rtp->drift_rate_mpps,
@@ -856,9 +986,21 @@ static void rtp_opus_drain_task(void *arg)
                     }
                 }
 
+                /* Secondary update — uses cumulative drift since drift_start_us.
+                 * Less noisy than per-window rate (averages over longer time)
+                 * but slower to react to true rate changes. Same EWMA factor
+                 * as primary so they don't fight each other. */
+                if ((now_us - rtp->last_clk_update_us) >= DRIFT_UPDATE_US && elapsed_us >= 1000000LL) {
+                    int32_t target_hz = rtp->sample_rate + (int32_t)((raw_drift * 1000000LL + elapsed_us/2) / elapsed_us);
+                    if (target_hz < rtp->sample_rate - 200) target_hz = rtp->sample_rate - 200;
+                    if (target_hz > rtp->sample_rate + 200) target_hz = rtp->sample_rate + 200;
+                    rtp->measured_sample_hz = (int32_t)((rtp->measured_sample_hz * 31LL + target_hz) / 32LL);
+                    rtp->last_clk_update_us = now_us;
+                }
+
                 /* Diagnostic log every 10s */
                 if ((now_us - rtp->last_drift_log_us) > 10000000LL) {
-                    ESP_LOGI(TAG, "[drift] raw=%ld rate=%ld.%03ld samp/s hz=%ld jbuf=%lu/%lu %s",
+                    ESP_LOGD(TAG, "[drift] raw=%ld rate=%ld.%03ld samp/s hz=%ld jbuf=%lu/%lu %s",
                              (long)raw_drift,
                              (long)(rtp->drift_rate_mpps / 1000),
                              (long)(abs(rtp->drift_rate_mpps) % 1000),
@@ -867,6 +1009,44 @@ static void rtp_opus_drain_task(void *arg)
                              (unsigned long)rtp->jbuf.bufsize,
                              rtp->drift_window_valid ? "[active]" : "[settling]");
                     rtp->last_drift_log_us = now_us;
+                }
+
+                /* --- Phase correction by jbuf level ---
+                 * I2S clock matching keeps RATE in sync but does NOT correct
+                 * absolute PHASE between two receivers — any initial offset
+                 * (set when each device joined the multicast at slightly
+                 * different moments) persists indefinitely.
+                 *
+                 * Steady-state target is read_thres/2 (half of pre-buffer):
+                 * after pre-buffer ends, pipeline drains roughly to half and
+                 * stays there if rate matches. read_thres itself is the START
+                 * threshold, NOT the steady-state target — comparing against
+                 * read_thres triggered phase correction on every normal cycle,
+                 * masking what was actually a rate/pre-buffer issue.
+                 *
+                 * INSERT silence path is disabled: low jbuf is an underrun
+                 * symptom (rate mismatch or pre-buffer too small), not a
+                 * phase issue, and inserting silence delays the next real
+                 * audio without restoring phase. Only DROP frame remains —
+                 * useful when this device leads the other, jbuf grows. */
+                #define PHASE_CHECK_INTERVAL_US     (5  * 1000000LL)
+                #define PHASE_CORRECTION_COOLDOWN_US (30 * 1000000LL)
+                #define PHASE_DEVIATION_BYTES        500   /* ~25 frames @ 5ms ≈ 125ms */
+
+                if (rtp->jbuf.state == JBUF_PLAYING
+                    && rtp->phase_correction_pending == 0
+                    && (now_us - rtp->last_phase_check_us) >= PHASE_CHECK_INTERVAL_US
+                    && (now_us - rtp->last_phase_correction_us) >= PHASE_CORRECTION_COOLDOWN_US) {
+                    rtp->last_phase_check_us = now_us;
+                    int32_t avail_now = (int32_t)jbuf_available(&rtp->jbuf);
+                    int32_t target = (int32_t)(rtp->jbuf.read_thres / 2);
+                    int32_t deviation = avail_now - target;
+                    if (deviation > PHASE_DEVIATION_BYTES) {
+                        rtp->phase_correction_pending = +1;
+                        ESP_LOGI(TAG, "[phase] jbuf=%ld target=%ld dev=+%ld → DROP frame queued",
+                                 (long)avail_now, (long)target, (long)deviation);
+                    }
+                    /* Negative-deviation path intentionally removed — see comment above. */
                 }
 
                 /* Roll forward base every 4h to avoid timestamp wrap */
@@ -914,6 +1094,9 @@ static void rtp_opus_drain_task(void *arg)
             if (seq_diff < 0) {
                 /* Late / duplicate — already flushed past this seq */
                 loop_top_us = esp_timer_get_time();
+                if ((total_packets & 0xF) == 0) {
+                    taskYIELD();
+                }
                 continue;
             } else if (seq_diff == 0) {
                 /* Expected next packet: write directly to jbuf */
@@ -1004,6 +1187,10 @@ static void rtp_opus_drain_task(void *arg)
                 last_stats_us = now_us;
             }
 
+            if ((total_packets & 0xF) == 0) {
+                taskYIELD();
+            }
+
             loop_top_us = esp_timer_get_time();
 
         } else if (ret < 0) {
@@ -1043,26 +1230,62 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
             return ESP_FAIL;
         }
 
-        uint32_t avail = jbuf_available(jbuf);
+        uint32_t avail = 0;
+        uint32_t read_thres = 0;
+        uint32_t bufsize = 0;
+        bool prebuffer_done_now = false;
+
+        if (rtp->jbuf_mutex) {
+            xSemaphoreTake(rtp->jbuf_mutex, portMAX_DELAY);
+        }
+        avail = jbuf_available(jbuf);
+        read_thres = jbuf->read_thres;
+        bufsize = jbuf->bufsize;
 
         /* Wait for RTP sync point set by drain task */
         if (!rtp->sync_ready) {
+            if (rtp->jbuf_mutex) {
+                xSemaphoreGive(rtp->jbuf_mutex);
+            }
             vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
 
         /* Pre-buffer: wait until jbuf reaches read_thres before first playback.
-         * Without this, the pipeline instantly drains jbuf into downstream
-         * ringbuffers at startup, leaving jbuf permanently empty. */
+         * Apply the SAME threshold for cold start and hot-switch — the previous
+         * "reduce to target_delay_ms*4" path made playback resume in ~50ms
+         * but left jbuf permanently underbuffered (the pipeline drained the
+         * tiny pre-buffer instantly and never recovered, holding jbuf at 0
+         * and triggering phase correction as if it were a sync issue). */
         if (jbuf->state != JBUF_PLAYING) {
             if (avail < jbuf->read_thres) {
+                if (rtp->jbuf_mutex) {
+                    xSemaphoreGive(rtp->jbuf_mutex);
+                }
                 vTaskDelay(pdMS_TO_TICKS(5));
                 continue;
             }
             jbuf->state = JBUF_PLAYING;
-            ESP_LOGI(TAG, "Pre-buffer done, starting playback: %lu/%lu bytes (thres=%lu)",
-                     (unsigned long)avail, (unsigned long)jbuf->bufsize,
-                     (unsigned long)jbuf->read_thres);
+            prebuffer_done_now = true;
+            rtp->hot_switching = false;
+        }
+
+        /* Apply DROP-frame phase correction queued by drain task.
+         * Drain only ever sets +1 (drop), never -1 (insert silence was
+         * removed — see drain task comment). */
+        if (rtp->phase_correction_pending > 0 && avail >= 2) {
+            uint8_t hdr[2];
+            jbuf_peek(jbuf, hdr, 2);
+            uint16_t fl = (hdr[0] << 8) | hdr[1];
+            uint32_t skip_total = 2 + fl;
+            if (fl < 1500 && avail >= skip_total) {
+                jbuf_skip(jbuf, skip_total);
+                avail = jbuf_available(jbuf);
+                rtp->phase_correction_pending = 0;
+                rtp->last_phase_correction_us = esp_timer_get_time();
+                ESP_LOGD(TAG, "[phase] dropped frame (%lu bytes), jbuf now=%lu",
+                         (unsigned long)skip_total, (unsigned long)avail);
+            }
         }
 
         /* Try to read one complete frame */
@@ -1077,14 +1300,30 @@ static esp_err_t _rtp_opus_read(audio_element_handle_t self, char *buffer, int l
                  * Opus decoder so it generates concealment audio */
                 if ((int)2 <= len) {
                     jbuf_read(jbuf, (uint8_t *)buffer, 2);
+                    if (rtp->jbuf_mutex) {
+                        xSemaphoreGive(rtp->jbuf_mutex);
+                    }
                     audio_element_update_byte_pos(self, 2);
                     return 2;
                 }
             } else if (frame_len < 1500 && avail >= total && (int)total <= len) {
                 jbuf_read(jbuf, (uint8_t *)buffer, total);
+                if (rtp->jbuf_mutex) {
+                    xSemaphoreGive(rtp->jbuf_mutex);
+                }
                 audio_element_update_byte_pos(self, total);
                 return total;
             }
+        }
+
+        if (rtp->jbuf_mutex) {
+            xSemaphoreGive(rtp->jbuf_mutex);
+        }
+
+        if (prebuffer_done_now) {
+            ESP_LOGI(TAG, "Pre-buffer done, starting playback: %lu/%lu bytes (thres=%lu)",
+                     (unsigned long)avail, (unsigned long)bufsize,
+                     (unsigned long)read_thres);
         }
 
         /* No complete frame — wait for drain task to deliver (typically <20ms) */
@@ -1155,8 +1394,14 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     rtp->rtp_ts_base         = 0;
     rtp->local_time_base_us  = 0;
     rtp->last_ssrc           = 0;
+    rtp->pending_ssrc        = 0;
+    rtp->pending_ssrc_count  = 0;
+    rtp->pending_ssrc_start_us = 0;
+    rtp->ignored_ssrc        = 0;
+    rtp->ignored_until_us    = 0;
     rtp->rtp_seq             = 0;
     rtp->need_seq_seed       = true;
+    rtp->hot_switching       = false;
     rtp->last_overflow_log_us = 0;
     rtp->drift_start_us       = 0;
     rtp->drift_window_valid   = false;
@@ -1166,7 +1411,13 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     rtp->last_drift_log_us    = 0;
     rtp->target_delay_ms      = (config->latency_ms > 0) ? (uint32_t)config->latency_ms : RTP_OPUS_STREAM_DEFAULT_LATENCY_MS;
     rtp->sync_rtp_ts_start    = 0;
+    rtp->phase_correction_pending = 0;
+    rtp->last_phase_correction_us = 0;
+    rtp->last_phase_check_us      = 0;
     rtp->sync_ready           = false;
+    rtp->first_sync_done      = false;
+    rtp->jbuf_mutex           = xSemaphoreCreateMutex();
+    AUDIO_MEM_CHECK(TAG, rtp->jbuf_mutex, goto _rtp_opus_init_exit);
 
     if (config->event_handler) {
         rtp->hook = config->event_handler;
@@ -1219,6 +1470,10 @@ audio_element_handle_t rtp_opus_stream_init(rtp_opus_stream_cfg_t *config)
     return el;
 
 _rtp_opus_init_exit:
+    if (rtp && rtp->jbuf_mutex) {
+        vSemaphoreDelete(rtp->jbuf_mutex);
+        rtp->jbuf_mutex = NULL;
+    }
     audio_free(rtp);
     return NULL;
 }
@@ -1269,19 +1524,26 @@ esp_err_t rtp_opus_stream_switch_multicast_address(audio_element_handle_t self, 
         return ESP_FAIL;
     }
 
-    /* Reset jitter buffer and RTP sync to clear old data */
-    jbuffer *jbuf = &rtp->jbuf;
-    memset(jbuf->buf, 0, jbuf->bufsize);
-    jbuf->r_p = 0;
-    jbuf->w_p = 0;
-    jbuf->state = JBUF_IDLE;
-    rtp->sync_initialized   = false;
-    rtp->measured_sample_hz = rtp->sample_rate;
-    rtp->last_clk_update_us = 0;
-    rtp->last_ssrc          = 0;
-    rtp->rtp_seq            = 0;
-    rtp->drift_window_valid = false;
-    rtp->drift_rate_mpps    = 0;
+    uint32_t old_ssrc = rtp->last_ssrc;
+
+    _rtp_opus_full_reset_locked(rtp);
+
+    /* Hot-switch context: keep configured target_delay_ms (do NOT shrink to
+     * 50ms — that practically disabled the pre-buffer threshold and caused
+     * underruns right after every switch). Reset measured I2S clock so drift
+     * starts fresh, and ignore any in-flight packets from the old multicast
+     * group for 2s (prevents jbuf double-filling at 2x rate while old IGMP
+     * membership lingers).
+     *
+     * NOTE: do NOT reset measured_sample_hz — receiver crystal is unchanged,
+     * so the existing estimate gives faster convergence than restarting from
+     * nominal. last_clk_update_us also kept for the same reason. */
+    rtp->hot_switching         = true;
+    rtp->pending_ssrc          = 0;
+    rtp->pending_ssrc_count    = 0;
+    rtp->pending_ssrc_start_us = 0;
+    rtp->ignored_ssrc          = old_ssrc;
+    rtp->ignored_until_us      = esp_timer_get_time() + 2000000LL;
 
     ESP_LOGI(TAG, "Successfully switched to new multicast address %s", new_host);
     return ESP_OK;

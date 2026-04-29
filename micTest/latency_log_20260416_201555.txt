@@ -1,0 +1,181 @@
+============================================================
+  Audio Latency Tester
+  Chirp: 500-6000 Гц, 30 мс
+  Интервал: 2.0 сек
+  Длительность: 1.0 мин
+  Sample rate: 48000 Гц
+============================================================
+
+Устройство вывода: Динамики (Realtek(R) Audio)
+Устройство ввода:  Микрофон (USB Audio CODEC )
+
+Доступные аудиоустройства:
+    0 Переназначение звуковых устр. - Input, MME (2 in, 0 out)
+>   1 Микрофон (USB Audio CODEC ), MME (2 in, 0 out)
+    2 Voicemeeter Out B2 (VB-Audio Vo, MME (8 in, 0 out)
+    3 Voicemeeter Out B3 (VB-Audio Vo, MME (8 in, 0 out)
+    4 Voicemeeter Out A3 (VB-Audio Vo, MME (8 in, 0 out)
+    5 Voicemeeter Out A2 (VB-Audio Vo, MME (8 in, 0 out)
+    6 Voicemeeter Out A5 (VB-Audio Vo, MME (8 in, 0 out)
+    7 Voicemeeter Out A1 (VB-Audio Vo, MME (8 in, 0 out)
+    8 Voicemeeter Out A4 (VB-Audio Vo, MME (8 in, 0 out)
+    9 Voicemeeter Out B1 (VB-Audio Vo, MME (8 in, 0 out)
+   10 Переназначение звуковых устр. - Output, MME (0 in, 2 out)
+<  11 Динамики (Realtek(R) Audio), MME (0 in, 8 out)
+   12 HP M27f FHD (NVIDIA High Defini, MME (0 in, 8 out)
+   13 Voicemeeter AUX Input (VB-Audio, MME (0 in, 8 out)
+   14 Voicemeeter In 5 (VB-Audio Voic, MME (0 in, 8 out)
+   15 Voicemeeter In 4 (VB-Audio Voic, MME (0 in, 8 out)
+   16 Динамики (Scream (WDM)), MME (0 in, 8 out)
+   17 Realtek Digital Output (Realtek, MME (0 in, 2 out)
+   18 Voicemeeter VAIO3 Input (VB-Aud, MME (0 in, 8 out)
+   19 Voicemeeter In 2 (VB-Audio Voic, MME (0 in, 8 out)
+   20 Voicemeeter In 3 (VB-Audio Voic, MME (0 in, 8 out)
+   21 Voicemeeter Input (VB-Audio Voi, MME (0 in, 8 out)
+   22 Voicemeeter In 1 (VB-Audio Voic, MME (0 in, 8 out)
+   23 Динамики (USB Audio CODEC ), MME (0 in, 2 out)
+   24 Первичный драйвер записи звука, Windows DirectSound (2 in, 0 out)
+   25 Микрофон (USB Audio CODEC ), Windows DirectSound (2 in, 0 out)
+   26 Voicemeeter Out B2 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   27 Voicemeeter Out B3 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   28 Voicemeeter Out A3 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   29 Voicemeeter Out A2 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   30 Voicemeeter Out A5 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   31 Voicemeeter Out A1 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   32 Voicemeeter Out A4 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   33 Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO), Windows DirectSound (8 in, 0 out)
+   34 Первичный звуковой драйвер, Windows DirectSound (0 in, 2 out)
+   35 Динамики (Realtek(R) Audio), Windows DirectSound (0 in, 8 out)
+   36 HP M27f FHD (NVIDIA High Definition Audio), Windows DirectSound (0 in, 8 out)
+   37 Voicemeeter AUX Input (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   38 Voicemeeter In 5 (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   39 Voicemeeter In 4 (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   40 Динамики (Scream (WDM)), Windows DirectSound (0 in, 8 out)
+   41 Realtek Digital Output (Realtek(R) Audio), Windows DirectSound (0 in, 2 out)
+   42 Voicemeeter VAIO3 Input (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   43 Voicemeeter In 2 (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   44 Voicemeeter In 3 (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   45 Voicemeeter Input (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   46 Voicemeeter In 1 (VB-Audio Voicemeeter VAIO), Windows DirectSound (0 in, 8 out)
+   47 Динамики (USB Audio CODEC ), Windows DirectSound (0 in, 2 out)
+   48 HP M27f FHD (NVIDIA High Definition Audio), Windows WASAPI (0 in, 2 out)
+   49 Voicemeeter AUX Input (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   50 Voicemeeter In 5 (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   51 Voicemeeter In 4 (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   52 Динамики (Scream (WDM)), Windows WASAPI (0 in, 6 out)
+   53 Realtek Digital Output (Realtek(R) Audio), Windows WASAPI (0 in, 2 out)
+   54 Voicemeeter VAIO3 Input (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   55 Voicemeeter In 2 (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   56 Voicemeeter In 3 (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   57 Voicemeeter Input (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   58 Voicemeeter In 1 (VB-Audio Voicemeeter VAIO), Windows WASAPI (0 in, 2 out)
+   59 Динамики (USB Audio CODEC ), Windows WASAPI (0 in, 2 out)
+   60 Динамики (Realtek(R) Audio), Windows WASAPI (0 in, 2 out)
+   61 Микрофон (USB Audio CODEC ), Windows WASAPI (1 in, 0 out)
+   62 Voicemeeter Out B2 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   63 Voicemeeter Out B3 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   64 Voicemeeter Out A3 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   65 Voicemeeter Out A2 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   66 Voicemeeter Out A5 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   67 Voicemeeter Out A1 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   68 Voicemeeter Out A4 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   69 Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO), Windows WASAPI (2 in, 0 out)
+   70 Стерео микшер (Realtek HD Audio Stereo input), Windows WDM-KS (2 in, 0 out)
+   71 Лин. вход (Realtek HD Audio Line input), Windows WDM-KS (2 in, 0 out)
+   72 Speakers (Realtek HD Audio output), Windows WDM-KS (0 in, 8 out)
+   73 Микрофон (Realtek HD Audio Mic input), Windows WDM-KS (2 in, 0 out)
+   74 SPDIF Out (Realtek HDA SPDIF Out), Windows WDM-KS (0 in, 2 out)
+   75 Output (Voicemeeter Point 1), Windows WDM-KS (0 in, 8 out)
+   76 Input (Voicemeeter Point 1), Windows WDM-KS (8 in, 0 out)
+   77 Voicemeeter Out 1 (Voicemeeter Point 1), Windows WDM-KS (8 in, 0 out)
+   78 Output (Voicemeeter Point 4), Windows WDM-KS (0 in, 8 out)
+   79 Input (Voicemeeter Point 4), Windows WDM-KS (8 in, 0 out)
+   80 Voicemeeter Out 4 (Voicemeeter Point 4), Windows WDM-KS (8 in, 0 out)
+   81 Output (Voicemeeter Point 7), Windows WDM-KS (0 in, 8 out)
+   82 Input (Voicemeeter Point 7), Windows WDM-KS (8 in, 0 out)
+   83 Voicemeeter Out 7 (Voicemeeter Point 7), Windows WDM-KS (8 in, 0 out)
+   84 Output (Voicemeeter Point 2), Windows WDM-KS (0 in, 8 out)
+   85 Input (Voicemeeter Point 2), Windows WDM-KS (8 in, 0 out)
+   86 Voicemeeter Out 2 (Voicemeeter Point 2), Windows WDM-KS (8 in, 0 out)
+   87 Output (Voicemeeter Point 5), Windows WDM-KS (0 in, 8 out)
+   88 Input (Voicemeeter Point 5), Windows WDM-KS (8 in, 0 out)
+   89 Voicemeeter Out 5 (Voicemeeter Point 5), Windows WDM-KS (8 in, 0 out)
+   90 Output (Voicemeeter Point 8), Windows WDM-KS (0 in, 8 out)
+   91 Input (Voicemeeter Point 8), Windows WDM-KS (8 in, 0 out)
+   92 Voicemeeter Out 8 (Voicemeeter Point 8), Windows WDM-KS (8 in, 0 out)
+   93 Output (Voicemeeter Point 3), Windows WDM-KS (0 in, 8 out)
+   94 Input (Voicemeeter Point 3), Windows WDM-KS (8 in, 0 out)
+   95 Voicemeeter Out 3 (Voicemeeter Point 3), Windows WDM-KS (8 in, 0 out)
+   96 Output (Voicemeeter Point 6), Windows WDM-KS (0 in, 8 out)
+   97 Input (Voicemeeter Point 6), Windows WDM-KS (8 in, 0 out)
+   98 Voicemeeter Out 6 (Voicemeeter Point 6), Windows WDM-KS (8 in, 0 out)
+   99 Output (), Windows WDM-KS (0 in, 8 out)
+  100 Speakers (Scream Wave), Windows WDM-KS (0 in, 8 out)
+  101 Динамики (USB Audio CODEC), Windows WDM-KS (0 in, 2 out)
+  102 Микрофон (USB Audio CODEC), Windows WDM-KS (2 in, 0 out)
+
+Тест запущен. Ожидание 2.0 сек между импульсами...
+
+  #  1 | T+   1.6с | Задержка:  276.62 мс | Уверенность: 0.626 | OK
+  #  2 | T+   3.7с | Задержка:  276.69 мс | Уверенность: 0.652 | OK
+  #  3 | T+   5.7с | Задержка:  276.75 мс | Уверенность: 0.666 | OK
+  #  4 | T+   7.7с | Задержка:  276.81 мс | Уверенность: 0.663 | OK
+  #  5 | T+   9.7с | Задержка:  283.38 мс | Уверенность: 0.653 | OK
+  #  6 | T+  11.8с | Задержка:  283.44 мс | Уверенность: 0.649 | OK
+  #  7 | T+  13.8с | Задержка:  283.50 мс | Уверенность: 0.664 | OK
+  #  8 | T+  15.8с | Задержка:  283.56 мс | Уверенность: 0.652 | OK
+  #  9 | T+  17.9с | Задержка:  283.62 мс | Уверенность: 0.656 | OK
+  # 10 | T+  19.9с | Задержка:  283.69 мс | Уверенность: 0.652 | OK
+  # 11 | T+  21.9с | Задержка:  283.75 мс | Уверенность: 0.640 | OK
+  # 12 | T+  24.0с | Задержка:  283.79 мс | Уверенность: 0.643 | OK
+  # 13 | T+  26.0с | Задержка:  283.85 мс | Уверенность: 0.643 | OK
+  # 14 | T+  28.0с | Задержка:  283.92 мс | Уверенность: 0.659 | OK
+  # 15 | T+  30.1с | Задержка:  283.98 мс | Уверенность: 0.666 | OK
+  # 16 | T+  32.1с | Задержка:  284.04 мс | Уверенность: 0.642 | OK
+  # 17 | T+  34.1с | Задержка:  284.10 мс | Уверенность: 0.646 | OK
+  # 18 | T+  36.2с | Задержка:  284.17 мс | Уверенность: 0.633 | OK
+  # 19 | T+  38.2с | Задержка:  284.23 мс | Уверенность: 0.627 | OK
+  # 20 | T+  40.2с | Задержка:  284.29 мс | Уверенность: 0.640 | OK
+  # 21 | T+  42.2с | Задержка:  284.35 мс | Уверенность: 0.626 | OK
+  # 22 | T+  44.3с | Задержка:  284.42 мс | Уверенность: 0.635 | OK
+  # 23 | T+  46.3с | Задержка:  284.48 мс | Уверенность: 0.621 | OK
+  # 24 | T+  48.4с | Задержка:  284.54 мс | Уверенность: 0.606 | OK
+  # 25 | T+  50.4с | Задержка:  284.60 мс | Уверенность: 0.636 | OK
+  # 26 | T+  52.4с | Задержка:  284.67 мс | Уверенность: 0.612 | OK
+  # 27 | T+  54.5с | Задержка:  284.73 мс | Уверенность: 0.608 | OK
+  # 28 | T+  56.5с | Задержка:  284.77 мс | Уверенность: 0.601 | OK
+  # 29 | T+  58.6с | Задержка:  284.83 мс | Уверенность: 0.582 | OK
+
+
+============================================================
+=== ИТОГИ ТЕСТА ЗАДЕРЖКИ ===
+Всего измерений: 29
+Валидных: 29
+Невалидных / не найдено: 0
+
+--- Статистика задержки (мс) ---
+  Минимум:       276.62 мс
+  Максимум:      284.83 мс
+  Среднее:       283.09 мс
+  Медиана:       283.98 мс
+  Std (σ):         2.58 мс
+  P95:           284.75 мс
+  P99:           284.81 мс
+  Jitter (σ):      2.58 мс
+
+--- Распределение ---
+  200-500 мс:   29 (100.0%) ████████████████████████████████████████
+
+--- Тренд ---
+  Первая четверть (avg): 279.60 мс
+  Последняя четверть:    284.66 мс
+  Дрейф:                 +5.06 мс
+
+--- Выбросы (>2σ) ---
+  #1: 276.62 мс (T+1.6с)
+  #2: 276.69 мс (T+3.7с)
+  #3: 276.75 мс (T+5.7с)
+  #4: 276.81 мс (T+7.7с)
+============================================================
+
+Лог сохранён: C:\Users\user\Desktop\antiDante\micTest\latency_log_20260416_201555.txt

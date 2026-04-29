@@ -57,7 +57,7 @@ void send_hid_key_release(uint8_t key)
 }
 
 void HID_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
     command_message_t msg;
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
@@ -93,9 +93,6 @@ void HID_task(void *arg) {
 
 void start_HID_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-	//char tmpString[strlen("HID_task")];
-	//sprintf(tmpString,"%s", "HID_task");
-    char tmpString = strdup("HID_task");
-	xTaskCreatePinnedToCore(HID_task, "HID_task", 1024*4, &slot_num,configMAX_PRIORITIES - 12, NULL, 0);
+	xTaskCreatePinnedToCore(HID_task, "HID_task", 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "HID_task init ok. Heap usage: %lu free heap:%u", heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

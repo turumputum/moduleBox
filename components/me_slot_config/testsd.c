@@ -237,8 +237,8 @@ static esp_err_t format_sd_card(void)
 	void *work_buf = NULL;
 	esp_err_t result = ESP_FAIL;
 
-	ff_diskio_register_sdmmc(0, card);
-	pdrv = 0;
+	pdrv = 1; // Use drive 1 to avoid conflicting with MSC on drive 0
+	ff_diskio_register_sdmmc(pdrv, card);
 
 	fs = calloc(1, sizeof(FATFS));
 	if (!fs) {
@@ -246,7 +246,7 @@ static esp_err_t format_sd_card(void)
 		goto fmt_cleanup;
 	}
 
-	FRESULT fres = f_mount(fs, "", 0);
+	FRESULT fres = f_mount(fs, "1:", 0);
 	if (fres != FR_OK) {
 		ESP_LOGE(TAG, "Format: f_mount failed (%d)", fres);
 		goto fmt_cleanup;
@@ -261,7 +261,7 @@ static esp_err_t format_sd_card(void)
 
 	const MKFS_PARM opt = { FM_FAT32, 0, 0, 0, 0 };
 	ESP_LOGI(TAG, "Formatting SD card as FAT32...");
-	fres = f_mkfs("", &opt, work_buf, workbuf_size);
+	fres = f_mkfs("1:", &opt, work_buf, workbuf_size);
 	if (fres != FR_OK) {
 		ESP_LOGE(TAG, "Format: f_mkfs failed (%d)", fres);
 		goto fmt_cleanup;
@@ -271,7 +271,7 @@ static esp_err_t format_sd_card(void)
 	result = ESP_OK;
 
 fmt_cleanup:
-	f_mount(NULL, "", 0);
+	f_mount(NULL, "1:", 0);
 	ff_diskio_register(pdrv, NULL);
 	if (fs) free(fs);
 	if (work_buf) free(work_buf);
@@ -563,7 +563,7 @@ void testsd_task(void *arg)
 {
 	PTESTSD_CONFIG		c 					= calloc(1, sizeof(TESTSD_CONFIG));
 	STDCOMMAND_PARAMS 	params 				= {0};
-    int 				slot_num 			= *(int *)arg;
+    int 				slot_num 			= (int)(intptr_t)arg;
 	TickType_t 			lastProgressTime 	= 0;
 	int 				lastProgressPercent = -1;
 	TickType_t 			lastDetectTime 		= 0;
@@ -683,6 +683,19 @@ void testsd_task(void *arg)
 						}
 					}
 
+					/* Проверяем наличие SD-карты перед инициализацией */
+					int card_present = detect_sd_card_presence();
+					if (card_present == 0) {
+						ESP_LOGE(TAG, "Slot:%d SD card not present, cannot start test", slot_num);
+						ts.result = -1;
+						ts.state = STATE_done;
+						stdreport_s(c->resultReport, (char*)getResultName(ts.result));
+						stdreport_s(c->stateReport, (char*)getStateName(ts.state));
+						break;
+					} else if (card_present == -1) {
+						ESP_LOGW(TAG, "Slot:%d SD card presence unknown, proceeding with init", slot_num);
+					}
+
 					if (testsd_init_card() == ESP_OK)
 					{
 						ts.beginTime	= xTaskGetTickCount();
@@ -704,19 +717,42 @@ void testsd_task(void *arg)
 
 						if (ts.readBuffer != NULL)
 						{
-							ESP_LOGI(TAG, "Begining %s test of SD-card: %lu sectors, %u bytes/sector, chunk=%lu sectors (%lu bytes)", 
+							if (c->testType == TESTT_readback)
+							{
+								ts.compareBuffer = NULL;
+								while (ts.chunkSectors >= 1 && ts.compareBuffer == NULL)
+								{
+									ts.compareBuffer = heap_caps_malloc(ts.blockSize * ts.chunkSectors, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+									if (!ts.compareBuffer)
+									{
+										free(ts.readBuffer);
+										ts.readBuffer = NULL;
+										ts.chunkSectors /= 2;
+										if (ts.chunkSectors >= 1)
+										{
+											ts.readBuffer = heap_caps_malloc(ts.blockSize * ts.chunkSectors, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+										}
+									}
+								}
+							}
+
+							if (ts.readBuffer != NULL && (c->testType != TESTT_readback || ts.compareBuffer != NULL))
+							{
+								ESP_LOGI(TAG, "Begining %s test of SD-card: %lu sectors, %u bytes/sector, chunk=%lu sectors (%lu bytes)", 
 										testTypeNames[c->testType],
 										(unsigned long)card->csd.capacity, (unsigned)ts.blockSize,
 										ts.chunkSectors, ts.chunkSectors * ts.blockSize);
 
-							ts.state = STATE_running;
-						}
-						else
-						{
-							ESP_LOGE(TAG, "Error allocating memory for test buffer, test done.");
-							ts.state = STATE_done;
+								ts.state = STATE_running;
+							}
+							else
+							{
+								ESP_LOGE(TAG, "Error allocating memory for test buffer, test done.");
+								ts.state = STATE_done;
+							}
 						}
 					}
+
 					else
 					{
 						ESP_LOGE(TAG, "Error opening SD-card, test done.");
@@ -832,13 +868,14 @@ void testsd_task(void *arg)
 			}
 
 			/* Сброс SDMMC-хоста после теста для очистки состояния периферии.
-			   Без этого ошибка 0x107 остаётся в хосте и ломает последующую детекцию. */
-			if (host_inited) {
+			   Без этого ошибка 0x107 остаётся в хосте и ломает последующую детекцию.
+			   Для slot 1 (основная SD-карта) не сбрасываем, чтобы не ломать MSC. */
+			if (slot_num != 1 && host_inited) {
 				sdmmc_host_deinit();
 				host_inited = false;
-			}
-			if (testsd_init() != ESP_OK) {
-				ESP_LOGW(TAG, "Slot:%d SDMMC host reinit failed after test", slot_num);
+				if (testsd_init() != ESP_OK) {
+					ESP_LOGW(TAG, "Slot:%d SDMMC host reinit failed after test", slot_num);
+				}
 			}
 
 			ts.state = STATE_stopped;
@@ -850,9 +887,7 @@ void testsd_task(void *arg)
 }
 void start_testsd_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	static int t_slot_num;
-	t_slot_num = slot_num;
-	xTaskCreatePinnedToCore(testsd_task, "testsd_task", 1024 * 4, &t_slot_num, 12, NULL,1);
+	xTaskCreatePinnedToCore(testsd_task, "testsd_task", 1024 * 4, (void*)(intptr_t)slot_num, 12, NULL,1);
 
 	ESP_LOGD(TAG, "TESTSD init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

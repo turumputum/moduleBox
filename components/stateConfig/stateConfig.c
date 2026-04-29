@@ -195,11 +195,19 @@ static int handler(void *user, const char *section, const char *name, const char
 	} else if (MATCH("SCHEDULE", "ntpServer")) {//-----------------------------------------------
 		pconfig->ntpServer = strdup(value);
 	} else if (MATCH("SCHEDULE", "time")) {//-----------------------------------------------
+		if (pconfig->scheduleCount >= MAX_SCHEDULE_ENTRIES) {
+			ESP_LOGW(TAG, "Too many schedule entries (max=%d), ignoring extra time '%s'", MAX_SCHEDULE_ENTRIES, value);
+			return 1;
+		}
 		if (parse_schedule_time(value, &pconfig->scheduleEntries[pconfig->scheduleCount].time) == -1)
 		{
 			mblog(E, "Error parsing schedule time value: '%s'", value);
 		}
 	} else if (MATCH("SCHEDULE", "command")) {//-----------------------------------------------
+		if (pconfig->scheduleCount >= MAX_SCHEDULE_ENTRIES) {
+			ESP_LOGW(TAG, "Too many schedule entries (max=%d), ignoring extra command '%s'", MAX_SCHEDULE_ENTRIES, value);
+			return 1;
+		}
 		pconfig->scheduleEntries[pconfig->scheduleCount].command = strdup(value);
 		pconfig->scheduleCount++;
 	}else {
@@ -382,60 +390,13 @@ int saveConfig(void) {
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 
-	
-    sprintf(tmp, "\r\n[UDP] \r\n");
-    fprintf(configFile, tmp);
-    memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "serverAdress = %s \r\n", me_config.udpServerAdress);
-    fprintf(configFile, tmp);
-    memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "serverPort = %d \r\n", me_config.udpServerPort);
-    fprintf(configFile, tmp);
-    memset(tmp, 0, strlen(tmp));
-    sprintf(tmp, "myPort = %d \r\n", me_config.udpMyPort);
-    fprintf(configFile, tmp);
-    memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "crosslink = %s \r\n", me_config.udp_crosslink);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-
-
-	sprintf(tmp, "\r\n[OSC] \r\n");
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "oscServerAdress = %s \r\n", me_config.oscServerAdress);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "oscServerPort = %d \r\n", me_config.oscServerPort);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "oscMyPort = %d \r\n", me_config.oscMyPort);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-
-
 	sprintf(tmp, "\r\n[MQTT] \r\n");
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
 	sprintf(tmp, "mqttBrokerAdress = %s \r\n", me_config.mqttBrokerAdress);
 	fprintf(configFile, tmp);
 	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "mqttLogin = %s \r\n", me_config.mqttLogin);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "mqttPass = %s \r\n", me_config.mqttPass);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "mqttQOS = %d \r\n", me_config.mqttQOS);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "mqttWatchdogTimeout = %d \r\n", me_config.mqttWatchdogTimeout);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-	sprintf(tmp, "mqttTLS = %d \r\n", me_config.mqttTLS);
-	fprintf(configFile, tmp);
-	memset(tmp, 0, strlen(tmp));
-
+	
 	for (int i = 0; i < 6; i++) {
 		sprintf(tmp, "\r\n[SLOT_%d] \r\n", i);
 		fprintf(configFile, tmp);

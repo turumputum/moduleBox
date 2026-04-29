@@ -69,7 +69,7 @@ typedef struct {
 
 void led_off_delay_task(void *pvParameters) {
 	
-	uint8_t slot_num = *((uint8_t*) pvParameters);
+	uint8_t slot_num = (uint8_t)(intptr_t)pvParameters;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
 	int off_delay;
 	char *rest;
@@ -95,7 +95,7 @@ void led_off_delay_task(void *pvParameters) {
 
 void flash_led_task(void *pvParameters) {
 
-	uint8_t slot_num = *((uint8_t*) pvParameters);
+	uint8_t slot_num = (uint8_t)(intptr_t)pvParameters;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
 	int flash_interval;
 	char *rest;
@@ -140,12 +140,12 @@ void exec_led(int slot_num, int payload) {
 		if (payload == 1) {
 			if (me_state.slot_task[slot_num] == NULL) {
 				//ESP_LOGD(TAG, "Led start flash task with interval:%d", flash_interval);
-				xTaskCreate(flash_led_task, "", 1024 * 3, &slot_num, 6, &me_state.slot_task[slot_num]);
+				xTaskCreate(flash_led_task, "", 1024 * 3, (void*)(intptr_t)slot_num, 6, &me_state.slot_task[slot_num]);
 			}else{
 				eTaskState taskState = eTaskGetState(me_state.slot_task[slot_num]);
 				//ESP_LOGD(TAG, "---beforeStart taskState:%d", taskState);
 				if(taskState==eDeleted){
-					xTaskCreate(flash_led_task, "", 1024 * 3, &slot_num, 6, &me_state.slot_task[slot_num]);
+					xTaskCreate(flash_led_task, "", 1024 * 3, (void*)(intptr_t)slot_num, 6, &me_state.slot_task[slot_num]);
 				}else{
 					ESP_LOGD(TAG, "Task is running");
 				}
@@ -175,7 +175,7 @@ void exec_led(int slot_num, int payload) {
 					vTaskDelete(me_state.slot_task[slot_num]);
 				}
 			}
-			xTaskCreate(led_off_delay_task, "", 1024 * 3, &slot_num, 6, &me_state.slot_task[slot_num]);
+			xTaskCreate(led_off_delay_task, "", 1024 * 3, (void*)(intptr_t)slot_num, 6, &me_state.slot_task[slot_num]);
 			ESP_LOGD(TAG, "Off delay task started for slot:%d", slot_num);
 			
 		}else{

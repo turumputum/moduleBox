@@ -65,7 +65,7 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
     */
     ch->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 4096);
     if (ch->threshold <= 0){
-        ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
+        ESP_LOGW(TAG, "threshold not set, using default 0. Slot:%d", slot_num);
         ch->threshold = 0;
     } else {
         ESP_LOGD(TAG, "threshold:%d. Slot:%d", ch->threshold, slot_num);
@@ -116,7 +116,7 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
 }
 
 void flywheel_task(void *arg){
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.command_queue[slot_num] = xQueueCreate(25, sizeof(command_message_t));
 
@@ -186,10 +186,9 @@ void flywheel_task(void *arg){
 
 void start_flywheel_task(int slot_num){
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "flywheel_task_%d", slot_num);
-    xTaskCreate(flywheel_task, tmpString, 1024*4, &t_slot_num, 12, NULL);
+    xTaskCreate(flywheel_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, 12, NULL);
     ESP_LOGD(TAG, "flywheel_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

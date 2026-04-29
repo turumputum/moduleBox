@@ -64,7 +64,7 @@ static void IRAM_ATTR watchdog_isr_handler(void* arg){
 }
 
 void watchdog_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
@@ -113,10 +113,9 @@ void watchdog_task(void *arg) {
 
 void start_watchdog_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "watchdog_task_%d", slot_num);
-    xTaskCreatePinnedToCore(watchdog_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    xTaskCreatePinnedToCore(watchdog_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "watchdog_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

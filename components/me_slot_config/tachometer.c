@@ -93,7 +93,7 @@ void tachometer_task(void *arg)
 	uint16_t resault=0, prev_resault=0;
 	uint8_t flag_report=0;
 
-	int slot_num = *(int *)arg;
+	int slot_num = (int)(intptr_t)arg;
 
 	uint8_t sens_pin_num = SLOTS_PIN_MAP[slot_num][0];
 	
@@ -169,7 +169,12 @@ void tachometer_task(void *arg)
 		.low_limit = -32768,
 		.flags.accum_count = true,
 	};
-	ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &var.pcnt_unit));
+	esp_err_t pcnt_err = pcnt_new_unit(&unit_config, &var.pcnt_unit);
+	if (pcnt_err != ESP_OK) {
+		ESP_LOGW(TAG, "PCNT unit limit reached (slot:%d), task terminated. err:%d",
+		         slot_num, pcnt_err);
+		vTaskDelete(NULL);
+	}
 	
 	pcnt_chan_config_t chan_config = {
 		.edge_gpio_num = sens_pin_num,
@@ -282,10 +287,9 @@ void tachometer_task(void *arg)
 
 void start_tachometer_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
-	// int slot_num = *(int*) arg;
+	// int slot_num = (int)(intptr_t)arg;
 	
-	xTaskCreate(tachometer_task, "tachometer_task", 1024 * 8, &t_slot_num, 12, NULL);
+	xTaskCreate(tachometer_task, "tachometer_task", 1024 * 8, (void*)(intptr_t)slot_num, 12, NULL);
 	// printf("----------getTime:%lld\r\n", esp_timer_get_time());
 
 	ESP_LOGD(TAG, "tachometer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

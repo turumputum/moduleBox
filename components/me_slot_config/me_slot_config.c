@@ -31,6 +31,7 @@
 #include "swiper.h"
 #include "rfid.h"
 #include "someUnique.h"
+#include "buttonMatrix.h"
 #include "dwin.h"
 
 #include "distanceSens.h"
@@ -109,134 +110,118 @@ int init_slots(void){
 
 		ESP_LOGD(TAG,"[%d] check mode: '%s'", i, me_config.slot_mode[i]);
 
-		if(!strlen(me_config.slot_mode[i])) {
+		const char *mode = me_config.slot_mode[i];
+
+		if(!strlen(mode) || !strcmp(mode, "empty") || !strcmp(mode, "SD_card")){
 			// empty
-		}else if(!memcmp(me_config.slot_mode[i], "empty", 5)){
-			// empty
-		}else if(!memcmp(me_config.slot_mode[i], "SD_card", 5)){
-			// empty
-		}else if(!memcmp(me_config.slot_mode[i], "mp3Player", 9)){
+		}else if(!strcmp(mode, "mp3Player")){
 			audioInit(i);
-		}else if(!memcmp(me_config.slot_mode[i], "wavPlayer", 9)){
+		}else if(!strcmp(mode, "wavPlayer")){
 			wavPlayerInit(i);
-		}else if(!memcmp(me_config.slot_mode[i], "audioLAN", 8)){
+		}else if(!strcmp(mode, "audioLAN")){
 			start_audioLAN_task(i); 		// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "opusLAN", 7)){
+		}else if(!strcmp(mode, "opusLAN")){
 			start_opusLAN_task(i); 		// W, C (Opus codec)
-		}else if(!memcmp(me_config.slot_mode[i], "button_ledRing", 14)){
+		}else if(!strcmp(mode, "button_ledRing")){
 			start_button_ledRing_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_runFire", 14)){
+		}else if(!strcmp(mode, "button_runFire")){
 			start_button_runFire_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_ledBar", 13)){
+		}else if(!strcmp(mode, "button_ledBar")){
 			start_button_ledBar_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_swiperLed", 16)){
+		}else if(!strcmp(mode, "button_swiperLed")){
 			start_button_swiperLed_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_smartLed", 15)){
+		}else if(!strcmp(mode, "button_smartLed")){
 			start_button_smartLed_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "button_led", 10)){
+		}else if(!strcmp(mode, "button_led")){
 			start_button_led_task(i);
-		// }else if(!memcmp(me_config.slot_mode[i], "in_3ch", 6)){
-		// 	start_in_3ch_task(i, 3);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "in_out", 6)){
-		start_in_out_task(i);
-		}else if(!memcmp(me_config.slot_mode[i], "in_2ch", 6)){
+		}else if(!strcmp(mode, "in_out")){
+			start_in_out_task(i);
+		}else if(!strcmp(mode, "in_2ch")){
 			start_in_2ch_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "out_2ch", 7)){
+		}else if(!strcmp(mode, "out_2ch")){
 			start_out_2ch_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "relay", 5)){
+		}else if(!strcmp(mode, "relay")){
 			start_relay_task(i);		// W, NOC
-		// }else if(!memcmp(me_config.slot_mode[i], "in_1ch", 6)){
-		// 	start_in_3ch_task(i, 1);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "pwmLeds", 7)){
+		}else if(!strcmp(mode, "pwmLeds")){
 			init_pwmLeds(i);			// W, C
-		// }else if(!memcmp(me_config.slot_mode[i], "encoderPPM", 10)){
-		// 	start_encoderPPM_task(i);	// W
-		}else if(!memcmp(me_config.slot_mode[i], "encoderInc", 10)){
+		}else if(!strcmp(mode, "encoderInc")){
 			start_encoder_inc_task(i);	// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "encoderAS5600", 13)){
+		}else if(!strcmp(mode, "encoderAS5600")){
 			start_encoderAS5600_task(i); // W, C
-		}else if(!memcmp(me_config.slot_mode[i], "benewakeTOF", 12)){
+		}else if(!strcmp(mode, "benewakeTOF")){
 			start_benewakeTOF_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "TOFxxxF", 7)){
+		}else if(!strcmp(mode, "TOFxxxF")){
 			start_tofxxxfuart_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "hlk2410", 7)){
+		}else if(!strcmp(mode, "hlk2410")){
 			start_hlk2410_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "rplidarS1", 9)){
+		}else if(!strcmp(mode, "rplidarS1")){
 			start_rplidarS1_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "sr04m", 5)){
+		}else if(!strcmp(mode, "sr04m")){
 			start_sr04m_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "tachometer", 10)){
+		}else if(!strcmp(mode, "tachometer")){
 			start_tachometer_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "analog", 6)){
+		}else if(!strcmp(mode, "analog")){
 			start_adc1_task(i); // W, C
-		}else if(!memcmp(me_config.slot_mode[i], "stepper", 7)){
+		}else if(!strcmp(mode, "stepper")){
 			start_stepper_task(i);		// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "testsd", 6)){
+		}else if(!strcmp(mode, "testsd")){
 			start_testsd_task(i);		// W, C
-			
-		// }else if(!memcmp(me_config.slot_mode[i], "out_3ch", 7)){
-		// 	start_out_3ch_task(i);		// W, NOC
-		
-		}else if(!memcmp(me_config.slot_mode[i], "tenzoButton", 12)){
+		}else if(!strcmp(mode, "tenzoButton")){
 			start_tenzo_button_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "flywheel", 7)){
+		}else if(!strcmp(mode, "flywheel")){
 			start_flywheel_task(i);		//OK, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "scaler", 6)){
+		}else if(!strcmp(mode, "scaler")){
 			start_scaler_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "swiper", 6)){
+		}else if(!strcmp(mode, "swiper")){
 			start_swiper_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "rfid", 4)){
+		}else if(!strcmp(mode, "rfid")){
 			start_pn532Uart_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "startup", 8)){
+		}else if(!strcmp(mode, "startup")){
 			start_startup_task(i);		// NW, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "HID", 3)){
+		}else if(!strcmp(mode, "HID")){
 			start_HID_task(i);			// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "counter", 3)){
+		}else if(!strcmp(mode, "counter")){
 			start_counter_task(i);		// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "timer", 3)){
+		}else if(!strcmp(mode, "timer")){
 			start_timer_task(i);		// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "watchdog", 3)){
+		}else if(!strcmp(mode, "watchdog")){
 			start_watchdog_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "uartLogger", 3)){
+		}else if(!strcmp(mode, "uartLogger")){
 			start_uartLogger_task(i);   // W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "buttonMatrix", 13)){
+		}else if(!strcmp(mode, "buttonMatrix")){
 			start_buttonMatrix_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "dwin", 4)){
+		}else if(!strcmp(mode, "dwin")){
 			start_dwinUart_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "dialer", 7)){
+		}else if(!strcmp(mode, "dialer")){
 			start_dialer_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "whitelist", 9)){
+		}else if(!strcmp(mode, "whitelist")){
 			start_whitelist_task(i);	// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "collector", 9)){
+		}else if(!strcmp(mode, "collector")){
 			start_collector_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "masquerade", 10)){
+		}else if(!strcmp(mode, "masquerade")){
 			start_masquerade_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "random", 6)){
+		}else if(!strcmp(mode, "random")){
 			start_random_task(i);	// W, C
-		}else if(!memcmp(me_config.slot_mode[i], "ds18b20", 7)){
+		}else if(!strcmp(mode, "ds18b20")){
 			start_ds18b20_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "steadywinGIM", 12)){
+		}else if(!strcmp(mode, "steadywinGIM")){
 			start_GIM_motor_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "CRSF", 4)){
+		}else if(!strcmp(mode, "CRSF")){
 			start_crsf_rx_task(i);		// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "VESC", 4)){
+		}else if(!strcmp(mode, "VESC")){
 			start_CAN_VESC_task(i);		// ???
-		}else if(!memcmp(me_config.slot_mode[i], "PPM", 3)){
+		}else if(!strcmp(mode, "PPM")){
 			start_ppm_generator_task(i);// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "tankControl", 11)){
+		}else if(!strcmp(mode, "tankControl")){
 			start_tankControl_task(i);	// W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "furbyEye", 8)){
+		}else if(!strcmp(mode, "furbyEye")){
 			start_furbyEye_task(i); // W, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "conductor", 9)){
+		}else if(!strcmp(mode, "conductor")){
 			start_conductor_task(i); // NOW, NOC
-		}else if(!memcmp(me_config.slot_mode[i], "st7789", 6)){
-			start_st7789_task(i); 
-		}
-		else
-		{
-			// This else branch should only execute if slot_mode[i] is not NULL
-			// But we already checked for NULL at the beginning of the loop
-			mblog(E, "Wrong mode for SLOT_%d: %s", i, me_config.slot_mode[i]);
+		}else if(!strcmp(mode, "st7789")){
+			start_st7789_task(i);
+		}else{
+			mblog(E, "Wrong mode for SLOT_%d: %s", i, mode);
 		}
 
 	}
@@ -279,7 +264,15 @@ int get_option_int_val(int slot_num, char* string, const char*  unit_name, int d
 		{
 			value++;
 
-			result = atoi(value);
+			int parsed = atoi(value);
+			if (parsed < min_value) {
+				ESP_LOGW(TAG, "Option '%s'=%d below min=%d, clamped", string, parsed, min_value);
+				parsed = min_value;
+			} else if (parsed > max_value) {
+				ESP_LOGW(TAG, "Option '%s'=%d above max=%d, clamped", string, parsed, max_value);
+				parsed = max_value;
+			}
+			result = parsed;
 		}
 		else
 		{
@@ -322,23 +315,33 @@ float get_option_float_val(int slot_num, char* string, float default_value)
 	return result;
 }
 char* get_option_string_val(int slot_num, char* option, char* default_value){
-	char* resault;
-	char *options_copy = strdup(me_config.slot_options[slot_num]);
-	char *ind_of_vol = strstr(options_copy, option);
-	//char options_copy[strlen(ind_of_vol)];
-	//strcpy(options_copy, ind_of_vol);
-	char *rest;
-	char *ind_of_eqal=strstr(ind_of_vol, ":");
-	if(ind_of_eqal!=NULL){
-		if(strstr(ind_of_vol, ",")!=NULL){
-			ind_of_vol = strtok_r(ind_of_eqal,",",&rest);
-		}else{
-			ind_of_vol=ind_of_eqal;
-		}
+	const char *options = me_config.slot_options[slot_num];
+	if (options == NULL) {
+		return default_value;
 	}
-	resault = ind_of_vol+1;
-	return resault;
-	// }
+
+	char *begin = strstr(options, option);
+	if (begin == NULL) {
+		return default_value;
+	}
+
+	char *colon = strchr(begin, ':');
+	if (colon == NULL) {
+		ESP_LOGW(TAG, "Options wrong format (no ':' for '%s')", option);
+		return default_value;
+	}
+	const char *value = colon + 1;
+
+	const char *end = strchr(value, ',');
+	size_t len = (end != NULL) ? (size_t)(end - value) : strlen(value);
+
+	char *result = heap_caps_malloc(len + 1, MALLOC_CAP_8BIT);
+	if (result == NULL) {
+		return default_value;
+	}
+	memcpy(result, value, len);
+	result[len] = '\0';
+	return result;
 }
 static char * _cleanValue(char *         value)
 {

@@ -149,8 +149,7 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
 	ESP_LOGI(TAG, "Free heap before pipeline start: %u (internal: %u)",
 	         xPortGetFreeHeapSize(), heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
-	audio_element_state_t el_state = audio_element_get_state(c->i2s_stream_writer);
-	if(el_state==AEL_STATE_RUNNING){
+    if (c->i2s_stream_writer != NULL && audio_element_get_state(c->i2s_stream_writer) == AEL_STATE_RUNNING) {
 		opusPipelineStop(c);
 	}
 
@@ -330,7 +329,7 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
     /* Размер буфера (jitter buffer) в миллисекундах
     - по умолчанию 500мс
 	*/
-	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 500, 50, 5000);
+	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 50, 50, 5000);
     ESP_LOGD(TAG, "[opusLAN_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
 
     /* Target latency / sync delay in ms
@@ -342,13 +341,13 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         /* Топик 
         */
-        char * custom_topic = get_option_string_val(slot_num, "topic", "/opusLAN_0");
+        char * custom_topic = get_option_string_val(slot_num, "topic", "/audioStream_0");
         me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         me_state.action_topic_list[slot_num]=strdup(custom_topic);
         ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/opusLAN_0")+3];
-		sprintf(t_str, "%s/opusLAN_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/audioStream_0")+3];
+		sprintf(t_str, "%s/audioStream_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
         me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
@@ -382,7 +381,7 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
 }
 
 void opusLAN_task(void *arg){
-	int slot_num = *(int *)arg;
+    int slot_num = (int)(intptr_t)arg;
     if(slot_num!=0){
         char tmpStr[100];
 		sprintf(tmpStr, "Wrong slot, only for SLOT_0, task terminated");
@@ -428,6 +427,7 @@ void opusLAN_task(void *arg){
     int led_state = 0;
     int64_t last_clk_adjust_us = esp_timer_get_time();
     int32_t last_set_hz = c->sample_rate;
+    const int64_t CLOCK_ADJUST_INTERVAL_US = 3000000LL; /* 3 seconds */
     while (1) {
         /* ----------------------------------------------------------------------- */
 
@@ -447,21 +447,28 @@ void opusLAN_task(void *arg){
         }
         
         /* Periodic I2S clock adjustment: match sender's actual sample rate.
-         * Step by ±1 Hz max per cycle to avoid audible click from I2S reconfig.
-         * Only apply when measured_hz differs from current. */
+         * Adaptive step size: large diff → faster step (up to ±5 Hz),
+         * small diff → ±1 Hz for smooth steady-state. Without the adaptive
+         * ramp, ±1 Hz/3s convergence took ~10s after each switch — long
+         * enough to accumulate hundreds of microseconds of phase drift. */
         {
             int64_t now_adj = esp_timer_get_time();
-            if ((now_adj - last_clk_adjust_us) > 60000000LL && c->state == ENABLE && c->rtp_stream_reader) {
+            if ((now_adj - last_clk_adjust_us) > CLOCK_ADJUST_INTERVAL_US && c->state == ENABLE && c->rtp_stream_reader) {
                 int32_t measured_hz = rtp_opus_stream_get_measured_hz(c->rtp_stream_reader);
                 if (measured_hz > 0 && measured_hz != last_set_hz) {
-                    /* Clamp step to ±1 Hz for smooth transition */
-                    int32_t step = measured_hz - last_set_hz;
-                    if (step > 1) step = 1;
-                    else if (step < -1) step = -1;
+                    int32_t diff = measured_hz - last_set_hz;
+                    int32_t step;
+                    int32_t abs_diff = diff < 0 ? -diff : diff;
+                    if      (abs_diff >= 5) step = 5;
+                    else if (abs_diff >= 3) step = 3;
+                    else if (abs_diff >= 2) step = 2;
+                    else                    step = 1;
+                    if (diff < 0) step = -step;
                     int32_t new_hz = last_set_hz + step;
                     i2s_stream_set_clk(c->i2s_stream_writer, new_hz, 16, 2);
                     last_set_hz = new_hz;
-                    ESP_LOGI(TAG, "I2S clk adjusted to %ld Hz (target %ld)", (long)new_hz, (long)measured_hz);
+                    ESP_LOGD(TAG, "I2S clk adjusted to %ld Hz (target %ld, step %+ld)",
+                             (long)new_hz, (long)measured_hz, (long)step);
                 }
                 last_clk_adjust_us = now_adj;
             }
@@ -523,6 +530,23 @@ void opusLAN_task(void *arg){
 
                             if (switch_result == ESP_OK) {
                                 ESP_LOGI(TAG, "[opusLAN_%d] Hot-switched to %s", slot_num, new_addr);
+
+                                /* Flush downstream ringbuffers — rtp_stream's jbuf is already
+                                 * cleared inside switch_multicast_address, but opus_decoder and
+                                 * i2s_stream_writer still hold residual frames/PCM from the old
+                                 * source. Without this flush, the tail of the previous stream
+                                 * plays out before the new stream starts (audible glitch + ~50ms
+                                 * desync). Each call is thread-safe (rb has its own mutex).
+                                 * I2S DMA buffer (~40-50ms) cannot be flushed and will drain
+                                 * naturally — that's the residual click on switch. */
+                                if (c->opus_decoder) {
+                                    audio_element_reset_input_ringbuf(c->opus_decoder);
+                                    audio_element_reset_output_ringbuf(c->opus_decoder);
+                                }
+                                if (c->i2s_stream_writer) {
+                                    audio_element_reset_input_ringbuf(c->i2s_stream_writer);
+                                }
+
                                 if (c->multicastAddress) free(c->multicastAddress);
                                 c->multicastAddress = new_addr;
                                 if (c->host) free(c->host);
@@ -565,20 +589,16 @@ void opusLAN_task(void *arg){
         }
 
         audio_event_iface_msg_t msg;
-        esp_err_t ret = audio_event_iface_listen(c->evt, &msg, 120);
-        if (ret != ESP_OK) {
-            continue;
-        }
+        audio_event_iface_listen(c->evt, &msg, 120);
     }
 }
 
 void start_opusLAN_task(int slot_num){
 
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
     char tmpString[60];
 	sprintf(tmpString, "task_opusLAN_%d", slot_num);
-	xTaskCreate(opusLAN_task, tmpString, 1024 * 10, &t_slot_num, configMAX_PRIORITIES - 20, NULL);
+    xTaskCreate(opusLAN_task, tmpString, 1024 * 10, (void *)(intptr_t)slot_num, configMAX_PRIORITIES - 20, NULL);
 
 	ESP_LOGD(TAG, "opusLAN_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

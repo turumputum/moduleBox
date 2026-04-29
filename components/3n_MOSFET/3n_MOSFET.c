@@ -220,7 +220,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 void pwmLeds_task(void *arg){
     //PMOSFETCONFIG c = calloc(1, sizeof(MOSFETCONFIG));
     MOSFETCONFIG c = {0};
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
     STDCOMMAND_PARAMS       params = { 0 };
 
 	me_state.command_queue[slot_num] = xQueueCreate(50, sizeof(command_message_t));
@@ -397,7 +397,7 @@ void pwmLeds_task(void *arg){
 void init_pwmLeds(int slot_num) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
-    xTaskCreate(pwmLeds_task, "pwmLeds_task", 1024*4, &slot_num,12, NULL);
+    xTaskCreate(pwmLeds_task, "pwmLeds_task", 1024*4, (void*)(intptr_t)slot_num,12, NULL);
 
 	ESP_LOGD(TAG,"pwmLeds task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

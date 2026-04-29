@@ -278,11 +278,10 @@ static void in_2ch_task(void *arg) {
 
 void start_in_2ch_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     
     char tmpString[60];
     sprintf(tmpString, "task_in_2ch_%d", slot_num);
-    xTaskCreatePinnedToCore(in_2ch_task, tmpString, 1024 * 5, (void*)(intptr_t)t_slot_num, configMAX_PRIORITIES - 12, NULL, 1);
+    xTaskCreatePinnedToCore(in_2ch_task, tmpString, 1024 * 5, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 1);
     
     ESP_LOGD(TAG, "in_2ch_task created for slot: %d Heap usage: %lu free heap:%u", 
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
@@ -453,11 +452,10 @@ static void in_3ch_task(void *arg) {
 
 void start_in_3ch_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     
     char tmpString[60];
     sprintf(tmpString, "task_in_3ch_%d", slot_num);
-    xTaskCreatePinnedToCore(in_3ch_task, tmpString, 1024 * 5, (void*)(intptr_t)t_slot_num, configMAX_PRIORITIES - 12, NULL, 1);
+    xTaskCreatePinnedToCore(in_3ch_task, tmpString, 1024 * 5, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 1);
     
     ESP_LOGD(TAG, "in_3ch_task created for slot: %d Heap usage: %lu free heap:%u", 
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());

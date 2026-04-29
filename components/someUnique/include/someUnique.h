@@ -1,7 +1,6 @@
 #ifndef SOME_UNIQUE_H
 #define SOME_UNIQUE_H
 
-void start_buttonMatrix_task(int slot_num);
 void start_uartLogger_task(int slot_num);
 void start_dialer_task(int slot_num);
 void start_volnaKolya_task(int slot_num);

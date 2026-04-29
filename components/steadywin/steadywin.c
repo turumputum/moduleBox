@@ -198,7 +198,7 @@ void steadywin_task(void *arg) {
 
     //vTaskDelay(pdMS_TO_TICKS(500));
 
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][0];
     uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][1];
@@ -366,10 +366,9 @@ void steadywin_task(void *arg) {
 
 void start_steadywin_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "steadywin_task_%d", slot_num);
-	xTaskCreatePinnedToCore(steadywin_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-12, NULL, 1);
+	xTaskCreatePinnedToCore(steadywin_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-12, NULL, 1);
 
 	ESP_LOGD(TAG,"steadywin_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -506,7 +505,7 @@ void GIM_motor_task(void *arg) {
 
     //vTaskDelay(pdMS_TO_TICKS(500));
 
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][0];
     uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][1];
@@ -530,11 +529,8 @@ void GIM_motor_task(void *arg) {
 		inverse=1;
 	}
 
-    int8_t state=0;
-    if (strstr(me_config.slot_options[slot_num], "defaultState") != NULL) {
-		state = get_option_int_val(slot_num, "defaultState", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set def_state:%d for slot:%d",state, slot_num);
-	}
+    int8_t state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
+    ESP_LOGD(TAG, "Set def_state:%d for slot:%d", state, slot_num);
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -636,10 +632,9 @@ void GIM_motor_task(void *arg) {
 
 void start_GIM_motor_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "GIM_motor_task_%d", slot_num);
-	xTaskCreatePinnedToCore(GIM_motor_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-12, NULL, 1);
+	xTaskCreatePinnedToCore(GIM_motor_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-12, NULL, 1);
 
 	ESP_LOGD(TAG,"GIM_motor_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

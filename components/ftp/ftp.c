@@ -1780,8 +1780,16 @@ void ftp_task(void *pvParameters) {
 //	shared_var_mutex = xSemaphoreCreateMutex();  // Create the mutex
 
 	anon_enabled = me_config.FTP_anon;
-	strcpy(ftp_user, me_config.FTP_login);
-	strcpy(ftp_pass, me_config.FTP_pass);
+	if (me_config.FTP_login) {
+		snprintf(ftp_user, sizeof(ftp_user), "%s", me_config.FTP_login);
+	} else {
+		ftp_user[0] = '\0';
+	}
+	if (me_config.FTP_pass) {
+		snprintf(ftp_pass, sizeof(ftp_pass), "%s", me_config.FTP_pass);
+	} else {
+		ftp_pass[0] = '\0';
+	}
 	ESP_LOGI(TAG_CL, "ftp_user:[%s] ftp_pass:[%s], anon enabled:[%s]", ftp_user, ftp_pass, anon_enabled ? "yes" : "no");
 
 

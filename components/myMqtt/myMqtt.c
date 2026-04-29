@@ -10,6 +10,7 @@
 #include "mdns.h"
 #include "esp_timer.h"
 #include "esp_crt_bundle.h"
+#include <inttypes.h>
 
 
 
@@ -71,6 +72,22 @@ void mqtt_sub(const char *topic){
 	ESP_LOGD(TAG, "Subcribed successful, topic:%s", topic);
 }
 
+static int append_json_topic(char *dst, size_t dst_size, const char *topic, int *count)
+{
+	if (!dst || !topic || !count) {
+		return -1;
+	}
+
+	int written = snprintf(dst + strlen(dst), dst_size - strlen(dst),
+						   "%s\"%s\"", (*count > 0) ? ", " : "", topic);
+	if (written < 0 || (size_t)written >= (dst_size - strlen(dst))) {
+		return -1;
+	}
+
+	(*count)++;
+	return 0;
+}
+
 static void log_error_if_nonzero(const char *message, int error_code)
 {
     if (error_code != 0) {
@@ -94,19 +111,26 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		mqtt_watchdog_stop();
 
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
-			if(memcmp(me_state.action_topic_list[i],"none", 4)){
-				char tmpS[strlen(me_state.action_topic_list[i])+3];
-				sprintf(tmpS, "%s/#", me_state.action_topic_list[i]);
-				mqtt_sub(me_state.action_topic_list[i]);
+			const char *action_topic = me_state.action_topic_list[i];
+			if (action_topic && strncmp(action_topic, "none", 4) != 0) {
+				size_t topic_len = strlen(action_topic);
+				char *tmpS = malloc(topic_len + 3);
+				if (tmpS == NULL) {
+					ESP_LOGE(TAG, "OOM while building MQTT subscribe topic");
+					continue;
+				}
+				snprintf(tmpS, topic_len + 3, "%s/#", action_topic);
+				mqtt_sub(action_topic);
 				mqtt_sub(tmpS);
+				free(tmpS);
 			}	
 		}
 
 		char tmpSB[255];
-		sprintf(tmpSB, "%s/system/#", me_config.deviceName);
+		snprintf(tmpSB, sizeof(tmpSB), "%s/system/#", me_config.deviceName);
 		mqtt_sub(tmpSB);
 
-		sprintf(willTopic, "clients/%s/state", me_config.deviceName);
+		snprintf(willTopic, sizeof(willTopic), "clients/%s/state", me_config.deviceName);
 		mqtt_pub(willTopic, "1");
 
 		//----------topic list generate-----------------
@@ -123,36 +147,35 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		// 	}
 		// }
 		//---print to arrray
-		char tmpStr[100];
 		char topic_list[1024] = { 0 };
 		int count;
 
-		strcat(topic_list, "{ \"triggers\":[ ");
+		snprintf(topic_list, sizeof(topic_list), "{ \"triggers\":[ ");
 		count = 0;
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
-			if(memcmp(me_state.trigger_topic_list[i],"none", 4)!=0){
-				if (count > 0) strcat(topic_list, ", ");
-				memset(tmpStr, 0, sizeof(tmpStr));
-				sprintf(tmpStr, "\"%s\"", me_state.trigger_topic_list[i]);
-				strcat(topic_list, tmpStr);
-				count++;
+			const char *trigger_topic = me_state.trigger_topic_list[i];
+			if (trigger_topic && strncmp(trigger_topic, "none", 4) != 0) {
+				if (append_json_topic(topic_list, sizeof(topic_list), trigger_topic, &count) != 0) {
+					ESP_LOGW(TAG, "Topic list truncated while appending trigger topics");
+					break;
+				}
 			}
 		}
-		strcat(topic_list, " ], \"actions\":[ ");
+		snprintf(topic_list + strlen(topic_list), sizeof(topic_list) - strlen(topic_list), " ], \"actions\":[ ");
 		count = 0;
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
-			if(memcmp(me_state.action_topic_list[i],"none", 4)!=0){
-				if (count > 0) strcat(topic_list, ", ");
-				memset(tmpStr, 0, sizeof(tmpStr));
-				sprintf(tmpStr, "\"%s\"", me_state.action_topic_list[i]);
-				strcat(topic_list, tmpStr);
-				count++;
+			const char *action_topic = me_state.action_topic_list[i];
+			if (action_topic && strncmp(action_topic, "none", 4) != 0) {
+				if (append_json_topic(topic_list, sizeof(topic_list), action_topic, &count) != 0) {
+					ESP_LOGW(TAG, "Topic list truncated while appending action topics");
+					break;
+				}
 			}
 		}
-		strcat(topic_list, " ] }");
+		snprintf(topic_list + strlen(topic_list), sizeof(topic_list) - strlen(topic_list), " ] }");
 
 		char topicList_topic[255];
-		sprintf(topicList_topic, "clients/%s/topics", me_config.deviceName);
+		snprintf(topicList_topic, sizeof(topicList_topic), "clients/%s/topics", me_config.deviceName);
 
 		ESP_LOGD(TAG, "Topic list:%s", topic_list);
 		mqtt_pub(topicList_topic, topic_list);
@@ -176,14 +199,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		break;
 	case MQTT_EVENT_DATA:
 		//ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-		char strT[255];
+		int max_needed = (event->topic_len > 0 ? event->topic_len : 0)
+		               + (event->data_len > 0 ? event->data_len + 1 : 0) + 1;
+		char *strT = malloc((size_t)max_needed);
+		if (strT == NULL) {
+			ESP_LOGE(TAG, "OOM while handling MQTT data event");
+			break;
+		}
 		if(event->data_len > 0){
-			sprintf(strT, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
+			snprintf(strT, (size_t)max_needed, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
 		}else{
-			sprintf(strT, "%.*s", event->topic_len, event->topic);
+			snprintf(strT, (size_t)max_needed, "%.*s", event->topic_len, event->topic);
 		}
 		//sprintf(strT, "%.*s:%.*s", event->topic_len, event->topic, event->data_len, event->data);
 		execute(strT);
+		free(strT);
 
 		break;
 	case MQTT_EVENT_ERROR:
@@ -213,11 +243,23 @@ int mqtt_app_start(void)
     }
 
 	memset(willTopic, 0, sizeof(willTopic));
-	sprintf(willTopic, "clients/%s/state", me_config.deviceName);
+	snprintf(willTopic, sizeof(willTopic), "clients/%s/state", me_config.deviceName);
+
+	char resolved_broker_host[64] = {0};
+	snprintf(resolved_broker_host, sizeof(resolved_broker_host), "%s", me_config.mqttBrokerAdress);
 
 	if(strstr(me_config.mqttBrokerAdress, ".local")!=NULL){
-		char hostname[strlen(me_config.mqttBrokerAdress)-5];
-		memcpy(hostname, me_config.mqttBrokerAdress, strlen(me_config.mqttBrokerAdress)-6);
+		size_t broker_len = strlen(me_config.mqttBrokerAdress);
+		size_t host_len = broker_len;
+		if (broker_len > 6) {
+			host_len = broker_len - 6;  /* trim ".local" */
+		}
+		char hostname[64] = {0};
+		if (host_len >= sizeof(hostname)) {
+			host_len = sizeof(hostname) - 1;
+		}
+		memcpy(hostname, me_config.mqttBrokerAdress, host_len);
+		hostname[host_len] = '\0';
 		struct esp_ip4_addr addr;
     	addr.addr = 0;
     	ESP_LOGD(TAG, "Resolve hostname:%s", hostname);
@@ -229,15 +271,15 @@ int mqtt_app_start(void)
 			ESP_LOGE(TAG, "Query Failed: %s", esp_err_to_name(err));
 		}else{
 			ESP_LOGI(TAG, "Query A: %s.local resolved to: " IPSTR, hostname, IP2STR(&addr));
-			sprintf(me_config.mqttBrokerAdress, IPSTR, IP2STR(&addr));
+			snprintf(resolved_broker_host, sizeof(resolved_broker_host), IPSTR, IP2STR(&addr));
 		}
 	}
 
 	// Build broker URI: mqtts:// for TLS, mqtt:// otherwise
 	const char *scheme = me_config.mqttTLS ? "mqtts" : "mqtt";
 	int default_port = me_config.mqttTLS ? 8883 : 1883;
-	char brokerUri[16 + strlen(me_config.mqttBrokerAdress)];
-	sprintf(brokerUri, "%s://%s:%d", scheme, me_config.mqttBrokerAdress, default_port);
+	char brokerUri[96];
+	snprintf(brokerUri, sizeof(brokerUri), "%s://%s:%d", scheme, resolved_broker_host, default_port);
 	ESP_LOGD(TAG, "Set brokerUri:%s", brokerUri);
 	
     esp_mqtt_client_config_t mqtt_cfg = {

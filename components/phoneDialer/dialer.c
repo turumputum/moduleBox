@@ -35,7 +35,7 @@ typedef enum {
 } DIALERCMD;
 
 static void IRAM_ATTR gpio_isr_handler(void* arg){
-    int slot_num = (int) arg;
+    int slot_num = (int)(intptr_t)arg;
     uint8_t tmp = 1;
     xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
 }
@@ -105,7 +105,7 @@ void configure_dialer(PDIALER_CONFIG ch, int slot_num)
 }
 
 void dialer_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     uint8_t ena_pin = SLOTS_PIN_MAP[slot_num][1];
     uint8_t pulse_pin = SLOTS_PIN_MAP[slot_num][0];
 
@@ -137,7 +137,7 @@ void dialer_task(void* arg) {
         .pull_up_en = 0,
     };
     gpio_config(&in_conf);
-    gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)slot_num);
+    gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)(intptr_t)slot_num);
 
     uint8_t counter = 0;
     char number_str[c.numberMaxLenght + 1];
@@ -210,10 +210,9 @@ void dialer_task(void* arg) {
 
 void start_dialer_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "dialer_task_%d", slot_num);
-    xTaskCreate(dialer_task, tmpString, 1024 * 4, &t_slot_num, configMAX_PRIORITIES - 18, NULL);
+    xTaskCreate(dialer_task, tmpString, 1024 * 4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 18, NULL);
     ESP_LOGD(TAG, "dialer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

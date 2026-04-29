@@ -31,7 +31,7 @@ extern stateStruct me_state;
 static const char *TAG = "TENZO_BUTTON";
 
 void tenzo_button_task(void *arg){
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
 
     ChanCfg adc_channel;
     adc_channel.chan= SLOT_ADC_MAP[slot_num];
@@ -179,10 +179,9 @@ void tenzo_button_task(void *arg){
 
 void start_tenzo_button_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_tenzo_button_%d", slot_num);
-	xTaskCreatePinnedToCore(tenzo_button_task, tmpString, 1024*4, &t_slot_num,12, NULL, 1);
+	xTaskCreatePinnedToCore(tenzo_button_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,12, NULL, 1);
 
 	ESP_LOGD(TAG,"tenzo_button_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

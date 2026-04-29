@@ -117,7 +117,7 @@ void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
 
    /* Минимальное свечение
    */
-   ctx->led.minBright = get_option_int_val(slot_num, "minBright", "", 0, 1, 4096);
+   ctx->led.minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 4096);
    if(ctx->led.minBright>255)ctx->led.minBright=255;
    if(ctx->led.minBright<0)ctx->led.minBright=0;
    ESP_LOGD(TAG, "Set minBright:%d for slot:%d", ctx->led.minBright, slot_num);
@@ -199,7 +199,7 @@ void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
 
 void button_led_task(void *arg)
 {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
     setup_button_hw(slot_num, ctx);
     configure_button_led(ctx, slot_num);
@@ -308,7 +308,7 @@ void button_led_task(void *arg)
 void start_button_led_task(int slot_num) {
     char tmpString[60];
     sprintf(tmpString, "task_button_led_%d", slot_num);
-    xTaskCreate(button_led_task, tmpString, 1024*4, &slot_num, configMAX_PRIORITIES-5, NULL);
+    xTaskCreate(button_led_task, tmpString, 1024*4, (void *)(intptr_t)slot_num, configMAX_PRIORITIES-5, NULL);
 }
 
 const char * get_manifest_button_led()

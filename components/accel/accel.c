@@ -34,7 +34,7 @@ static const char *TAG = "ACCEL";
 void MPU9250_kick_task(void *arg) {
     #define I2C_MASTER_TIMEOUT_MS 100
     #define MPU9250_ADDR 0x68
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 	//---init hardware---
 	uint8_t sda_pin = SLOTS_PIN_MAP[slot_num][0];
@@ -144,10 +144,9 @@ void MPU9250_kick_task(void *arg) {
 
 void start_MPU9250_kick_task(int slot_num){
 	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_MPU9250_kick_%d", slot_num);
-	xTaskCreatePinnedToCore(MPU9250_kick_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES-12, NULL, 1);
+	xTaskCreatePinnedToCore(MPU9250_kick_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES-12, NULL, 1);
 
 	ESP_LOGD(TAG,"MPU9250_kick_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

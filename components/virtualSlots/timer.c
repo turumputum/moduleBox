@@ -90,7 +90,7 @@ static void IRAM_ATTR timer_isr_handler(void* arg){
 }
 
 void timer_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
     STDCOMMAND_PARAMS params = {0};
     params.skipTypeChecking = true;
     
@@ -148,10 +148,9 @@ void timer_task(void *arg) {
 
 void start_timer_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
     char tmpString[60];
     sprintf(tmpString, "timer_task_%d", slot_num);
-    xTaskCreatePinnedToCore(timer_task, tmpString, 1024*4, &t_slot_num, configMAX_PRIORITIES - 12, NULL, 0);
+    xTaskCreatePinnedToCore(timer_task, tmpString, 1024*4, (void*)(intptr_t)slot_num, configMAX_PRIORITIES - 12, NULL, 0);
     ESP_LOGD(TAG, "timer_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

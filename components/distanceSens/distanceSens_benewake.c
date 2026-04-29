@@ -100,7 +100,7 @@ void configure_benewakeTOF(distanceSens_t *distanceSens, uint8_t slot_num)
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
         distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 4096);
         if (distanceSens->threshold <= 0) {
-            ESP_LOGE(TAG, "threshold wrong format, set default. Slot:%d", slot_num);
+            ESP_LOGW(TAG, "threshold not set, using default. Slot:%d", slot_num);
             distanceSens->threshold = 0;
         } else {
             ESP_LOGD(TAG, "threshold:%d. Slot:%d", distanceSens->threshold, slot_num);
@@ -191,7 +191,7 @@ void configure_benewakeTOF(distanceSens_t *distanceSens, uint8_t slot_num)
 }
 
 void benewakeTOF_task(void* arg) {
-    int slot_num = *(int*)arg;
+    int slot_num = (int)(intptr_t)arg;
     
     int uart_num = UART_NUM_1;
     while (uart_is_driver_installed(uart_num)) {
@@ -272,7 +272,7 @@ void benewakeTOF_task(void* arg) {
 
 void start_benewakeTOF_task(int slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    xTaskCreate(benewakeTOF_task, "benewakeTOF_task", 1024 * 4, &slot_num, 5, NULL);
+    xTaskCreate(benewakeTOF_task, "benewakeTOF_task", 1024 * 4, (void*)(intptr_t)slot_num, 5, NULL);
     ESP_LOGD(TAG, "benewakeTOF_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 

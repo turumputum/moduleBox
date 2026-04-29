@@ -40,7 +40,7 @@ static const char *TAG = "servoDev";
     TWAI_ALERT_BUS_ERROR )
 
 void servoRod_task(void *arg) {
-    int slot_num = *(int*) arg;
+    int slot_num = (int)(intptr_t)arg;
     uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][0];
     uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][1];
 
@@ -183,9 +183,8 @@ void servoRod_task(void *arg) {
 
 void start_servoRod_task(uint8_t slot_num) {
     uint32_t heapBefore = xPortGetFreeHeapSize();
-    int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "servoRod_%d", slot_num);
-	xTaskCreatePinnedToCore(servoRod_task, tmpString, 1024*4, &t_slot_num,configMAX_PRIORITIES - 12, NULL, 1);
+	xTaskCreatePinnedToCore(servoRod_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,configMAX_PRIORITIES - 12, NULL, 1);
     ESP_LOGD(TAG, "servoRod_task init ok: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }

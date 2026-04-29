@@ -285,7 +285,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 void audio_task(void *arg) {
     PAUDIOCONFIG c = calloc(1, sizeof(AUDIOCONFIG));
 
-	int slot_num = *(int*) arg;
+	int slot_num = (int)(intptr_t)arg;
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
     STDCOMMAND_PARAMS       params = { 0 };
@@ -630,10 +630,9 @@ void audio_task(void *arg) {
 
 void audioInit(uint8_t slot_num){
 	//uint32_t heapBefore = xPortGetFreeHeapSize();
-	int t_slot_num = slot_num;
 	char tmpString[60];
 	sprintf(tmpString, "task_player_%d", slot_num);
-	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*8, &t_slot_num,configMAX_PRIORITIES-5, NULL, 0);
+	xTaskCreatePinnedToCore(audio_task, tmpString, 1024*8, (void*)(intptr_t)slot_num, configMAX_PRIORITIES-5, NULL, 0);
 }
 
 void audioDeinit(void) {

@@ -32,8 +32,9 @@ idf_component_register(SRCS
                         driver 
                         rgbHsv 
                         myHID 
-                        someUnique 
-                        distanceSens 
+                        someUnique
+                        buttonMatrix
+                        distanceSens
                         lidars
                         accel 
                         servoDev 
