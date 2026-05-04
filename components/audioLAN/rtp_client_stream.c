@@ -381,23 +381,26 @@ static int jbuf_init(jbuffer *jbuf, uint32_t size)
     return 0;
 }
 
-// silently drops data if writing too much
+/* Atomic per-packet write: if the entire payload doesn't fit, write nothing
+ * and return 0. This guarantees the ring buffer never holds a partial RTP
+ * packet, which would otherwise break PCM frame alignment on read.
+ * Caller is expected to treat 0 as overflow and trigger a full resync. */
 static int jbuf_write(uint8_t *datain, uint32_t size, jbuffer *jbuf)
-{    
-    uint32_t i=0;
-    while (size)
-    {
-        uint32_t next_wp = (jbuf->w_p + 1);
+{
+    uint32_t used = (jbuf->r_p == jbuf->w_p) ? 0
+                  : (jbuf->r_p < jbuf->w_p)
+                      ? (jbuf->w_p - jbuf->r_p)
+                      : (jbuf->bufsize - (jbuf->r_p - jbuf->w_p));
+    uint32_t free_space = jbuf->bufsize - 1 - used;
+    if (size > free_space) return 0;
+
+    for (uint32_t i = 0; i < size; i++) {
+        jbuf->buf[jbuf->w_p] = datain[i];
+        uint32_t next_wp = jbuf->w_p + 1;
         if (next_wp >= jbuf->bufsize) next_wp = 0;
-        if (next_wp == jbuf->r_p) break;   // full
-
-        jbuf->buf[jbuf->w_p] = datain[i];  // write at current w_p
-        jbuf->w_p = next_wp;               // then advance
-        i++;
-        size--;
+        jbuf->w_p = next_wp;
     }
-
-    return i;
+    return (int)size;
 }
 
 /// return read amount, size - requested amount of data
@@ -622,23 +625,27 @@ static inline uint8_t *reorder_slot_ptr(rtp_stream_t *rtp, int slot) {
     return rtp->reorder_data + slot * REORDER_SLOT_SIZE;
 }
 
-/* Flush all consecutive packets starting from reorder_next_seq into jbuf */
-static void reorder_flush_pcm(rtp_stream_t *rtp)
+/* Flush all consecutive packets starting from reorder_next_seq into jbuf.
+ * Returns false if jbuf overflow occurred — caller must do _rtp_full_reset. */
+static bool reorder_flush_pcm(rtp_stream_t *rtp)
 {
     while (1) {
         int slot = rtp->reorder_next_seq % REORDER_SLOTS;
         reorder_meta_t *m = &rtp->reorder_meta[slot];
         if (!m->occupied || m->seq != rtp->reorder_next_seq)
             break;
-        jbuf_write(reorder_slot_ptr(rtp, slot), m->payload_len, &rtp->jbuf);
+        if (jbuf_write(reorder_slot_ptr(rtp, slot), m->payload_len, &rtp->jbuf) == 0)
+            return false;
         m->occupied = false;
         rtp->last_seq = rtp->reorder_next_seq;
         rtp->reorder_next_seq++;
     }
+    return true;
 }
 
-/* If oldest buffered packet waited > REORDER_MAX_WAIT_US, skip the gap */
-static void reorder_timeout_pcm(rtp_stream_t *rtp, int64_t now_us, uint32_t *total_lost)
+/* If oldest buffered packet waited > REORDER_MAX_WAIT_US, skip the gap.
+ * Returns false on jbuf overflow — caller must do _rtp_full_reset. */
+static bool reorder_timeout_pcm(rtp_stream_t *rtp, int64_t now_us, uint32_t *total_lost)
 {
     bool has_old = false;
     for (int i = 0; i < REORDER_SLOTS; i++) {
@@ -648,7 +655,7 @@ static void reorder_timeout_pcm(rtp_stream_t *rtp, int64_t now_us, uint32_t *tot
             break;
         }
     }
-    if (!has_old) return;
+    if (!has_old) return true;
 
     /* Find the smallest seq among occupied slots */
     uint16_t min_seq = rtp->reorder_next_seq;
@@ -668,13 +675,25 @@ static void reorder_timeout_pcm(rtp_stream_t *rtp, int64_t now_us, uint32_t *tot
                  skipped, rtp->reorder_next_seq, (uint16_t)(min_seq - 1));
         rtp->reorder_next_seq = min_seq;
     }
-    reorder_flush_pcm(rtp);
+    return reorder_flush_pcm(rtp);
 }
 
 static void reorder_reset(rtp_stream_t *rtp)
 {
     for (int i = 0; i < REORDER_SLOTS; i++)
         rtp->reorder_meta[i].occupied = false;
+}
+
+/* Common overflow recovery: log (rate-limited) and full state reset.
+ * Called from drain task whenever jbuf_write or reorder_flush_pcm fail —
+ * we already lost data, a clean resync is better than partial buffer state. */
+static inline void rtp_overflow_recover(rtp_stream_t *rtp, int64_t now_us, const char *reason)
+{
+    if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
+        ESP_LOGW(TAG, "Jitter buffer overflow (%s) — full reset", reason);
+        rtp->last_overflow_log_us = now_us;
+    }
+    _rtp_full_reset(rtp);
 }
 
 /* ///////////////// Socket drain task /////////////////
@@ -851,19 +870,17 @@ static void rtp_drain_task(void *arg)
             } else if (seq_diff == 0) {
                 /* Expected next packet: write directly to jbuf */
                 uint16_t payload_len = ret - 12;
-                int written = jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf);
-                if (written < payload_len) {
-                    if ((now_us - rtp->last_overflow_log_us) > 1000000LL) {
-                        ESP_LOGW(TAG, "Jitter buffer overflow! wrote=%d/%d avail=%d/%d",
-                                 written, payload_len,
-                                 jbuf_count(&rtp->jbuf), (int)rtp->jbuf.bufsize);
-                        rtp->last_overflow_log_us = now_us;
-                    }
+                if (jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf) == 0) {
+                    rtp_overflow_recover(rtp, now_us, "main path");
+                    continue;
                 }
                 rtp->last_seq = tseq;
                 rtp->reorder_next_seq++;
                 /* Flush any consecutive buffered packets */
-                reorder_flush_pcm(rtp);
+                if (!reorder_flush_pcm(rtp)) {
+                    rtp_overflow_recover(rtp, now_us, "reorder flush");
+                    continue;
+                }
             } else if (seq_diff < REORDER_SLOTS) {
                 /* Future packet within reorder window: buffer it */
                 int slot = tseq % REORDER_SLOTS;
@@ -900,16 +917,25 @@ static void rtp_drain_task(void *arg)
                              skipped, rtp->reorder_next_seq, (uint16_t)(min_occ - 1),
                              (int)(tseq - min_occ));
                     rtp->reorder_next_seq = min_occ;
-                    reorder_flush_pcm(rtp);
+                    if (!reorder_flush_pcm(rtp)) {
+                        rtp_overflow_recover(rtp, now_us, "skip-ahead flush");
+                        continue;
+                    }
                 }
                 /* Re-check diff after flush */
                 seq_diff = (int16_t)(tseq - rtp->reorder_next_seq);
                 if (seq_diff == 0) {
                     uint16_t payload_len = ret - 12;
-                    jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf);
+                    if (jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf) == 0) {
+                        rtp_overflow_recover(rtp, now_us, "post-flush write");
+                        continue;
+                    }
                     rtp->last_seq = tseq;
                     rtp->reorder_next_seq++;
-                    reorder_flush_pcm(rtp);
+                    if (!reorder_flush_pcm(rtp)) {
+                        rtp_overflow_recover(rtp, now_us, "post-flush reorder");
+                        continue;
+                    }
                 } else if (seq_diff > 0 && seq_diff < REORDER_SLOTS) {
                     int slot = tseq % REORDER_SLOTS;
                     reorder_meta_t *m = &rtp->reorder_meta[slot];
@@ -928,14 +954,20 @@ static void rtp_drain_task(void *arg)
                              tseq, rtp->reorder_next_seq);
                     reorder_reset(rtp);
                     uint16_t payload_len = ret - 12;
-                    jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf);
+                    if (jbuf_write(packet_buf + 12, payload_len, &rtp->jbuf) == 0) {
+                        rtp_overflow_recover(rtp, now_us, "hard-reset write");
+                        continue;
+                    }
                     rtp->reorder_next_seq = tseq + 1;
                     rtp->last_seq = tseq;
                 }
             }
 
             /* Timeout check: skip past gaps if oldest buffered pkt waited > 40ms */
-            reorder_timeout_pcm(rtp, now_us, &total_lost);
+            if (!reorder_timeout_pcm(rtp, now_us, &total_lost)) {
+                rtp_overflow_recover(rtp, now_us, "timeout flush");
+                continue;
+            }
 
             /* --- Periodic stats (every 60s) --- */
             if ((now_us - last_stats_us) > 60000000LL) {
