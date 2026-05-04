@@ -729,6 +729,17 @@ static void rtp_drain_task(void *arg)
             if (gap_us > max_gap_us) max_gap_us = gap_us;
             total_packets++;
 
+            /* Detect packet gap > 80ms: reset drift window so the post-gap
+             * snapshot doesn't poison delta_raw at next 30s window close
+             * (would otherwise drive INSERT-flood for the full window). */
+            if (gap_us > 80000LL && rtp->drift_initialized && rtp->drift_window_valid) {
+                rtp->drift_window_valid = false;
+                rtp->correction_debt    = 0;
+                rtp->drift_rate_mpps    = 0;
+                rtp->drift_start_us     = now_us;
+                ESP_LOGW(TAG, "[drift] packet gap %lldms, reset window", gap_us / 1000);
+            }
+
             rtp->last_packet_time = now_us;
 
             /* --- RTP header parsing --- */
@@ -990,6 +1001,16 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
                  * Threshold 8 bytes = 2 stereo frames — ensures readlen > 0
                  * and avoids busy-loop / WDT trigger. */
                 if (avail < 8) {
+                    /* Real underrun: reset drift window so post-gap raw_drift
+                     * snapshot doesn't poison the next rate measurement
+                     * (otherwise INSERT-flood for up to 30s after recovery). */
+                    if (rtp->drift_window_valid) {
+                        rtp->drift_window_valid = false;
+                        rtp->correction_debt    = 0;
+                        rtp->drift_rate_mpps    = 0;
+                        rtp->drift_start_us     = esp_timer_get_time();
+                        ESP_LOGW(TAG, "[drift] underrun detected, reset window");
+                    }
                     vTaskDelay(pdMS_TO_TICKS(2));
                     continue;
                 }
@@ -1026,7 +1047,7 @@ static esp_err_t _rtp_read(audio_element_handle_t self, char *buffer, int len, T
     #define DRIFT_WINDOW_US         (30 * 1000000LL)   // 30s measurement window
     #define DRIFT_MIN_RATE_MPPS     300                // min drift rate to act on: 0.3 samples/sec (in milli-samples/sec)
     #define DRIFT_CORRECTION_COOLDOWN_US (100000LL)    // min 100ms between corrections
-    #define DRIFT_MAX_RATE_MPPS     500000             // max plausible rate: 500 samp/s (~10000ppm), anything above = glitch
+    #define DRIFT_MAX_RATE_MPPS     25000              // max plausible rate: 25 samp/s (~520ppm), anything above = glitch/gap artefact
     #define DRIFT_MAX_DEBT          5000               // max correction debt: 5 samples (in milli-samples)
 
     if (rtp->drift_initialized && wr > 0 && rtp->sample_rate > 0) {
