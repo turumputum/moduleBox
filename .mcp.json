@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "git": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository",
+        "."
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "serial": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-serial"
+      ],
+      "env": {
+        "SERIAL_PORT": "${SERIAL_PORT:-COM3}",
+        "SERIAL_BAUD": "${SERIAL_BAUD:-115200}"
+      }
+    }
+  }
+}

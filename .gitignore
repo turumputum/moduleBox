@@ -9,6 +9,7 @@ build
 *.S2X
 *.log
 .*.json
+!.mcp.json
 core
 build
 .vscode
