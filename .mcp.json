@@ -20,7 +20,11 @@
       }
     },
     "serial": {
-      "command": "serial-mcp"
+      "command": "python",
+      "args": [
+        "-c",
+        "from serial_mcp.server import main; main()"
+      ]
     }
   }
 }
