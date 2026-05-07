@@ -1,10 +1,10 @@
 {
   "mcpServers": {
     "git": {
-      "command": "npx",
+      "command": "python",
       "args": [
-        "-y",
-        "@modelcontextprotocol/server-git",
+        "-m",
+        "mcp_server_git",
         "--repository",
         "."
       ]
@@ -20,15 +20,7 @@
       }
     },
     "serial": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-serial"
-      ],
-      "env": {
-        "SERIAL_PORT": "${SERIAL_PORT:-COM3}",
-        "SERIAL_BAUD": "${SERIAL_BAUD:-115200}"
-      }
+      "command": "serial-mcp"
     }
   }
 }
