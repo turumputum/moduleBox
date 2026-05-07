@@ -118,6 +118,8 @@ typedef struct rtp_stream {
     uint32_t                      last_ssrc;
     bool                          need_seq_seed;        // true = next packet seeds seq (no loss check)
     int64_t                       last_overflow_log_us;
+    int64_t                       last_ssrc_packet_us;        // time of last packet matching last_ssrc
+    int64_t                       last_concurrent_ssrc_log_us;// rate limit for concurrent-stream drops
 
     // === Drain task — reads socket independently of pipeline backpressure ===
     TaskHandle_t                  drain_task_handle;
@@ -542,8 +544,10 @@ static esp_err_t _rtp_open(audio_element_handle_t self)
 
     /* Open-only: clear drift_rate_mpps (no prior estimate exists on first
      * open) and per-session log throttle. */
-    rtp->drift_rate_mpps      = 0;
-    rtp->last_overflow_log_us = 0;
+    rtp->drift_rate_mpps             = 0;
+    rtp->last_overflow_log_us        = 0;
+    rtp->last_ssrc_packet_us         = 0;
+    rtp->last_concurrent_ssrc_log_us = 0;
 
     /* Start drain task — reads socket into jitter buffer independently.
      * Priority 24 = above audio element tasks — must never miss packets.
@@ -769,15 +773,39 @@ static void rtp_drain_task(void *arg)
                           | ((uint32_t)packet_buf[10] <<  8)
                           |  (uint32_t)packet_buf[11];
 
-            /* Detect stream restart: SSRC change */
-            if (rtp->drift_initialized && ssrc != rtp->last_ssrc) {
-                ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
-                         (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
-                _rtp_full_reset(rtp);
-                /* drift_rate_mpps preserved — receiver crystal unchanged. */
-                ESP_LOGI(TAG, "jbuf flushed on SSRC change");
+            /* SSRC handling. Two scenarios produce ssrc != last_ssrc:
+             *  (a) Sender restart  — old stream really stopped, new one started.
+             *  (b) Concurrent stream — a second sender publishes to the same
+             *      multicast group; both arrive interleaved. Without a guard,
+             *      every packet flips the SSRC, triggering full reset + reinit
+             *      + 4 ESP_LOGI per packet. At packet rates ≥30/s this clogs
+             *      the UART, starves IDLE, and trips the task watchdog.
+             *
+             * Distinguish by the freshness of last_ssrc: if a packet matching
+             * it arrived within 1 s, the current stream is still alive and the
+             * other SSRC is concurrent — drop the packet. Only after current
+             * SSRC has been silent for >1 s do we accept a real stream change. */
+            if (ssrc != rtp->last_ssrc) {
+                if (rtp->drift_initialized) {
+                    int64_t since_last = now_us - rtp->last_ssrc_packet_us;
+                    if (since_last < 1000000LL) {
+                        if ((now_us - rtp->last_concurrent_ssrc_log_us) > 1000000LL) {
+                            ESP_LOGW(TAG, "Concurrent SSRC 0x%08lx (active 0x%08lx, idle %lldms) — dropping",
+                                     (unsigned long)ssrc, (unsigned long)rtp->last_ssrc,
+                                     since_last / 1000);
+                            rtp->last_concurrent_ssrc_log_us = now_us;
+                        }
+                        continue;
+                    }
+                    ESP_LOGI(TAG, "SSRC changed 0x%08lx -> 0x%08lx, re-syncing",
+                             (unsigned long)rtp->last_ssrc, (unsigned long)ssrc);
+                    _rtp_full_reset(rtp);
+                    /* drift_rate_mpps preserved — receiver crystal unchanged. */
+                    ESP_LOGI(TAG, "jbuf flushed on SSRC change");
+                }
             }
             rtp->last_ssrc = ssrc;
+            rtp->last_ssrc_packet_us = now_us;
 
             /* --- Drift tracking initialization --- */
             if (!rtp->drift_initialized) {
