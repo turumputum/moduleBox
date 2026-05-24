@@ -9,7 +9,7 @@ foreach(SOURCE_FILE ${MODULE_FILES})
 
         add_custom_command(
             OUTPUT "${GENERATED_OUTPUT_FILE}"
-            COMMAND manifesto ARGS "${SOURCE_FILE}" "${GENERATED_OUTPUT_FILE}"
+            COMMAND "${CMAKE_SOURCE_DIR}/manifesto" ARGS "${SOURCE_FILE}" "${GENERATED_OUTPUT_FILE}"
             DEPENDS "${SOURCE_FILE}"
             COMMENT "Generating manifest of ${SOURCE_FILE}"
         )
