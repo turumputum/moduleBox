@@ -43,14 +43,16 @@ void MPU9250_kick_task(void *arg) {
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/kick_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "trigger_topic:%s", me_state.action_topic_list[slot_num]);
+		char t_custom[strlen(custom_topic) + 8];
+		sprintf(t_custom, "%s/event", custom_topic);
+		me_state.trigger_topic_list[slot_num]=strdup(t_custom);
+		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/kick_0")+3];
-		sprintf(t_str, "%s/kick_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/kick_0")+9];
+		sprintf(t_str, "%s/kick_%d/event",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.action_topic_list[slot_num]);
-	} 
+		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+	}
 
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
@@ -100,18 +102,18 @@ void MPU9250_kick_task(void *arg) {
 
 
     // Сброс устройства
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x80}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x6B, 0x80}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Включение акселерометра
-    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x00}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x6B, 0x00}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 
     // Настройка диапазона акселерометра (±16g)
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x1C, 0x18}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x1C, 0x18}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     //Turn on the internal low-pass filter for accelerometer with 10.2Hz bandwidth
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x1D, 0x05}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x1D, 0x05}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     //turn on the bypass multiplexer
-    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x37, 0x02}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x37, 0x02}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 
     
 

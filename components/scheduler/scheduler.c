@@ -123,7 +123,7 @@ void scheduler_periodic_turn()
             time(&now);
             gmtime_r(&now, &timeinfo);
             
-            if (matches_schedule_time(&me_config.scheduleEntries[i], 
+            if (matches_schedule_time(&me_config.scheduleEntries[i].time,
                                       1900 + timeinfo.tm_year, timeinfo.tm_mon + 1, timeinfo.tm_mday, 
                                       timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, 
                                       timeinfo.tm_wday))

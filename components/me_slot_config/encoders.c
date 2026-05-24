@@ -140,11 +140,13 @@ void configure_encoderInc(PINCCONFIG c, int slot_num)
 		char* custom_topic=NULL;
 		/* Определяет топик для MQTT сообщений */
     	custom_topic = get_option_string_val(slot_num, "topic", "/encoder_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		char t_custom[strlen(custom_topic) + 8];
+		sprintf(t_custom, "%s/event", custom_topic);
+		me_state.trigger_topic_list[slot_num]=strdup(t_custom);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0")+3];
-		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0/event")+3];
+		sprintf(t_str, "%s/encoder_%d/event",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
@@ -156,7 +158,7 @@ void configure_encoderInc(PINCCONFIG c, int slot_num)
 
 	/* Рапортует текущее значение
 	*/
-	c->report = stdreport_register(RPTT_string, slot_num, "", "");
+	c->report = stdreport_register(RPTT_string, slot_num, "", "val");
 }
 
 void encoder_inc_task(void *arg){
@@ -227,7 +229,8 @@ void encoder_inc_task(void *arg){
 	pcnt_unit_add_watch_point(pcnt_unit, INT16_MAX);
 	pcnt_unit_add_watch_point(pcnt_unit, INT16_MIN);
 
-    int32_t rawVal = 0, prewRawVal=0; //pcnt coint in int16 MAX-MIN range
+    int rawVal = 0; //pcnt count - pcnt_unit_get_count expects int*
+    int32_t prewRawVal=0; //pcnt coint in int16 MAX-MIN range
     int32_t count = 0; // global accumulated count
 	int32_t pos = 0; //after divider
 	int32_t prev_pos = INT32_MIN;
@@ -309,7 +312,7 @@ void encoder_inc_task(void *arg){
                 sprintf(str, "%ld", diff);
             }
 
-			stdreport_s(c.report, &str);
+			stdreport_s(c.report, str);
             //report(str, slot_num);
 			//ESP_LOGD(TAG,"Report:%s",str);
             prev_pos = pos;
@@ -417,11 +420,13 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 		char* custom_topic=NULL;
 		/* Определяет топик для MQTT сообщений */
     	custom_topic = get_option_string_val(slot_num, "topic", "/encoder_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		char t_custom[strlen(custom_topic) + 8];
+		sprintf(t_custom, "%s/event", custom_topic);
+		me_state.trigger_topic_list[slot_num]=strdup(t_custom);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0")+3];
-		sprintf(t_str, "%s/encoder_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/encoder_0/event")+3];
+		sprintf(t_str, "%s/encoder_%d/event",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}

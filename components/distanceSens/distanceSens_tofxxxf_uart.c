@@ -124,13 +124,15 @@ void configure_TOFxxxF(distanceSens_t *distanceSens, uint8_t slot_num)
         char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
         custom_topic = get_option_string_val(slot_num, "topic", "/distanceSens_0");
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+        char t_custom[strlen(custom_topic) + 8];
+        sprintf(t_custom, "%s/event", custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(t_custom);
         ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-        char t_str[strlen(me_config.deviceName)+strlen("/distanceSens_0")+3];
-        sprintf(t_str, "%s/distanceSens_%d",me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName)+strlen("/distanceSens_0")+9];
+        sprintf(t_str, "%s/distanceSens_%d/event",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
-        ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);  
+        ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
     // --- LEDC config for visual indication ---
@@ -240,7 +242,7 @@ void TOFxxxF_task(void* arg) {
             } else {
                 index++;
                 if (index == 7) {
-                    if (crc16_modbus(&rawByte,5) == (rawByte[6] << 8 | rawByte[5])) {
+                    if (crc16_modbus(rawByte,5) == (rawByte[6] << 8 | rawByte[5])) {
                         int16_t receivedDistance = (rawByte[3] << 8) | rawByte[4];
                         if(receivedDistance>0){
                             distanceSens.currentPos = abs((rawByte[3] << 8) | rawByte[4]);

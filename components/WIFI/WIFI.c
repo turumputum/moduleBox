@@ -151,9 +151,9 @@ uint8_t wifiInit() {
 			ESP_ERROR_CHECK(esp_netif_dhcpc_stop(wifiSta));
 			esp_netif_ip_info_t info_t;
 
-			ip4addr_aton((const char*) me_config.WIFI_ipAdress, &info_t.ip);
-			ip4addr_aton((const char*) me_config.WIFI_gateWay, &info_t.gw);
-			ip4addr_aton((const char*) me_config.WIFI_netMask, &info_t.netmask);
+			ip4addr_aton((const char*) me_config.WIFI_ipAdress, (ip4_addr_t*)&info_t.ip);
+			ip4addr_aton((const char*) me_config.WIFI_gateWay, (ip4_addr_t*)&info_t.gw);
+			ip4addr_aton((const char*) me_config.WIFI_netMask, (ip4_addr_t*)&info_t.netmask);
 
 			ESP_ERROR_CHECK(esp_netif_set_ip_info(wifiSta, &info_t));
 			ESP_LOGD(TAG, "IP config complite");

@@ -71,7 +71,7 @@ Every slot-mode module is a component under `components/<name>/` and **must** fo
    ```
    Stack size 4096–5120 bytes, priority `configMAX_PRIORITIES-5` (or `-10` for sensor reads). Task name `task_<mod>_<slot>`.
 
-4. **Topics**: action topic (commands inbound) goes in `me_state.action_topic_list[slot_num]`, trigger topic (events outbound) in `trigger_topic_list[slot_num]`. Default form is `<deviceName>/<mode>_<slot>`; user override via `topic:<value>` option.
+4. **Topics**: action topic (commands inbound) goes in `me_state.action_topic_list[slot_num]`, trigger topic (events outbound) in `trigger_topic_list[slot_num]`. Default form is `<deviceName>/<mode>_<slot>`; user override via `topic:<value>` option. Full protocol contract (topic structure, `event`/`action` directions, payload format, `enable` lifecycle, canonical name dictionary) is defined in [CONSTITUTION.md](CONSTITUTION.md) — read it before adding or changing any event/action names.
 
 5. **Adding a new component**: after creating the directory, the new top-level `idf_component_register(... REQUIRES ...)` deps usually include `me_slot_config stateConfig reporter` plus whatever else (`rgbHsv arsenal` for LED stuff, `audioPlayer` for audio, etc.). Then add the `start_<mode>_task` branch in [me_slot_config.c init_slots()](components/me_slot_config/me_slot_config.c).
 
@@ -88,7 +88,7 @@ If a module's manifest is missing on the SD card, suspect: (a) the variant file 
 
 ## Where to look first
 
-- New module mode → [COMPONENT_SKILL.md](COMPONENT_SKILL.md) (full Russian-language template + checklist), then mimic [components/distanceSens/](components/distanceSens/) (sensor-style) or [components/buttonLeds/](components/buttonLeds/) (input+output split).
+- New module mode → [COMPONENT_SKILL.md](COMPONENT_SKILL.md) (full Russian-language template + checklist), then mimic [components/distanceSens/](components/distanceSens/) (sensor-style) or [components/buttonLeds/](components/buttonLeds/) (input+output split). All topic/payload/lifecycle rules → [CONSTITUTION.md](CONSTITUTION.md).
 - Slot dispatch / option parsing → [me_slot_config.c](components/me_slot_config/me_slot_config.c) (`get_option_flag_val`, `get_option_int_val`, `get_option_float_val`, `get_option_string_val`, `get_option_enum_val`).
 - Reporter / publish path (MQTT/OSC/UDP fan-out) → [components/reporter/](components/reporter/) and `stdreport.c` in `me_slot_config`.
 - Boot sequence → [main/main.c](main/main.c).

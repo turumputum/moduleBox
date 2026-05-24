@@ -13,8 +13,12 @@
 #include "freertos/portmacro.h"
 
 #include "reporter.h"
+#include "stateConfig.h"
 #include <axstring.h>
 #include <string.h>
+
+extern configuration me_config;
+extern stateStruct me_state;
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
@@ -194,4 +198,19 @@ void stdreport_s(int                reportRegId,
 
         report(tmpString, p->slot_num);
     }
+}
+
+void stdreport_enable(int slot_num, int value)
+{
+    if (slot_num < 0 || slot_num >= NUM_OF_SLOTS) return;
+    if (!me_state.trigger_topic_list[slot_num]) return;
+
+    /* trigger_topic_list содержит "<deviceName>/<module>_<slot>/event" */
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s/enable", me_state.trigger_topic_list[slot_num]);
+
+    char payload[4];
+    snprintf(payload, sizeof(payload), "%d", value);
+
+    report_retain(topic, payload);
 }

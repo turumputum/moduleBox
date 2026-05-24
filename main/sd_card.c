@@ -193,7 +193,7 @@ int spisd_init() {
 	const uint8_t pin_sets[][4] = {
 		// {clk, cmd, d0, led}
 		{47, 21, 40, 48},  // v3
-		{41, 40,  3, 48},  // v4
+		{ 41, 40, 3, 48},  // v4
 	};
 	int set_order[2];
 
@@ -248,7 +248,7 @@ int spisd_init() {
 	// SDMMC_FREQ_DEFAULT = 20MHz — стандартная скорость для GPIO Matrix.
 	// 40MHz (HIGHSPEED) через GPIO Matrix + USB-нагрузка даёт end-bit error (0x8008).
 	// input_delay_phase работает только при HIGHSPEED/52M, при 20MHz не нужна.
-	host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+	host.max_freq_khz =SDMMC_FREQ_HIGHSPEED;
 	host.input_delay_phase = SDMMC_DELAY_PHASE_1;
 
 	int res=spisd_mount_fs();

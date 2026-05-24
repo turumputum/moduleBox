@@ -14,6 +14,7 @@
 #include "esp_log.h"
 
 #include <stdcommand.h>
+#include <stdreport.h>
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
@@ -38,6 +39,9 @@ void stdcommand_init(PSTDCOMMANDS       cmd,
     memset(cmd, 0, sizeof(STDCOMMANDS));
 
     cmd->slot_num = slot_num;
+
+    /* Авто-регистрация action/enable (Конституция §6) */
+    stdcommand_register(cmd, STDCMD_ENABLE, "enable", PARAMT_int);
 }
 int _stdcommand_register(PSTDCOMMANDS       cmd,
                          int                id,
@@ -357,6 +361,14 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
         if (-1 == result)
         {
             ESP_LOGW(TAG, "Slot:%d command not recognized: '%s'", cmd->slot_num, cmd->msg.str);
+        }
+
+        /* Авто-обработка action/enable (Конституция §6): публикуем event/enable retained.
+         * Модуль получит STDCMD_ENABLE и может дополнительно обработать (sleep/wake логика).
+         * Если не обработает — default: break — тоже нормально. */
+        if (result == STDCMD_ENABLE && params->count > 0)
+        {
+            stdreport_enable(cmd->slot_num, params->p[0].i);
         }
     }
 

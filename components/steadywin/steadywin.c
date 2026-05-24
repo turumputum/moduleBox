@@ -535,14 +535,16 @@ void GIM_motor_task(void *arg) {
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/GIM_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+		char t_action[strlen(custom_topic)+9]; sprintf(t_action, "%s/action", custom_topic);
+		me_state.action_topic_list[slot_num]=strdup(t_action);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
 		char t_str[strlen(me_config.deviceName)+strlen("/GIM_0")+3];
 		sprintf(t_str, "%s/GIM_%d",me_config.deviceName, slot_num);
-		me_state.action_topic_list[slot_num]=strdup(t_str);
+		char t_action[strlen(t_str)+9]; sprintf(t_action, "%s/action", t_str);
+		me_state.action_topic_list[slot_num]=strdup(t_action);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
-	} 
+	}
 
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     //twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();

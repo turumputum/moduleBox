@@ -96,21 +96,23 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->button.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "hz", 40, 1, 100));
 
-    if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL) 
+    if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL)
     {
         /* Топик для событий кнопки
         */
         char * custom_topic = get_option_string_val(slot_num, "buttonTopic", "/button_0");
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+8];
+        sprintf(t_custom, "%s/event", custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(t_custom);
     }else{
-        char t_str[strlen(me_config.deviceName)+strlen("/button_0")+3];
-        sprintf(t_str, "%s/button_%d",me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName)+strlen("/button_0/event")+3];
+        sprintf(t_str, "%s/button_%d/event",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
     }
 
 	/* Рапортует при изменении состояния кнопки
 	*/
-	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", nil, 0, 1);
+	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "press", 0, 1);
 
 	/* Рапортует при регистрации длинного нажатия
 	*/
@@ -192,12 +194,14 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 		char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
     	custom_topic = get_option_string_val(slot_num, "ledTopic", "/ledRing_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+9];
+        sprintf(t_custom, "%s/action", custom_topic);
+		me_state.action_topic_list[slot_num]=strdup(t_custom);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/ledRing_0")+3];
-		sprintf(t_str, "%s/ledRing_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/ledRing_0/action")+3];
+		sprintf(t_str, "%s/ledRing_%d/action",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
-	} 
+	}
 
     /* Задаёт текущее состояние светодиода (вкл/выкл)
     */

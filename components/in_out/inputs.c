@@ -178,27 +178,29 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     // Setup topic
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = get_option_string_val(slot_num, "topic", "/in_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+8];
+        sprintf(t_custom, "%s/event", custom_topic);
+        me_state.trigger_topic_list[slot_num] = strdup(t_custom);
         ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
-        sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/in_0/event") + 3];
+        sprintf(t_str, "%s/in_%d/event", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
-   
+
     /* Отчет о состоянии канала 0 (0 или 1)
     */
-    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "/ch_0", 0, 1);
-    
+    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "ch_0", 0, 1);
+
     /* Отчет о состоянии канала 1 (0 или 1)
     */
-    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "/ch_1", 0, 1);
-    
+    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "ch_1", 0, 1);
+
     /* Отчет о комбинированном состоянии обоих каналов (результат логической операции OR/AND)
     */
-    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "");
+    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "val");
 
     // Configure GPIO
     gpio_config_t io_conf = {};
@@ -343,30 +345,32 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
     // Setup topic
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = get_option_string_val(slot_num, "topic", "/in_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+8];
+        sprintf(t_custom, "%s/event", custom_topic);
+        me_state.trigger_topic_list[slot_num] = strdup(t_custom);
         ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
-        sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/in_0/event") + 3];
+        sprintf(t_str, "%s/in_%d/event", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
     /* Отчет о состоянии канала 0 (0 или 1)
     */
-    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "/ch_0", 0, 1);
-    
+    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "ch_0", 0, 1);
+
     /* Отчет о состоянии канала 1 (0 или 1)
     */
-    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "/ch_1", 0, 1);
-    
+    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "ch_1", 0, 1);
+
     /* Отчет о состоянии канала 2 (0 или 1)
     */
-    ctx->stateReport_2 = stdreport_register(RPTT_int, slot_num, "", "/ch_2", 0, 1);
-    
+    ctx->stateReport_2 = stdreport_register(RPTT_int, slot_num, "", "ch_2", 0, 1);
+
     /* Отчет о комбинированном состоянии всех каналов (результат логической операции OR/AND)
     */
-    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", me_state.trigger_topic_list[slot_num]);
+    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "val");
 
     // Configure GPIO
     gpio_config_t io_conf = {};

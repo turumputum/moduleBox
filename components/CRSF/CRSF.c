@@ -78,11 +78,13 @@ void crsf_rx_task(void* arg) {
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/CRSF_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
+		char t_custom[strlen(custom_topic) + 8];
+		sprintf(t_custom, "%s/event", custom_topic);
+		me_state.trigger_topic_list[slot_num]=strdup(t_custom);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/CRSF_0")+3];
-		sprintf(t_str, "%s/CRSF_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/CRSF_0/event")+3];
+		sprintf(t_str, "%s/CRSF_%d/event",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
@@ -157,7 +159,7 @@ void crsf_rx_task(void* arg) {
                         if(frame.type == 0x16) {
                             //ESP_LOGD(TAG, "Received payload: %x %x %x %x %x %x", frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3], frame.payload[4], frame.payload[5]);
                             int32_t rawChannels[numOfChannel];
-                            UnpackChannels(&frame.payload, rawChannels);
+                            UnpackChannels(frame.payload, rawChannels);
                             for(int i=0; i<8; i++){
                                 if(abs(rawChannels[i]-channels[i])>deadBand){
                                    

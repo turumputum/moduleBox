@@ -1,5 +1,6 @@
 void reporter_init(void);
 void report(char *msg, int num_of_slot);
+void report_retain(const char *topic, const char *payload);
 void crosslinker_task(void *parameter);
 void reportTaskList();
 void reportNETstatus();

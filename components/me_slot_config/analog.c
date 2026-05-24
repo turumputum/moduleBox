@@ -238,11 +238,13 @@ void analog_task(void *arg)
 
     // Topic setup
     if (ctx.flag_custom_topic == 0) {
-        char *str = calloc(strlen(me_config.deviceName) + strlen("/analog_") + 4, sizeof(char));
-        sprintf(str, "%s/analog_%d", me_config.deviceName, slot_num);
+        char *str = calloc(strlen(me_config.deviceName) + strlen("/analog_") + 4 + strlen("/event"), sizeof(char));
+        sprintf(str, "%s/analog_%d/event", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = str;
     } else {
-        me_state.trigger_topic_list[slot_num] = ctx.custom_topic;
+        char *str = calloc(strlen(ctx.custom_topic) + strlen("/event") + 1, sizeof(char));
+        sprintf(str, "%s/event", ctx.custom_topic);
+        me_state.trigger_topic_list[slot_num] = str;
     }
 
     uint8_t oversample = 150;

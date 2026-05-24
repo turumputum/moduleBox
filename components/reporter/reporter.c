@@ -324,7 +324,7 @@ void send_report(reporter_message_t * msg)
 	}
 }
 
-void spread_the_word_task(void)
+void spread_the_word_task(void *arg)
 {
 	//char tmpStr[555];
 	reporter_message_t received_message;
@@ -361,7 +361,17 @@ void forward_report(char *msg, int slot_num)
 		ESP_LOGE(TAG, "Der Heap ist kaputt");
 }
 
-void reporter_task(void){
+/* Публикует retained-сообщение напрямую, минуя очередь reporter.
+ * Используется исключительно для event/enable (retained по Конституции §5-6).
+ * msg формат: "full/topic:value"  */
+void report_retain(const char *topic, const char *payload)
+{
+	if (me_state.MQTT_init_res == ESP_OK) {
+		mqtt_pub_retain(topic, payload);
+	}
+}
+
+void reporter_task(void *arg){
 	reporter_message_t received_message;
 	for(;;){
 		if (xQueueReceive(me_state.reporter_queue, &received_message, portMAX_DELAY) == pdPASS){

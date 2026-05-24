@@ -25,7 +25,7 @@ typedef struct rtp_opus_stream_event_msg {
     void                          *source;
     void                          *data;
     int                           data_len;
-    esp_transport_handle_t        sock_fd;
+    int                           sock_fd;
 } rtp_opus_stream_event_msg_t;
 
 typedef esp_err_t (*rtp_opus_stream_event_handle_cb)(rtp_opus_stream_event_msg_t *msg, rtp_opus_stream_status_t state, void *event_ctx);

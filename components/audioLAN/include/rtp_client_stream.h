@@ -45,7 +45,7 @@ typedef struct rtp_stream_event_msg {
     void                          *source;          /*!< Element handle */
     void                          *data;            /*!< Data of input/output */
     int                           data_len;         /*!< Data length of input/output */
-    esp_transport_handle_t        sock_fd;          /*!< handle of socket*/
+    int                           sock_fd;          /*!< raw socket descriptor*/
 } rtp_stream_event_msg_t;
 
 typedef esp_err_t (*rtp_stream_event_handle_cb)(rtp_stream_event_msg_t *msg, rtp_stream_status_t state, void *event_ctx);

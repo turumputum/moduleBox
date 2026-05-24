@@ -19,6 +19,11 @@
 #define STDCOMMAN_MAX_KEYWORDS  10
 #define STDCOMMAN_MAX_PARAMS    10
 
+/* Зарезервированный ID для action/enable (Конституция §6).
+ * stdcommand_init авто-регистрирует это ключевое слово.
+ * Обрабатывать в switch: case STDCMD_ENABLE: ... */
+#define STDCMD_ENABLE           (-10)
+
 #define PARAMSIZE               uint32_t
 
 // ---------------------------------------------------------------------------

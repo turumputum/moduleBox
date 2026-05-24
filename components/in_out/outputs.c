@@ -125,11 +125,13 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
         /* Пользовательская топик для выходного сигнала
         */
         char* custom_topic = get_option_string_val(slot_num, "topic", "/out_0");
-        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+9];
+        sprintf(t_custom, "%s/action", custom_topic);
+        me_state.action_topic_list[slot_num] = strdup(t_custom);
         ESP_LOGD(TAG, "Custom action_topic:%s", me_state.action_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/out_0") + 3];
-        sprintf(t_str, "%s/out_%d", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/out_0/action") + 3];
+        sprintf(t_str, "%s/out_%d/action", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
     }
@@ -310,11 +312,13 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
         /* Пользовательский топик для выходного сигнала
         */
         char* custom_topic = get_option_string_val(slot_num, "topic", "/out_0");
-        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+9];
+        sprintf(t_custom, "%s/action", custom_topic);
+        me_state.action_topic_list[slot_num] = strdup(t_custom);
         ESP_LOGD(TAG, "Custom action_topic:%s", me_state.action_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/out_0") + 3];
-        sprintf(t_str, "%s/out_%d", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/out_0/action") + 3];
+        sprintf(t_str, "%s/out_%d/action", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
     }
@@ -526,11 +530,13 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
         /* Пользовательский топик для реле
         */
         char* custom_topic = get_option_string_val(slot_num, "topic", "/relay_0");
-        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        char t_custom[strlen(custom_topic)+9];
+        sprintf(t_custom, "%s/action", custom_topic);
+        me_state.action_topic_list[slot_num] = strdup(t_custom);
         ESP_LOGD(TAG, "Custom action_topic:%s", me_state.action_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/relay_0") + 3];
-        sprintf(t_str, "%s/relay_%d", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/relay_0/action") + 3];
+        sprintf(t_str, "%s/relay_%d/action", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
     }

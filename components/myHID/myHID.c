@@ -63,7 +63,8 @@ void HID_task(void *arg) {
 
     char t_str[strlen(me_config.deviceName)+strlen("/HID_0")+3];
     sprintf(t_str, "%s/HID_%d",me_config.deviceName, slot_num);
-    me_state.action_topic_list[slot_num]=strdup(t_str);
+    char t_action[strlen(t_str)+9]; sprintf(t_action, "%s/action", t_str);
+    me_state.action_topic_list[slot_num]=strdup(t_action);
     ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
     ESP_LOGD(TAG, "HID task init ok. Slot_num:%d", slot_num);
 

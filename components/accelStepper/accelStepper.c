@@ -63,7 +63,7 @@ uint8_t runSpeed(Stepper_t* motor){
 	
 	//unsigned long time = HAL_GetTick() * 10; //Arduino: micros();
     //unsigned long time = esp_timer_get_time();
-	unsigned long time;
+	uint64_t time;
 	gptimer_get_raw_count(usTime, &time);
 	unsigned long nextStepTime = motor->_lastStepTime + (motor->_stepInterval/1000);
 

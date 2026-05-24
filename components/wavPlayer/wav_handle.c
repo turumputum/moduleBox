@@ -279,7 +279,7 @@ static int _playCurrent(wav_handle_t    h)
 }
 wav_handle_t wav_handle_init(const char * tag, gpio_num_t bclk, gpio_num_t ws, gpio_num_t dout)
 {
-    wav_handle_t            result  = 1;
+    wav_handle_t            result  = nil;
 
     if ((result = calloc(1, sizeof(struct wav_handle))) != nil)
     {

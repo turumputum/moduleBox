@@ -378,9 +378,9 @@ int LAN_init(void) {
 
 	esp_netif_ip_info_t info_t;
 	if (me_config.LAN_DHCP == 0) {
-		ip4addr_aton((const char*) me_config.LAN_ipAdress, &info_t.ip);
-		ip4addr_aton((const char*) me_config.LAN_gateWay, &info_t.gw);
-		ip4addr_aton((const char*) me_config.LAN_netMask, &info_t.netmask);
+		ip4addr_aton((const char*) me_config.LAN_ipAdress, (ip4_addr_t*)&info_t.ip);
+		ip4addr_aton((const char*) me_config.LAN_gateWay, (ip4_addr_t*)&info_t.gw);
+		ip4addr_aton((const char*) me_config.LAN_netMask, (ip4_addr_t*)&info_t.netmask);
 		esp_netif_dhcpc_stop(eth_netif);
 		esp_netif_set_ip_info(eth_netif, &info_t);
 	}
@@ -410,7 +410,7 @@ const char * networkGetStatusString()
 		{
 			if (info_t.ip.addr != 0)
 			{
-				addr = ip4addr_ntoa(&info_t.ip);
+				addr = ip4addr_ntoa((const ip4_addr_t*)&info_t.ip);
 			}
 		}
 

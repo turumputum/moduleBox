@@ -88,14 +88,18 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = NULL;
         custom_topic = get_option_string_val(slot_num, "topic", "/flywheel_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
-        me_state.action_topic_list[slot_num] = strdup(custom_topic);
+        char t_action[strlen(custom_topic)+9]; sprintf(t_action, "%s/action", custom_topic);
+        char t_event[strlen(custom_topic)+8];  sprintf(t_event,  "%s/event",  custom_topic);
+        me_state.trigger_topic_list[slot_num] = strdup(t_event);
+        me_state.action_topic_list[slot_num] = strdup(t_action);
         ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
         char t_str[strlen(me_config.deviceName) + strlen("/flywheel_0") + 3];
         sprintf(t_str, "%s/flywheel_%d", me_config.deviceName, slot_num);
-        me_state.trigger_topic_list[slot_num] = strdup(t_str);
-        me_state.action_topic_list[slot_num] = strdup(t_str);
+        char t_action[strlen(t_str)+9]; sprintf(t_action, "%s/action", t_str);
+        char t_event[strlen(t_str)+8];  sprintf(t_event,  "%s/event",  t_str);
+        me_state.trigger_topic_list[slot_num] = strdup(t_event);
+        me_state.action_topic_list[slot_num] = strdup(t_action);
         ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
@@ -108,7 +112,7 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
 
     /* Отчёт состояния в пороговом режиме (0/1)
     */
-    ch->stateReport = stdreport_register(RPTT_int, slot_num, "", "", 0, 1);
+    ch->stateReport = stdreport_register(RPTT_int, slot_num, "", "val", 0, 1);
 
     /* Отчёт значения счетчика
     */

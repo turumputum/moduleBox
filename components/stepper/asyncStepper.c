@@ -126,7 +126,7 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 #define STATE_STOP 3
 
 void stepper_getCurrentPos(stepper_t *stepper){
-    int32_t pos = 0;
+    int pos = 0;
     pcnt_unit_get_count(stepper->pcntUnit, &pos);
     
     int32_t delta= pos - stepper->pcnt_prevPos;
@@ -180,7 +180,7 @@ static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt
         pcnt_unit_clear_count(stepper->pcntUnit);
         stepper->pcnt_prevPos = 0;
     }
-    int32_t tmpCnt = 0;
+    int tmpCnt = 0;
     pcnt_unit_get_count(stepper->pcntUnit, &tmpCnt);
     if(tmpCnt!=stepper->pcnt_watchPoint){
         pcnt_unit_clear_count(stepper->pcntUnit);

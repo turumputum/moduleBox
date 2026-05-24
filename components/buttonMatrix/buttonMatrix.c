@@ -122,19 +122,23 @@ void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
 
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char *custom_topic = get_option_string_val(slot_num, "topic", "/buttonMatrix_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
+        char t_event[strlen(custom_topic)+8];
+        sprintf(t_event, "%s/event", custom_topic);
+        me_state.trigger_topic_list[slot_num] = strdup(t_event);
         ESP_LOGD(TAG, "buttonMatrix topic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/buttonMatrix_0") + 3];
+        char t_str[strlen(me_config.deviceName) + strlen("/buttonMatrix_0/event") + 3];
+        char t_event[strlen(t_str)+8];
         sprintf(t_str, "%s/buttonMatrix_%d", me_config.deviceName, slot_num);
-        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        sprintf(t_event, "%s/event", t_str);
+        me_state.trigger_topic_list[slot_num] = strdup(t_event);
         ESP_LOGD(TAG, "Standart buttonMatrix topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
     /* Рапортует строкой символ соответствующий нажатой клетке матрицы
        символ берётся из mapping по индексу row*cols + col
     */
-    ctx->charReport = stdreport_register(RPTT_string, slot_num, "", "");
+    ctx->charReport = stdreport_register(RPTT_string, slot_num, "", "key");
 }
 
 void buttonMatrix_task(void *arg) {
