@@ -8,11 +8,15 @@ void reportFreeRAM();
 void reportFreeDisk();
 void reportVersion();
 
-/* Periodic diagnostic snapshot — publishes <deviceName>/system/diag
-   with a single-line JSON: uptime, heap (free/min/largest/internal/spiram),
-   MQTT counters (connect/disconnect/pub/data/err + last-pub-age),
-   open-socket count, FreeRTOS task count. */
+/* Periodic diagnostic snapshot — writes JSON line to /sdcard/log.txt via mblog.
+   Content: uptime, heap (free/min/largest/internal/spiram), MQTT counters
+   (connect/disconnect/pub/data/err + last-event ages), open-socket count,
+   FreeRTOS task count. Does NOT touch MQTT/OSC/UDP. */
 void reportSystemDiag(void);
+
+/* Dumps FreeRTOS task list with stack high-water marks to /sdcard/log.txt
+   via mblog. Heavier than reportSystemDiag (~2 KB). */
+void logTaskList(void);
 
 //void startup_crosslinks_exec(void);
 void crosslinks_process(char *crosslinks_str, char *event);

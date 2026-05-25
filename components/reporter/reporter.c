@@ -20,6 +20,7 @@
 #include "esp_vfs_fat.h"
 #include "esp_heap_caps.h"
 #include <fcntl.h>
+#include <mbdebug.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "REPORTER";
@@ -528,12 +529,12 @@ static int count_open_sockets(void){
 }
 
 void reportSystemDiag(void){
-	/* Все большие буферы — на куче чтобы не раздувать стек caller'а */
-	const int bufSize = 768;
+	/* Пишем диагностический snapshot в SD-лог через mblog (не в MQTT).
+	   Один JSON-объект, удобно грепать в /sdcard/log.txt. */
+	const int bufSize = 640;
 	char *tmpStr = heap_caps_malloc(bufSize, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
 
-	/* Heap-метрики (internal — самый ценный, его мало) */
 	uint32_t heap_free      = xPortGetFreeHeapSize();
 	uint32_t heap_min       = xPortGetMinimumEverFreeHeapSize();
 	uint32_t heap_largest   = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -546,16 +547,16 @@ void reportSystemDiag(void){
 	mqtt_diag_t md;
 	mqtt_diag_snapshot(&md);
 
-	int64_t last_pub_age_s = md.last_published_us  ? (now_us - md.last_published_us)  / 1000000 : -1;
-	int64_t last_data_age_s = md.last_data_us      ? (now_us - md.last_data_us)       / 1000000 : -1;
-	int64_t last_conn_age_s = md.last_connect_us   ? (now_us - md.last_connect_us)    / 1000000 : -1;
-	int64_t last_disc_age_s = md.last_disconnect_us? (now_us - md.last_disconnect_us) / 1000000 : -1;
+	int64_t last_pub_age_s  = md.last_published_us  ? (now_us - md.last_published_us)  / 1000000 : -1;
+	int64_t last_data_age_s = md.last_data_us       ? (now_us - md.last_data_us)       / 1000000 : -1;
+	int64_t last_conn_age_s = md.last_connect_us    ? (now_us - md.last_connect_us)    / 1000000 : -1;
+	int64_t last_disc_age_s = md.last_disconnect_us ? (now_us - md.last_disconnect_us) / 1000000 : -1;
 
 	int socks = count_open_sockets();
 	UBaseType_t tasks = uxTaskGetNumberOfTasks();
 
 	snprintf(tmpStr, bufSize,
-		"%s/system/diag:{"
+		"DIAG {"
 		"\"up_s\":%llu,"
 		"\"heap_free\":%lu,\"heap_min\":%lu,\"heap_largest\":%lu,"
 		"\"heap_internal\":%lu,\"spiram_free\":%lu,"
@@ -567,7 +568,6 @@ void reportSystemDiag(void){
 			"\"conn_age_s\":%lld,\"disc_age_s\":%lld"
 		"}"
 		"}",
-		me_config.deviceName,
 		(unsigned long long)uptime_s,
 		(unsigned long)heap_free, (unsigned long)heap_min, (unsigned long)heap_largest,
 		(unsigned long)heap_internal, (unsigned long)spiram_free,
@@ -579,6 +579,18 @@ void reportSystemDiag(void){
 		(long long)last_conn_age_s, (long long)last_disc_age_s
 	);
 
-	forward_report(tmpStr, -1);
+	/* Используем W (warn), чтобы лог писался при дефолтном logLevel=warn,
+	   без необходимости менять config.ini. */
+	mblog(W, tmpStr);
 	heap_caps_free(tmpStr);
+}
+
+void logTaskList(void){
+	char *buf = heap_caps_malloc(2048, MALLOC_CAP_8BIT);
+	if(!buf) return;
+	/* Префикс "TASKS\n" чтобы блок было видно в логе. */
+	strcpy(buf, "TASKS\n");
+	vTaskList(buf + strlen(buf));
+	mblog(W, buf);
+	heap_caps_free(buf);
 }

@@ -613,20 +613,21 @@ void app_main(void)
 			scheduleTicks = now;
 		}
 
-		/* Диагностика — раз в 60 с публикует <dev>/system/diag.
-		   Помогает ловить деградации (heap leak, MQTT half-open, socket-leak,
-		   падение mDNS/MQTT-таска). Лёгкий пакет, ~400 байт JSON. */
+		/* Диагностика — раз в 60 с пишет одну JSON-строку в /sdcard/log.txt
+		   через mblog (НЕ в MQTT, чтобы не засорять брокер).
+		   Помогает ловить multi-day деградации (heap leak, MQTT half-open,
+		   socket-leak, падение mDNS/MQTT-таска). */
 		if ((now - diagTicks) >= pdMS_TO_TICKS(60 * 1000))
 		{
 			reportSystemDiag();
 			diagTicks = now;
 		}
 
-		/* Длинный дамп списка задач — раз в 5 минут.
-		   Тяжелее (~2 КБ), но даёт stack high-water mark по каждой задаче. */
-		if ((now - taskListTicks) >= pdMS_TO_TICKS(5 * 60 * 1000))
+		/* Длинный дамп списка задач (~2 КБ) — раз в 15 минут, тоже в SD-лог.
+		   Даёт stack high-water mark по каждой задаче. */
+		if ((now - taskListTicks) >= pdMS_TO_TICKS(15 * 60 * 1000))
 		{
-			reportTaskList();
+			logTaskList();
 			taskListTicks = now;
 		}
 
