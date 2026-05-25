@@ -58,8 +58,7 @@ void configure_masquerade(PMASQUERADE_CONFIG ch, int slot_num)
         ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
     }
 
-    /* Выходной замаскированный топик (база — суффикс /event/ добавит
-       stdreport_register автоматически).
+    /* Выходной замаскированный топик (база-маска).
        По умолчанию deviceName/msq_x
     */
     if (strstr(me_config.slot_options[slot_num], "mask") != NULL) {
