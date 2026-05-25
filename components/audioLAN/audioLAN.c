@@ -330,22 +330,14 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
         /* Топик
         */
         char * custom_topic = get_option_string_val(slot_num, "topic", "/audioStream_0");
-        char t_action[strlen(custom_topic)+9];
-        char t_event[strlen(custom_topic)+8];
-        sprintf(t_action, "%s/action", custom_topic);
-        sprintf(t_event, "%s/event", custom_topic);
-        me_state.action_topic_list[slot_num]=strdup(t_action);
-        me_state.trigger_topic_list[slot_num]=strdup(t_event);
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
         ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/audioStream_0/action")+3];
-		char t_action[strlen(t_str)+9];
-		char t_event[strlen(t_str)+8];
+		char t_str[strlen(me_config.deviceName)+strlen("/audioStream_0")+3];
 		sprintf(t_str, "%s/audioStream_%d",me_config.deviceName, slot_num);
-		sprintf(t_action, "%s/action", t_str);
-		sprintf(t_event, "%s/event", t_str);
-		me_state.action_topic_list[slot_num]=strdup(t_action);
-		me_state.trigger_topic_list[slot_num]=strdup(t_event);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 

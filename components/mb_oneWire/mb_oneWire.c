@@ -104,14 +104,12 @@ void ds18b20_task(void* arg) {
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/temp_0");
-		char t_event[strlen(custom_topic)+8]; sprintf(t_event, "%s/event", custom_topic);
-		me_state.trigger_topic_list[slot_num]=strdup(t_event);
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "tempTopic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
 		char t_str[strlen(me_config.deviceName)+strlen("/temp_0")+3];
 		sprintf(t_str, "%s/temp_%d",me_config.deviceName, slot_num);
-		char t_event[strlen(t_str)+8]; sprintf(t_event, "%s/event", t_str);
-		me_state.trigger_topic_list[slot_num]=strdup(t_event);
+		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart tempTopic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 

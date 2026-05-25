@@ -423,13 +423,11 @@ void adc1_task(void *arg)
 	}
 
     if(ch->flag_custom_topic==0){
-		char *str = calloc(strlen(me_config.deviceName)+strlen("/analog_")+4+strlen("/event"), sizeof(char));
-		sprintf(str, "%s/analog_%d/event",me_config.deviceName, slot_num);
+		char *str = calloc(strlen(me_config.deviceName)+strlen("/analog_")+4, sizeof(char));
+		sprintf(str, "%s/analog_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=str;
 	}else{
-		char *str = calloc(strlen(ch->custom_topic)+strlen("/event")+1, sizeof(char));
-		sprintf(str, "%s/event", ch->custom_topic);
-		me_state.trigger_topic_list[slot_num]=str;
+		me_state.trigger_topic_list[slot_num]=strdup(ch->custom_topic);
 	}
 
 	uint8_t oversumple = 150;

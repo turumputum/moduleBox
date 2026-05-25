@@ -102,12 +102,10 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
         /* Топик для событий кнопки
         */
         char * custom_topic = get_option_string_val(slot_num, "buttonTopic", "/button_0");
-        char t_custom[strlen(custom_topic)+8];
-        sprintf(t_custom, "%s/event", custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(t_custom);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
     }else{
-        char t_str[strlen(me_config.deviceName)+strlen("/button_0/event")+3];
-        sprintf(t_str, "%s/button_%d/event",me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName)+strlen("/button_0")+3];
+        sprintf(t_str, "%s/button_%d",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
     }
 
@@ -201,12 +199,10 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
         char* custom_topic=NULL;
         /* Определяет топик для MQTT сообщений */
         custom_topic = get_option_string_val(slot_num, "ledTopic", "/runFire_0");
-        char t_custom[strlen(custom_topic)+9];
-        sprintf(t_custom, "%s/action", custom_topic);
-        me_state.action_topic_list[slot_num]=strdup(t_custom);
+        me_state.action_topic_list[slot_num]=strdup(custom_topic);
     }else{
-        char t_str[strlen(me_config.deviceName)+strlen("/runFire_0/action")+3];
-        sprintf(t_str, "%s/runFire_%d/action",me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName)+strlen("/runFire_0")+3];
+        sprintf(t_str, "%s/runFire_%d",me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num]=strdup(t_str);
     }
 

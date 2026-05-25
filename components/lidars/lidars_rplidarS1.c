@@ -217,18 +217,14 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
         char* custom_topic = NULL;
         /* Определяет топик для MQTT сообщений */
         custom_topic = get_option_string_val(slot_num, "topic", "/lidar_0");
-        char t_action[strlen(custom_topic)+9]; sprintf(t_action, "%s/action", custom_topic);
-        char t_event[strlen(custom_topic)+8];  sprintf(t_event,  "%s/event",  custom_topic);
-        me_state.trigger_topic_list[slot_num] = strdup(t_event);
-        me_state.action_topic_list[slot_num] = strdup(t_action);
+        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
+        me_state.action_topic_list[slot_num] = strdup(custom_topic);
         ESP_LOGD(TAG, "topic:%s slot:%d", custom_topic, slot_num);
     } else {
         char t_str[strlen(me_config.deviceName) + 20];
         sprintf(t_str, "%s/lidar_%d", me_config.deviceName, slot_num);
-        char t_action[strlen(t_str)+9]; sprintf(t_action, "%s/action", t_str);
-        char t_event[strlen(t_str)+8];  sprintf(t_event,  "%s/event",  t_str);
-        me_state.trigger_topic_list[slot_num] = strdup(t_event);
-        me_state.action_topic_list[slot_num] = strdup(t_action);
+        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        me_state.action_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard topic:%s slot:%d", t_str, slot_num);
     }
 

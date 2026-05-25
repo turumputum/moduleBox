@@ -192,22 +192,14 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/stepper_0");
-		char t_action[strlen(custom_topic) + 9];
-		sprintf(t_action, "%s/action", custom_topic);
-		me_state.action_topic_list[slot_num]=strdup(t_action);
-		char t_event[strlen(custom_topic) + 8];
-		sprintf(t_event, "%s/event", custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(t_event);
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
+        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
 		char t_str[strlen(me_config.deviceName)+strlen("/stepper_0")+3];
 		sprintf(t_str, "%s/stepper_%d",me_config.deviceName, slot_num);
-		char t_action[strlen(t_str) + 9];
-		sprintf(t_action, "%s/action", t_str);
-		me_state.action_topic_list[slot_num]=strdup(t_action);
-		char t_event[strlen(t_str) + 8];
-		sprintf(t_event, "%s/event", t_str);
-        me_state.trigger_topic_list[slot_num]=strdup(t_event);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
+        me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart stepper_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
@@ -273,7 +265,7 @@ void getHomingSenesorState(int slot_num, int* state){
         if(strstr(cmd, ":")!=NULL){
             cmd = strtok_r(msg.str, ":", &payload);
             ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]);
+            cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             if(strstr(cmd, "homingSensor")!=NULL){
                 *state = atoi(payload);
             }

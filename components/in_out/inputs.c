@@ -178,13 +178,11 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     // Setup topic
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = get_option_string_val(slot_num, "topic", "/in_0");
-        char t_custom[strlen(custom_topic)+8];
-        sprintf(t_custom, "%s/event", custom_topic);
-        me_state.trigger_topic_list[slot_num] = strdup(t_custom);
+        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
         ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/in_0/event") + 3];
-        sprintf(t_str, "%s/in_%d/event", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
+        sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
@@ -345,13 +343,11 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
     // Setup topic
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
         char* custom_topic = get_option_string_val(slot_num, "topic", "/in_0");
-        char t_custom[strlen(custom_topic)+8];
-        sprintf(t_custom, "%s/event", custom_topic);
-        me_state.trigger_topic_list[slot_num] = strdup(t_custom);
+        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
         ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
-        char t_str[strlen(me_config.deviceName) + strlen("/in_0/event") + 3];
-        sprintf(t_str, "%s/in_%d/event", me_config.deviceName, slot_num);
+        char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
+        sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }

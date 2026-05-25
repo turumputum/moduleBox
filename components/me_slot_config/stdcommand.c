@@ -244,6 +244,15 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
         {
             keyword = cmd->msg.str + len + 1;
 
+            /* action_topic_list содержит базу "<deviceName>/<module>_<slot>".
+               Суффикс "action/" (по Конституции) пропускается тут — единая
+               точка разбора, чтобы модули не клеили его руками. Поддерживаем
+               и старый формат "<base>/keyword" для совместимости. */
+            if (strncmp(keyword, "action/", 7) == 0)
+            {
+                keyword += 7;
+            }
+
             params->count = 0;
 
             // Separate keyword and parameters, if any

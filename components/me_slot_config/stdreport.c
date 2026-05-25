@@ -83,7 +83,7 @@ int stdreport_register(RPTT               output_type,
                 *p->topic       = 0;
 
                 if (defaultTopic && *defaultTopic)
-                    snprintf(p->topic, sizeof(p->topic) - 1, "/%s:", defaultTopic);
+                    snprintf(p->topic, sizeof(p->topic) - 1, "/event/%s:", defaultTopic);
 
                 switch (p->outType)
                 {
@@ -205,9 +205,10 @@ void stdreport_enable(int slot_num, int value)
     if (slot_num < 0 || slot_num >= NUM_OF_SLOTS) return;
     if (!me_state.trigger_topic_list[slot_num]) return;
 
-    /* trigger_topic_list содержит "<deviceName>/<module>_<slot>/event" */
+    /* trigger_topic_list содержит базу "<deviceName>/<module>_<slot>".
+       Суффикс /event/ добавляется здесь — единая точка сборки топика. */
     char topic[128];
-    snprintf(topic, sizeof(topic), "%s/enable", me_state.trigger_topic_list[slot_num]);
+    snprintf(topic, sizeof(topic), "%s/event/enable", me_state.trigger_topic_list[slot_num]);
 
     char payload[4];
     snprintf(payload, sizeof(payload), "%d", value);

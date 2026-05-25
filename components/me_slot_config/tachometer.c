@@ -218,13 +218,11 @@ void tachometer_task(void *arg)
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/tachometer_0");
-		char t_custom[strlen(custom_topic) + 8];
-		sprintf(t_custom, "%s/event", custom_topic);
-		me_state.trigger_topic_list[slot_num]=strdup(t_custom);
+		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/tachometer_0/event")+3];
-		sprintf(t_str, "%s/tachometer_%d/event",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/tachometer_0")+3];
+		sprintf(t_str, "%s/tachometer_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}

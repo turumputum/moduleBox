@@ -535,14 +535,12 @@ void GIM_motor_task(void *arg) {
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
     	custom_topic = get_option_string_val(slot_num, "topic", "/GIM_0");
-		char t_action[strlen(custom_topic)+9]; sprintf(t_action, "%s/action", custom_topic);
-		me_state.action_topic_list[slot_num]=strdup(t_action);
+		me_state.action_topic_list[slot_num]=strdup(custom_topic);
 		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
     }else{
 		char t_str[strlen(me_config.deviceName)+strlen("/GIM_0")+3];
 		sprintf(t_str, "%s/GIM_%d",me_config.deviceName, slot_num);
-		char t_action[strlen(t_str)+9]; sprintf(t_action, "%s/action", t_str);
-		me_state.action_topic_list[slot_num]=strdup(t_action);
+		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
@@ -583,11 +581,11 @@ void GIM_motor_task(void *arg) {
             char* payload;
             char* cmd = strtok_r(msg.str, ":", &payload);
             //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num])){
+            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num]) + strlen("/action")){
                 state = atoi(payload);
-                  
+
             }else{
-                cmd = cmd + strlen(me_state.action_topic_list[slot_num])+1;
+                cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
                 if(strstr(cmd, "setPos")!=NULL){
                    int16_t rawPos = atoi(payload);
                    if(rawPos>maxVal)rawPos = maxVal;

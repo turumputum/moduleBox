@@ -52,12 +52,8 @@ void configure_watchdog(PWATCHDOG_CONFIG ch, int slot_num)
 
     char t_str[strlen(me_config.deviceName) + strlen("/watchdog_0") + 3];
     sprintf(t_str, "%s/watchdog_%d", me_config.deviceName, slot_num);
-    char t_event[strlen(t_str) + 8];
-    sprintf(t_event, "%s/event", t_str);
-    me_state.trigger_topic_list[slot_num] = strdup(t_event);
-    char t_action[strlen(t_str) + 9];
-    sprintf(t_action, "%s/action", t_str);
-    me_state.action_topic_list[slot_num] = strdup(t_action);
+    me_state.trigger_topic_list[slot_num] = strdup(t_str);
+    me_state.action_topic_list[slot_num] = strdup(t_str);
     ESP_LOGD(TAG, "Standart topic:%s", me_state.trigger_topic_list[slot_num]);
 }
 
@@ -76,9 +72,9 @@ void watchdog_task(void *arg) {
     WATCHDOG_CONFIG c = {0};
     configure_watchdog(&c, slot_num);
 
-    int strl = strlen(me_state.action_topic_list[slot_num]) + strlen("restart") + 1;
+    int strl = strlen(me_state.action_topic_list[slot_num]) + strlen("/action/restart") + 1;
     char tmpstr[strl];
-    sprintf(tmpstr, "%s/%s", me_state.action_topic_list[slot_num], "restart");
+    sprintf(tmpstr, "%s/action/%s", me_state.action_topic_list[slot_num], "restart");
     xQueueSend(me_state.command_queue[slot_num], &tmpstr, 0);
     
     esp_timer_handle_t virtual_timer = NULL;
@@ -102,7 +98,7 @@ void watchdog_task(void *arg) {
         
         command_message_t cmd;
         if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 0) == pdPASS){
-            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]) + 1;
+            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             
             if(!memcmp(command, "restart", 7)){ 
                 if(esp_timer_is_active(virtual_timer)){

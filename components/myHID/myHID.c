@@ -63,8 +63,7 @@ void HID_task(void *arg) {
 
     char t_str[strlen(me_config.deviceName)+strlen("/HID_0")+3];
     sprintf(t_str, "%s/HID_%d",me_config.deviceName, slot_num);
-    char t_action[strlen(t_str)+9]; sprintf(t_action, "%s/action", t_str);
-    me_state.action_topic_list[slot_num]=strdup(t_action);
+    me_state.action_topic_list[slot_num]=strdup(t_str);
     ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
     ESP_LOGD(TAG, "HID task init ok. Slot_num:%d", slot_num);
 
@@ -75,7 +74,7 @@ void HID_task(void *arg) {
             char* payload;
             char* cmd = strtok_r(msg.str, ":", &payload);
             ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]);
+            cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             if(strstr(cmd, "press")!=NULL){
                 send_hid_key_press(atoi(payload));
             }else if(strstr(cmd, "release")!=NULL){
