@@ -30,6 +30,11 @@ char willTopic[255];
 static esp_timer_handle_t mqtt_watchdog_timer = NULL;
 static bool mqtt_watchdog_running = false;  // флаг: таймер уже тикает
 
+/* Диагностика — обновляется из mqtt_event_handler, читается из reporter.
+   Не используем мьютекс ради дешевизны — целые слова на ESP32 атомарны.
+   Снимок берётся одним движением (struct copy). */
+static mqtt_diag_t s_mqtt_diag = {0};
+
 static void mqtt_watchdog_timer_cb(void *arg) {
     ESP_LOGE(TAG, "MQTT watchdog timeout! No connection for %d sec. Restarting...", me_config.mqttWatchdogTimeout);
     esp_restart();
@@ -70,6 +75,11 @@ void mqtt_pub(const char *topic, const char *string){
 void mqtt_pub_retain(const char *topic, const char *string){
     int msg_id = esp_mqtt_client_publish(client, topic, string, 0, me_config.mqttQOS, 1);
     //ESP_LOGD(TAG, "sent retained publish msg_id=%d topic=%s", msg_id, topic);
+}
+
+void mqtt_diag_snapshot(mqtt_diag_t *out){
+    if (!out) return;
+    *out = s_mqtt_diag;
 }
 
 void mqtt_sub(const char *topic){
@@ -113,6 +123,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_CONNECTED");
 		me_state.MQTT_init_res = ESP_OK;
+		s_mqtt_diag.connected++;
+		s_mqtt_diag.last_connect_us = esp_timer_get_time();
+		s_mqtt_diag.is_connected = 1;
 		mqtt_watchdog_stop();
 
 		for (int i = 0; i < NUM_OF_SLOTS; i++) {
@@ -190,6 +203,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_DISCONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_DISCONNECTED");
 		me_state.MQTT_init_res = ESP_FAIL;
+		s_mqtt_diag.disconnected++;
+		s_mqtt_diag.last_disconnect_us = esp_timer_get_time();
+		s_mqtt_diag.is_connected = 0;
 		mqtt_watchdog_start();
 		break;
 
@@ -200,9 +216,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		ESP_LOGD(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
 		break;
 	case MQTT_EVENT_PUBLISHED:
+		s_mqtt_diag.published++;
+		s_mqtt_diag.last_published_us = esp_timer_get_time();
 		ESP_LOGD(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
 		break;
 	case MQTT_EVENT_DATA:
+		s_mqtt_diag.data++;
+		s_mqtt_diag.last_data_us = esp_timer_get_time();
 		//ESP_LOGI(TAG, "MQTT_EVENT_DATA");
 		int max_needed = (event->topic_len > 0 ? event->topic_len : 0)
 		               + (event->data_len > 0 ? event->data_len + 1 : 0) + 1;
@@ -222,6 +242,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 		break;
 	case MQTT_EVENT_ERROR:
+		s_mqtt_diag.errors++;
 		ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
 		if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
 			log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);

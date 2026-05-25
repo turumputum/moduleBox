@@ -551,6 +551,8 @@ void app_main(void)
 
 	uint32_t periodicTicks = xTaskGetTickCount();
 	uint32_t scheduleTicks = xTaskGetTickCount();
+	uint32_t diagTicks     = xTaskGetTickCount();
+	uint32_t taskListTicks = xTaskGetTickCount();
 
 	while (1)
 	{
@@ -603,14 +605,31 @@ void app_main(void)
 			}
 		}
 
-		// every second 
+		// every second
 		if ((now - scheduleTicks) >= pdMS_TO_TICKS(1000))
 		{
 			scheduler_periodic_turn();
 
 			scheduleTicks = now;
 		}
-		
+
+		/* Диагностика — раз в 60 с публикует <dev>/system/diag.
+		   Помогает ловить деградации (heap leak, MQTT half-open, socket-leak,
+		   падение mDNS/MQTT-таска). Лёгкий пакет, ~400 байт JSON. */
+		if ((now - diagTicks) >= pdMS_TO_TICKS(60 * 1000))
+		{
+			reportSystemDiag();
+			diagTicks = now;
+		}
+
+		/* Длинный дамп списка задач — раз в 5 минут.
+		   Тяжелее (~2 КБ), но даёт stack high-water mark по каждой задаче. */
+		if ((now - taskListTicks) >= pdMS_TO_TICKS(5 * 60 * 1000))
+		{
+			reportTaskList();
+			taskListTicks = now;
+		}
+
 		vTaskDelay(pdMS_TO_TICKS(200));
 	}
 }

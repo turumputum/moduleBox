@@ -18,6 +18,8 @@
 #include "LAN.h"
 #include "udplink.h"
 #include "esp_vfs_fat.h"
+#include "esp_heap_caps.h"
+#include <fcntl.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "REPORTER";
@@ -507,6 +509,76 @@ void reportTaskList(){
 	if(!tmpStr) return;
 	int pos = snprintf(tmpStr, 2048, "%s/system/TaskList:",me_config.deviceName);
 	vTaskList(tmpStr + pos);
+	forward_report(tmpStr, -1);
+	heap_caps_free(tmpStr);
+}
+
+/* Считает количество открытых lwIP-сокетов (примерное верхнее значение —
+   итерирует по всем возможным fd и проверяет состояние). Полезно для
+   обнаружения утечек сокетов в multi-day uptime. */
+static int count_open_sockets(void){
+	int count = 0;
+	int max_fd = LWIP_SOCKET_OFFSET + CONFIG_LWIP_MAX_SOCKETS;
+	for(int fd = LWIP_SOCKET_OFFSET; fd < max_fd; fd++){
+		/* fcntl(F_GETFD) вернёт -1 для закрытого/невалидного сокета */
+		int flags = fcntl(fd, F_GETFD, 0);
+		if(flags >= 0) count++;
+	}
+	return count;
+}
+
+void reportSystemDiag(void){
+	/* Все большие буферы — на куче чтобы не раздувать стек caller'а */
+	const int bufSize = 768;
+	char *tmpStr = heap_caps_malloc(bufSize, MALLOC_CAP_8BIT);
+	if(!tmpStr) return;
+
+	/* Heap-метрики (internal — самый ценный, его мало) */
+	uint32_t heap_free      = xPortGetFreeHeapSize();
+	uint32_t heap_min       = xPortGetMinimumEverFreeHeapSize();
+	uint32_t heap_largest   = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	uint32_t heap_internal  = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+	uint32_t spiram_free    = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+	int64_t now_us     = esp_timer_get_time();
+	uint64_t uptime_s  = (uint64_t)(now_us / 1000000);
+
+	mqtt_diag_t md;
+	mqtt_diag_snapshot(&md);
+
+	int64_t last_pub_age_s = md.last_published_us  ? (now_us - md.last_published_us)  / 1000000 : -1;
+	int64_t last_data_age_s = md.last_data_us      ? (now_us - md.last_data_us)       / 1000000 : -1;
+	int64_t last_conn_age_s = md.last_connect_us   ? (now_us - md.last_connect_us)    / 1000000 : -1;
+	int64_t last_disc_age_s = md.last_disconnect_us? (now_us - md.last_disconnect_us) / 1000000 : -1;
+
+	int socks = count_open_sockets();
+	UBaseType_t tasks = uxTaskGetNumberOfTasks();
+
+	snprintf(tmpStr, bufSize,
+		"%s/system/diag:{"
+		"\"up_s\":%llu,"
+		"\"heap_free\":%lu,\"heap_min\":%lu,\"heap_largest\":%lu,"
+		"\"heap_internal\":%lu,\"spiram_free\":%lu,"
+		"\"socks\":%d,\"tasks\":%u,"
+		"\"mqtt\":{"
+			"\"up\":%u,"
+			"\"conn\":%lu,\"disc\":%lu,\"pub\":%lu,\"data\":%lu,\"err\":%lu,"
+			"\"pub_age_s\":%lld,\"data_age_s\":%lld,"
+			"\"conn_age_s\":%lld,\"disc_age_s\":%lld"
+		"}"
+		"}",
+		me_config.deviceName,
+		(unsigned long long)uptime_s,
+		(unsigned long)heap_free, (unsigned long)heap_min, (unsigned long)heap_largest,
+		(unsigned long)heap_internal, (unsigned long)spiram_free,
+		socks, (unsigned)tasks,
+		md.is_connected,
+		(unsigned long)md.connected, (unsigned long)md.disconnected,
+		(unsigned long)md.published, (unsigned long)md.data, (unsigned long)md.errors,
+		(long long)last_pub_age_s, (long long)last_data_age_s,
+		(long long)last_conn_age_s, (long long)last_disc_age_s
+	);
+
 	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
