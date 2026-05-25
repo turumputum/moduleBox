@@ -22,6 +22,7 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 #include "stdreport.h"
+#include "stdcommand.h"
 #include <mbdebug.h>
 
 #include <generated_files/gen_distanceSens_hlk2410.h>
@@ -48,7 +49,15 @@ extern void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
 void configure_hlk2410(distanceSens_t *distanceSens, uint8_t slot_num)
 {
     // --- Distance sensor config ---
-    
+
+    stdcommand_init(&distanceSens->cmds, slot_num);
+
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
+    */
+    distanceSens->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", distanceSens->active_state, slot_num);
+
     /* Мертвая зона - минимальное изменение значения для отправки рапорта
     Числовое значение 1-4096, по умолчанию 10
     */
@@ -226,20 +235,39 @@ void hlk2410_task(void* arg) {
     uart_driver_install (uart_num, 256, 256, 0, NULL, 0);
 
     distanceSens_t distanceSens=DISTANCE_SENS_DEFAULT();
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
     configure_hlk2410(&distanceSens, slot_num);
 
     char str[255];
     uint8_t index = 0;
-    
+
     #define PACKET_START 0xF4F3F2F1
     #define PACKET_END 0xF8F7F6F5
     uint8_t rawByte[20];
     uint8_t f_msg_start = 0;
+    STDCOMMAND_PARAMS params = {0};
 
     waitForWorkPermit(slot_num);
 
     while (1) {
-        if (uart_read_bytes(uart_num, &rawByte[index], 1, portMAX_DELAY)) {
+        // --- Обработка команд (включая action/enable) ---
+        int cmd = stdcommand_receive(&distanceSens.cmds, &params, 0);
+        if (cmd == STDCMD_ENABLE) {
+            if (params.count > 0) {
+                distanceSens.active_state = params.p[0].i ? 1 : 0;
+                ESP_LOGD(TAG, "enable:%d slot:%d", distanceSens.active_state, slot_num);
+                /* event/enable публикуется автоматически stdcommand_receive */
+            }
+        }
+
+        if (!distanceSens.active_state) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            index = 0;
+            f_msg_start = 0;
+            continue;
+        }
+
+        if (uart_read_bytes(uart_num, &rawByte[index], 1, pdMS_TO_TICKS(100))) {
             if (f_msg_start == 0) {
                 if(rawByte[0]==0xF4){
                     index++;

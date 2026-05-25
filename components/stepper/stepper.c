@@ -64,6 +64,7 @@ typedef struct __tag_STEPPERCONFIG{
 	int 					posReportFlag;
     int 					circularCounterFlag;
     int                     goHomeOnStart;
+    int                     active_state;
 
     STDCOMMANDS             cmds;
 
@@ -93,6 +94,12 @@ typedef enum
 */
 void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     stdcommand_init(&c->cmds, slot_num);
+
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
+    */
+    c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "[stepper_%d] Initial active_state:%d", slot_num, c->active_state);
 
     c->dir = CW;
     /* Флаг инвертирует направление работы двигателя
@@ -328,9 +335,31 @@ void stepper_task(void *arg){
 
         int cmd = stdcommand_receive(&c->cmds, &params, 5);
 		char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
-        
+
+        /* Если модуль выключен - принимаем только action/enable, все команды
+           движения игнорируем (Конституция §6). */
+        if (!c->active_state && cmd != -1 && cmd != STDCMD_ENABLE) {
+            ESP_LOGD(TAG, "[stepper_%d] disabled, ignoring cmd:%d", slot_num, cmd);
+            cmd = -1;
+        }
+
         switch (cmd){
             case -1: // none
+                break;
+
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    int new_state = params.p[0].i ? 1 : 0;
+                    if (new_state != c->active_state) {
+                        c->active_state = new_state;
+                        ESP_LOGD(TAG, "[stepper_%d] enable:%d", slot_num, c->active_state);
+                        /* event/enable публикуется автоматически stdcommand_receive */
+                        if (!c->active_state) {
+                            /* Экстренная остановка при выключении (Конституция §6) */
+                            stepper_stop(&stepper);
+                        }
+                    }
+                }
                 break;
 
             case stepCMD_goHome:
@@ -405,7 +434,7 @@ void stepper_task(void *arg){
                 break;
         }
 
-        if(c->state==GOING_HOME){
+        if(c->active_state && c->state==GOING_HOME){
             if(homingProcedureState==HOMING_WAITING){
                 stdreport_s(c->homeReport, "homing");
                 stepper.maxSpeed = c->homingSpeed;
@@ -440,7 +469,9 @@ void stepper_task(void *arg){
             }
         }
 
-        stepper_speedUpdate(&stepper, c->refreshPeriod);
+        if (c->active_state) {
+            stepper_speedUpdate(&stepper, c->refreshPeriod);
+        }
         stepper_getCurrentPos(&stepper);
         //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
 

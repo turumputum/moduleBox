@@ -11,6 +11,7 @@ typedef struct __tag_DIALER_CONFIG {
     uint8_t enaInverse;
     uint8_t pulseInverse;
     int debounceGap;
+    int active_state;
     int numberReport;
     STDCOMMANDS cmds;
 } DIALER_CONFIG, * PDIALER_CONFIG;

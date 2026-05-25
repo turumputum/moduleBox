@@ -18,6 +18,8 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 
+#include <stdcommand.h>
+
 //#define CONFIG_PN532DEBUG 1
 // #define CONFIG_MIFAREDEBUG 1
 extern uint8_t SLOTS_PIN_MAP[10][4];
@@ -29,6 +31,15 @@ static const char *TAG = "RFID";
 
 void pn532Uart_task(void* arg) {
     int slot_num = (int)(intptr_t)arg;
+
+    STDCOMMANDS cmds;
+    stdcommand_init(&cmds, slot_num);
+
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
+    */
+    int active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", active_state, slot_num);
 
     int uart_num = UART_NUM_1; // Начинаем с минимального порта
     while (uart_is_driver_installed(uart_num)) {
@@ -67,10 +78,37 @@ void pn532Uart_task(void* arg) {
     char _cardID[3*10+3];
     memset(_cardID, 0, sizeof(cardID));
 
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+
     waitForWorkPermit(slot_num);
 
+    STDCOMMAND_PARAMS params = { 0 };
+
     while (1){
-        buf[0] = 1;               
+        int cmd = stdcommand_receive(&cmds, &params, 0);
+        switch (cmd) {
+            case -1:
+                break;
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[rfid_%d] enable:%d", slot_num, active_state);
+                    /* event/enable публикуется автоматически stdcommand_receive */
+                    /* При выключении сбрасываем кэш последней карты, чтобы при
+                       повторном включении та же карта снова сгенерировала событие */
+                    if (!active_state) {
+                        memset(_cardID, 0, sizeof(_cardID));
+                    }
+                }
+                break;
+        }
+
+        if (!active_state) {
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        buf[0] = 1;
         buf[1] = 0;               /* 106 kbps type A(ISO / IEC14443 Type A) */
         l = pn532_tx(p, 0x4A, 2, buf, 0, NULL);
         l = pn532_rx(p, 0, NULL, sizeof(buf), buf,200);
@@ -89,7 +127,7 @@ void pn532Uart_task(void* arg) {
                 report(cardID, slot_num);
             }
         }
-        
+
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     EXIT:

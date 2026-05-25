@@ -83,8 +83,7 @@ typedef enum
 	MYCMD_play = 0,
 	MYCMD_stop,
 	MYCMD_shift,
-	MYCMD_setVolume,
-	MYCMD_setState
+	MYCMD_setVolume
 } MYCMD;
 
 static const char *TAG = "AUDIO";
@@ -225,10 +224,11 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 	c->play_to_end = get_option_flag_val(slot_num, "playToEnd");
 	ESP_LOGD(TAG, "Set play_to_end:%d", c->play_to_end);
 
-	/* Состояние модуля по умолчанию (0 - выключен, 1 - включен)
+	/* Если флаг поднят - модуль стартует в выключенном состоянии,
+	   до прихода action/enable 1 (Конституция §6).
 	*/
-	c->active_state = get_option_int_val(slot_num, "defaultState", "", 1, 0, 1);
-	ESP_LOGD(TAG, "Set defaultState:%d", c->active_state);
+	c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+	ESP_LOGD(TAG, "Initial active_state:%d", c->active_state);
 
 	//---add action to topic list---
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
@@ -274,12 +274,8 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "action/setVolume", PARAMT_int);
 
-    /* Установить состояние модуля (0 - выключен, 1 - включен)
-       После включения модуль в режиме стоп
-    */
-	stdcommand_register(&c->cmds, MYCMD_setState, "action/setState", PARAMT_int);
-
-
+    /* action/enable - авто-регистрируется в stdcommand_init (Конституция §6).
+       Обрабатывается в case STDCMD_ENABLE. */
 }
 
 void audio_task(void *arg) {
@@ -538,13 +534,13 @@ void audio_task(void *arg) {
 				}
 				break;
 
-			case MYCMD_setState:
+			case STDCMD_ENABLE:
 				if ((params.count > 0) && (params.p[0].type == PARAMT_int))
 				{
 					uint8_t new_state = params.p[0].i ? 1 : 0;
 					if(new_state != c->active_state){
 						c->active_state = new_state;
-						ESP_LOGD(TAG, "setState:%d", c->active_state);
+						ESP_LOGD(TAG, "enable:%d", c->active_state);
 						if(c->active_state == 1){
 							// При включении - останавливаем воспроизведение
 							audioStop();

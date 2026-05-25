@@ -21,6 +21,7 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 #include "stdreport.h"
+#include "stdcommand.h"
 #include <mbdebug.h>
 
 #include <generated_files/gen_distanceSens_sr04m.h>
@@ -51,7 +52,15 @@ extern void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num);
 void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 {
     // --- Distance sensor config ---
-    
+
+    stdcommand_init(&distanceSens->cmds, slot_num);
+
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
+    */
+    distanceSens->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", distanceSens->active_state, slot_num);
+
     /* Мертвая зона - минимальное изменение значения для отправки рапорта
     Числовое значение 1-4096, по умолчанию 10
     */
@@ -222,15 +231,33 @@ void sr04m_task(void* arg) {
 
     distanceSens_t distanceSens = DISTANCE_SENS_DEFAULT();
     distanceSens.maxVal = 4500;
+    me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
     configure_sr04m(&distanceSens, slot_num);
 
     uint8_t trigger_cmd = 0x55;
     uint8_t rawByte[4];
     uint8_t index = 0;
+    STDCOMMAND_PARAMS params = {0};
 
     waitForWorkPermit(slot_num);
 
     while (1) {
+        // --- Обработка команд (включая action/enable) ---
+        int cmd = stdcommand_receive(&distanceSens.cmds, &params, 0);
+        if (cmd == STDCMD_ENABLE) {
+            if (params.count > 0) {
+                distanceSens.active_state = params.p[0].i ? 1 : 0;
+                ESP_LOGD(TAG, "enable:%d slot:%d", distanceSens.active_state, slot_num);
+                /* event/enable публикуется автоматически stdcommand_receive */
+            }
+        }
+
+        if (!distanceSens.active_state) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            index = 0;
+            continue;
+        }
+
         // Отправляем команду измерения каждый цикл
         if (index == 0) {
             uart_write_bytes(uart_num, &trigger_cmd, 1);

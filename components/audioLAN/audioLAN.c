@@ -89,8 +89,7 @@ typedef struct __tag_RTPCONFIG{
 
 typedef enum
 {
-	rtpCMD_setState= 0,
-    rtpCMD_setVolume,
+    rtpCMD_setVolume = 0,
     rtpCMD_setMulticastAddress
 } rtpCMD;
 
@@ -271,14 +270,12 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
     
     stdcommand_init(&c->cmds, slot_num);
 
-    /* задает состояние модуля по умолчанию вкл/выкл
-    по умолчанию 1 - включен
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
     */
-    c->defaultState = get_option_int_val(slot_num, "defaultState","bool", 1,0,1);
-    if(c->defaultState==0){
-        ESP_LOGE(TAG, "defaultState: %d for slot:%d", c->defaultState, slot_num);
-    }
+    c->defaultState = !get_option_flag_val(slot_num, "disableOnStart");
     c->state = c->defaultState;
+    ESP_LOGD(TAG, "Initial state:%d for slot:%d", c->state, slot_num);
 
     /* Громкость
     - 0-100 по умолчанию 100
@@ -353,9 +350,8 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 	*/
 	c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "event/address");
 
-    /* Команда включает/выключает плеер
-    */
-    stdcommand_register(&c->cmds, rtpCMD_setState, "action/setState", PARAMT_int);
+    /* action/enable - авто-регистрируется в stdcommand_init (Конституция §6).
+       Обрабатывается в case STDCMD_ENABLE. */
 
     /* Команда устанавливает значение громкости
     0-100
@@ -471,14 +467,14 @@ void audioLAN_task(void *arg){
             case -1: // none
                 break;
 
-            case rtpCMD_setState:
+            case STDCMD_ENABLE:
                 if((atoi(cmd_arg)==ENABLE)&&(c->state != ENABLE)){
                     audio_pipeline_resume(c->pipeline);
                 }else if((atoi(cmd_arg)==DISABLE)&&(c->state != DISABLE)){
                     audio_pipeline_pause(c->pipeline);
                 }
                 c->state = atoi(cmd_arg);
-                ESP_LOGD(TAG, "[audioLAN_%d] lets set state:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
+                ESP_LOGD(TAG, "[audioLAN_%d] enable:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
                 stdreport_i(c->stateReport, c->state);
                 break;
 

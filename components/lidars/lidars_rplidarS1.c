@@ -202,12 +202,12 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
     */
     lidar->debounceGap = pdMS_TO_TICKS(get_option_int_val(slot_num, "debounceGap", "ms", 0, 0, 60000));
 
-    /* Состояние сканирования при включении устройства
-    0 - сканирование выключено (по умолчанию), 1 - сканирование включено
-    Числовое значение 0-1, по умолчанию 0
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
     */
-    lidar->defaultState = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
-    lidar->scanEnabled = lidar->defaultState;
+    lidar->scanEnabled = !get_option_flag_val(slot_num, "disableOnStart");
+    lidar->defaultState = lidar->scanEnabled;
+    ESP_LOGD(TAG, "Initial scanEnabled:%d for slot:%d", lidar->scanEnabled, slot_num);
 
     // --- Topic setup ---
     if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {

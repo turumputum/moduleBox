@@ -95,6 +95,12 @@ void configure_dialer(PDIALER_CONFIG ch, int slot_num)
 
     stdcommand_init(&ch->cmds, slot_num);
 
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
+    */
+    ch->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", ch->active_state, slot_num);
+
     /* Сброс текущего набираемого номера
     */
     stdcommand_register(&ch->cmds, DIALERCMD_reset, "action/reset", PARAMT_none);
@@ -155,6 +161,20 @@ void dialer_task(void* arg) {
         switch (cmd){
             case -1:
                 break;
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    c.active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "enable:%d slot:%d", c.active_state, slot_num);
+                    /* При выключении сбрасываем накопленное состояние набора */
+                    if (!c.active_state) {
+                        memset(number_str, 0, sizeof(number_str));
+                        string_lenght = 0;
+                        state_flag = 0;
+                        counter = 0;
+                    }
+                    /* event/enable публикуется автоматически stdcommand_receive */
+                }
+                break;
             case DIALERCMD_reset:
                 memset(number_str, 0, sizeof(number_str));
                 string_lenght = 0;
@@ -162,6 +182,14 @@ void dialer_task(void* arg) {
                 counter = 0;
                 ESP_LOGD(TAG, "Reset dialer for slot:%d", slot_num);
                 break;
+        }
+
+        if (!c.active_state) {
+            /* Сливаем накопленные ISR-импульсы чтобы не копились */
+            uint8_t drain;
+            while (xQueueReceive(me_state.interrupt_queue[slot_num], &drain, 0) == pdPASS) {}
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
         }
 
         // Обработка сигнала разрешения набора

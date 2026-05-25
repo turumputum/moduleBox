@@ -2,10 +2,14 @@
 #include <string.h>
 #include "driver/ledc.h"
 #include "freertos/FreeRTOS.h"
+#include "stdcommand.h"
 
 typedef struct {
     uint8_t state;
     uint8_t prevState;
+
+    int active_state;
+    STDCOMMANDS cmds;
 
     uint16_t currentPos;
     uint16_t prevPos;
@@ -38,6 +42,7 @@ typedef struct {
 #define DISTANCE_SENS_DEFAULT() {\
     .state = 0,\
     .prevState = 0,\
+    .active_state = 1,\
     .currentPos = 0,\
     .prevPos = 0,\
     .maxVal = 65535,\

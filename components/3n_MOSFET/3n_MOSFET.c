@@ -38,9 +38,10 @@ typedef struct __tag_MOSFETCONFIG
     RgbColor                targetRGB;
     uint8_t                 ledMode;
     uint8_t                 state;
+    int                     active_state;
     STDCOMMANDS             cmds;
 
-} MOSFETCONFIG, * PMOSFETCONFIG; 
+} MOSFETCONFIG, * PMOSFETCONFIG;
 
 typedef enum
 {
@@ -98,6 +99,12 @@ void set_pwm_channels(ledc_channel_config_t ch_r, ledc_channel_config_t ch_g, le
 void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
+
+    /* Если флаг поднят - модуль стартует в выключенном состоянии,
+       до прихода action/enable 1 (Конституция §6).
+    */
+    c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", c->active_state, slot_num);
 
     /* Величина приращения значения свечения
     */
@@ -297,6 +304,13 @@ void pwmLeds_task(void *arg){
             case -1: // none
                 break;
 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    c.active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "enable:%d slot:%d", c.active_state, slot_num);
+                    /* event/enable публикуется автоматически stdcommand_receive */
+                }
+                break;
 
             case MYCMD_default:
                 c.state = params.p[0].i;
@@ -350,8 +364,14 @@ void pwmLeds_task(void *arg){
                 break;                
         }
 
+        if (!c.active_state) {
+            /* Модуль выключен через action/enable - PWM каналы не трогаем */
+            vTaskDelayUntil(&lastWakeTime, c.refreshPeriod);
+            continue;
+        }
+
         if(c.state==0){
-            targetBright =abs(255*c.inverse-c.min_bright); 
+            targetBright =abs(255*c.inverse-c.min_bright);
             checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
 			set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB,currentBright);
         }else{
