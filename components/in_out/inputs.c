@@ -190,15 +190,15 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
 
     /* Отчет о состоянии канала 0 (0 или 1)
     */
-    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "ch_0", 0, 1);
+    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "event/ch_0", 0, 1);
 
     /* Отчет о состоянии канала 1 (0 или 1)
     */
-    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "ch_1", 0, 1);
+    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "event/ch_1", 0, 1);
 
     /* Отчет о комбинированном состоянии обоих каналов (результат логической операции OR/AND)
     */
-    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "val");
+    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "event/val");
 
     // Configure GPIO
     gpio_config_t io_conf = {};
@@ -354,19 +354,19 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
 
     /* Отчет о состоянии канала 0 (0 или 1)
     */
-    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "ch_0", 0, 1);
+    ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "event/ch_0", 0, 1);
 
     /* Отчет о состоянии канала 1 (0 или 1)
     */
-    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "ch_1", 0, 1);
+    ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "event/ch_1", 0, 1);
 
     /* Отчет о состоянии канала 2 (0 или 1)
     */
-    ctx->stateReport_2 = stdreport_register(RPTT_int, slot_num, "", "ch_2", 0, 1);
+    ctx->stateReport_2 = stdreport_register(RPTT_int, slot_num, "", "event/ch_2", 0, 1);
 
     /* Отчет о комбинированном состоянии всех каналов (результат логической операции OR/AND)
     */
-    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "val");
+    ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "event/val");
 
     // Configure GPIO
     gpio_config_t io_conf = {};

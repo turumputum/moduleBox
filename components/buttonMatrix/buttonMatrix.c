@@ -134,7 +134,7 @@ void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
     /* Рапортует строкой символ соответствующий нажатой клетке матрицы
        символ берётся из mapping по индексу row*cols + col
     */
-    ctx->charReport = stdreport_register(RPTT_string, slot_num, "", "key");
+    ctx->charReport = stdreport_register(RPTT_string, slot_num, "", "event/key");
 }
 
 void buttonMatrix_task(void *arg) {

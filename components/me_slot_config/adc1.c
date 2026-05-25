@@ -367,15 +367,15 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 
 	/* Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале
 	*/
-	ch->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "ratio", (int)ch->MIN_VAL, (int)ch->MAX_VAL);
+	ch->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "event/ratio", (int)ch->MIN_VAL, (int)ch->MAX_VAL);
 
 	/* Возвращает текущее сырое целочисленное значение канала
 	*/
-	ch->rawReport 	= stdreport_register(RPTT_int, slot_num, "unit", "rawVal");
+	ch->rawReport 	= stdreport_register(RPTT_int, slot_num, "unit", "event/rawVal");
 
 	/* Рапортует 0/1 при пороговом режиме
 	*/
-	ch->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+	ch->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 
 	if (ch->threshold >= 0) {
 		ch->currentReport = ch->thresholdReport;

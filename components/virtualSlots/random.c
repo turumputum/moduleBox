@@ -77,11 +77,11 @@ void configure_random(PRND_CONFIG ch, int slot_num){
     
     /* Запуск генератора случайных чисел
     */
-    stdcommand_register(&ch->cmds, RNDCMD_gen, "generate", PARAMT_none);
+    stdcommand_register(&ch->cmds, RNDCMD_gen, "action/generate", PARAMT_none);
 
     /* Возвращает сгенерированное значение
     */
-    ch->report = stdreport_register(RPTT_int, slot_num, "", "val", (int)ch->minVal, (int)ch->maxVal);
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "event/val", (int)ch->minVal, (int)ch->maxVal);
 }
 
 void random_task(void *arg) {

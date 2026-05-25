@@ -181,13 +181,13 @@ void configure_benewakeTOF(distanceSens_t *distanceSens, uint8_t slot_num)
     
     /* Рапортует текущее значение расстояния в мм
     */
-    distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "distance", 0, distanceSens->maxVal);
+    distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "event/distance", 0, distanceSens->maxVal);
     /* Рапортует текущее значение расстояния в формате float (от 0 до 1)
     */
-    distanceSens->distanceFloatReport = stdreport_register(RPTT_ratio, slot_num, "ratio", "ratio", 0.0f, 1.0f);
+    distanceSens->distanceFloatReport = stdreport_register(RPTT_ratio, slot_num, "ratio", "event/ratio", 0.0f, 1.0f);
     /* Рапортует состояние порогового датчика 0/1
     */
-    distanceSens->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+    distanceSens->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 }
 
 void benewakeTOF_task(void* arg) {

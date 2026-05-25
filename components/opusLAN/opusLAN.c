@@ -355,29 +355,29 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
 
     /* Рапортует состояние модуля вкл/выкл
 	*/
-	c->stateReport = stdreport_register(RPTT_int, slot_num, "state", "state");
+	c->stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/state");
 
     /* Рапортует при изменении громкости
 	*/
-	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "volume");
+	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "event/volume");
 
     /* Рапортует текущий адрес потока */
-    c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "address");
+    c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "event/address");
 
     /* Команда включает/выключает плеер
     */
-    stdcommand_register(&c->cmds, opusCMD_setState, "setState", PARAMT_int);
+    stdcommand_register(&c->cmds, opusCMD_setState, "action/setState", PARAMT_int);
 
     /* Команда устанавливает значение громкости
     0-100
     */
-    stdcommand_register(&c->cmds, opusCMD_setVolume, "setVolume", PARAMT_int);
+    stdcommand_register(&c->cmds, opusCMD_setVolume, "action/setVolume", PARAMT_int);
 
     /* Команда переключает multicast адрес на лету
     - строка IPv4 адреса для multicast группы
     - 0 — переключиться на unicast
     */
-    stdcommand_register(&c->cmds, opusCMD_setMulticastAddress, "setMulticastAddress", PARAMT_string);
+    stdcommand_register(&c->cmds, opusCMD_setMulticastAddress, "action/setMulticastAddress", PARAMT_string);
 }
 
 void opusLAN_task(void *arg){

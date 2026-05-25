@@ -436,7 +436,6 @@ void furbyEye_task(void* arg) {
             char* payload;
             char* cmd = strtok_r(msg.str, ":", &payload);
             //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             if(strstr(cmd, "setPic")!=NULL){
                 val = atoi(payload);
                 if(uart_write_bytes(uart_num, &val, 1)==1){
@@ -652,7 +651,6 @@ void st7789_task(void* arg) {
             char* payload;
             char* cmd = strtok_r(msg.str, ":", &payload);
             //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             if(strstr(cmd, "setPic")!=NULL){
                 val = atoi(payload);
                 if (val < 0) val = 0;

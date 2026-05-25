@@ -82,8 +82,10 @@ int stdreport_register(RPTT               output_type,
                 p->outType      = output_type;
                 *p->topic       = 0;
 
+                /* defaultTopic ожидается уже с направлением, например "event/press".
+                   Хранится как "/event/press:" — reporter префиксирует базу слота. */
                 if (defaultTopic && *defaultTopic)
-                    snprintf(p->topic, sizeof(p->topic) - 1, "/event/%s:", defaultTopic);
+                    snprintf(p->topic, sizeof(p->topic) - 1, "/%s:", defaultTopic);
 
                 switch (p->outType)
                 {

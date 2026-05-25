@@ -78,11 +78,11 @@ void configure_masquerade(PMASQUERADE_CONFIG ch, int slot_num)
 
     /* Передать значение в замаскированный топик
     */
-    stdcommand_register(&ch->cmds, MASQUERADEMCMD_set, "push", PARAMT_string);
+    stdcommand_register(&ch->cmds, MASQUERADEMCMD_set, "action/push", PARAMT_string);
 
     /* Отчёт значения в выходной топик
     */
-    ch->report = stdreport_register(RPTT_string, slot_num, "", "val");
+    ch->report = stdreport_register(RPTT_string, slot_num, "", "event/val");
 }
 
 void masquerade_task(void *arg) {

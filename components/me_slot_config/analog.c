@@ -156,15 +156,15 @@ void configure_analog(analog_context_t *ctx, int slot_num)
 
     /* Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале
     */
-    ctx->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "ratio", (int)ctx->MIN_VAL, (int)ctx->MAX_VAL);
+    ctx->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "event/ratio", (int)ctx->MIN_VAL, (int)ctx->MAX_VAL);
 
     /* Возвращает текущее сырое целочисленное значение канала
     */
-    ctx->rawReport = stdreport_register(RPTT_int, slot_num, "unit", "rawVal");
+    ctx->rawReport = stdreport_register(RPTT_int, slot_num, "unit", "event/rawVal");
 
     /* Рапортует 0/1 при пороговом режиме
     */
-    ctx->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+    ctx->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 
     if (ctx->threshold >= 0) {
         ctx->currentReport = ctx->thresholdReport;

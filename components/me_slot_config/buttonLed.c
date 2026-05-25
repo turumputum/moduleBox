@@ -250,19 +250,19 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&ch->cmds, MYCMD_default, NULL, PARAMT_int);
+    stdcommand_register(&ch->cmds, MYCMD_default, "action/setVal", PARAMT_int);
 
 	/* Возвращает состояние нажатия кнопки
 	*/
-	ch->stateReport = stdreport_register(RPTT_int, slot_num, "unit", "press", 0, 1);
+	ch->stateReport = stdreport_register(RPTT_int, slot_num, "unit", "event/press", 0, 1);
 
 	/* Возвращает состояние длинного нажатия кнопки
 	*/
-	ch->longReport = stdreport_register(RPTT_int, slot_num, "unit", "longpress", 0, 1);
+	ch->longReport = stdreport_register(RPTT_int, slot_num, "unit", "event/longpress", 0, 1);
 
 	/* Возвращает состояние двойного нажатия кнопки
 	*/
-	ch->doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "doubleClick", 0, 1);
+	ch->doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "event/doubleClick", 0, 1);
 
 	ch->event_filter = 0;
 }

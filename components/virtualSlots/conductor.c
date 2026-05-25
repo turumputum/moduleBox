@@ -95,27 +95,27 @@ void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
 
     /* Обновление текущей позиции от энкодера
     */
-    stdcommand_register(&ch->cmds, CONDUCTORCMD_currentPos, "currentPos", PARAMT_int);
+    stdcommand_register(&ch->cmds, CONDUCTORCMD_currentPos, "action/currentPos", PARAMT_int);
 
     /* Задать целевую позицию
     */
-    stdcommand_register(&ch->cmds, CONDUCTORCMD_targetPos, "targetPos", PARAMT_int);
+    stdcommand_register(&ch->cmds, CONDUCTORCMD_targetPos, "action/targetPos", PARAMT_int);
 
     /* Остановить двигатель
     */
-    stdcommand_register(&ch->cmds, CONDUCTORCMD_stop, "stop", PARAMT_none);
+    stdcommand_register(&ch->cmds, CONDUCTORCMD_stop, "action/stop", PARAMT_none);
 
     /* Отчёт остановки двигателя
     */
-    ch->stopReport = stdreport_register(RPTT_string, slot_num, "", "stop");
+    ch->stopReport = stdreport_register(RPTT_string, slot_num, "", "event/stop");
 
     /* Отчёт движения вверх
     */
-    ch->runUpReport = stdreport_register(RPTT_string, slot_num, "", "runUp");
+    ch->runUpReport = stdreport_register(RPTT_string, slot_num, "", "event/runUp");
 
     /* Отчёт движения вниз
     */
-    ch->runDownReport = stdreport_register(RPTT_string, slot_num, "", "runDown");
+    ch->runDownReport = stdreport_register(RPTT_string, slot_num, "", "event/runDown");
 }
 
 void conductor_task(void *arg) {

@@ -79,15 +79,15 @@ void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
 
     /* Добавить данные в строку коллектора
     */
-    stdcommand_register(&ch->cmds, COLLECTORCMD_add, "add", PARAMT_string);
+    stdcommand_register(&ch->cmds, COLLECTORCMD_add, "action/add", PARAMT_string);
 
     /* Очистить строку коллектора
     */
-    stdcommand_register(&ch->cmds, COLLECTORCMD_clear, "clear", PARAMT_none);
+    stdcommand_register(&ch->cmds, COLLECTORCMD_clear, "action/clear", PARAMT_none);
 
     /* Отчёт собранной строки
     */
-    ch->report = stdreport_register(RPTT_string, slot_num, "", "val");
+    ch->report = stdreport_register(RPTT_string, slot_num, "", "event/val");
 }
 
 void collector_task(void *arg) {

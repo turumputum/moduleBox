@@ -152,11 +152,11 @@ void configure_encoderInc(PINCCONFIG c, int slot_num)
 	stdcommand_init(&c->cmds, slot_num);
     /* Обнуляет счетчик
     */
-    stdcommand_register(&c->cmds, INCCMD_reset, "reset", PARAMT_none);
+    stdcommand_register(&c->cmds, INCCMD_reset, "action/reset", PARAMT_none);
 
 	/* Рапортует текущее значение
 	*/
-	c->report = stdreport_register(RPTT_string, slot_num, "", "val");
+	c->report = stdreport_register(RPTT_string, slot_num, "", "event/val");
 }
 
 void encoder_inc_task(void *arg){
@@ -430,15 +430,15 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
 
 	/* Рапортует текущее абсолютное положение
 	*/
-	c->absReport = stdreport_register(RPTT_string, slot_num, "", "abs");
+	c->absReport = stdreport_register(RPTT_string, slot_num, "", "event/abs");
 
 	/* Рапортует текущее инкрементальное приращение
 	*/
-	c->incReport = stdreport_register(RPTT_string, slot_num, "", "inc");
+	c->incReport = stdreport_register(RPTT_string, slot_num, "", "event/inc");
 
 	/* Рапортует текущее отношение в формате числа с плавающей точкой
 	*/
-	c->floatReport = stdreport_register(RPTT_string, slot_num, "", "float");
+	c->floatReport = stdreport_register(RPTT_string, slot_num, "", "event/float");
 
 }
 

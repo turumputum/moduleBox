@@ -112,15 +112,15 @@ void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
 
 	/* Рапортует при изменении состояния кнопки
 	*/
-	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "unit", "press", 0, 1);
+	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "unit", "event/press", 0, 1);
 
 	/* Рапортует при регистрации длинного нажатия
 	*/
-	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "unit", "longPress", 0, 1);
+	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "unit", "event/longPress", 0, 1);
 
 	/* Рапортует при регистрации двойного нажатия
 	*/
-	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "doubleClick", 0, 1);
+	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "event/doubleClick", 0, 1);
 
     // --- Swiper LED logic config ---
     /* Количенство светодиодов
@@ -169,22 +169,22 @@ void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
     /* задаёт текущее состояние светодиода (вкл/выкл)
     Числовое значение 0-1
     */
-    stdcommand_register(&ctx->led.cmds, SWIPERLED_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, SWIPERLED_default, "action/setVal", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
-    stdcommand_register(&ctx->led.cmds, SWIPERLED_toggleLedState, "toggleLedState", PARAMT_none);
+    stdcommand_register(&ctx->led.cmds, SWIPERLED_toggleLedState, "action/toggleLedState", PARAMT_none);
 
     /* Установить новый целевой цвет
     Цвет задаётся десятичными значениями R G B через пробел
     */
-   stdcommand_register(&ctx->led.cmds, SWIPERLED_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+   stdcommand_register(&ctx->led.cmds, SWIPERLED_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
 
     /*Команда запускает световой эффект в видде свайпа
     Доступные значения: up, down, left, right
     */
-    stdcommand_register_enum(&ctx->led.cmds, SWIPERLED_swipe, "swipe", "up", "down", "left", "right");
+    stdcommand_register_enum(&ctx->led.cmds, SWIPERLED_swipe, "action/swipe", "up", "down", "left", "right");
 }
 
 static void setMinBright(swiper_handle_t *swiperLed) {

@@ -72,15 +72,15 @@ void configure_timer(PTIMER_CONFIG ch, int slot_num){
     /* Запустить таймер
        Опционально - время таймера, если параметр не задан или равен 0 будет использован параметр заданный в опциях
     */
-    stdcommand_register(&ch->cmds, TIMERCMD_start, "start", PARAMT_int);
+    stdcommand_register(&ch->cmds, TIMERCMD_start, "action/start", PARAMT_int);
 
     /* Остановить таймер
     */
-    stdcommand_register(&ch->cmds, TIMERCMD_stop, "stop", PARAMT_none);
+    stdcommand_register(&ch->cmds, TIMERCMD_stop, "action/stop", PARAMT_none);
 
     /* Отчёт о срабатывании таймера
     */
-    ch->timerEndReport = stdreport_register(RPTT_string, slot_num, "", "timerEnd");
+    ch->timerEndReport = stdreport_register(RPTT_string, slot_num, "", "event/timerEnd");
 }
 
 static void IRAM_ATTR timer_isr_handler(void* arg){

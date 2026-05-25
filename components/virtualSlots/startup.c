@@ -62,7 +62,7 @@ void configure_startup(PSTARTUP_CONFIG ch, int slot_num)
     /* Рапортует при старте
     Используется для инициализации начального состояния
     */
-    ch->startReport = stdreport_register(RPTT_int, slot_num, "bool", "started", 0, 1);
+    ch->startReport = stdreport_register(RPTT_int, slot_num, "bool", "event/started", 0, 1);
 }
 
 void startup_task(void *arg) {

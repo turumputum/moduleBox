@@ -45,10 +45,7 @@ static const char* TAG = "LIDARS";
 
 #define RPLIDAR_MAX_RETRIES     5
 
-// Command IDs
-enum {
-    LIDAR_CMD_ENABLE = 0,
-};
+// Command IDs (enable handled via auto-registered STDCMD_ENABLE)
 
 // ---------------------------------------------------------------------------
 // -------------------------------- HELPERS ----------------------------------
@@ -229,29 +226,25 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
     }
 
     // --- Command registration ---
-
-    /* Включает/выключает сканирование лидара
-    Значение 0 - выключить, 1 - включить
-    */
-    stdcommand_register(&lidar->cmds, LIDAR_CMD_ENABLE, "enable", PARAMT_int);
+    // (action/enable auto-registered)
 
     // --- Report registration ---
 
     /* Рапортует расстояние до ближайшего обьекта в мм
     */
-    lidar->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "distance", 0, lidar->distMaxVal);
+    lidar->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "event/distance", 0, lidar->distMaxVal);
 
     /* Рапортует угол ближайшего обьекта в градусах
     */
-    lidar->angleReport = stdreport_register(RPTT_int, slot_num, "deg", "angle", 0, 360);
+    lidar->angleReport = stdreport_register(RPTT_int, slot_num, "deg", "event/angle", 0, 360);
 
     /* Рапортует состояние порогового режима 0/1
     */
-    lidar->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "threshold", 0, 1);
+    lidar->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 
     /* Рапортует текст ошибки при сбое подключения к лидару
     */
-    lidar->errorReport = stdreport_register(RPTT_string, slot_num, "string", "error");
+    lidar->errorReport = stdreport_register(RPTT_string, slot_num, "string", "event/error");
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +343,7 @@ void rplidarS1_task(void* arg) {
         // --- Check commands (non-blocking) ---
         STDCOMMAND_PARAMS params = {0};
         int cmd = stdcommand_receive(&lidar.cmds, &params, 0);
-        if (cmd == LIDAR_CMD_ENABLE) {
+        if (cmd == STDCMD_ENABLE) {
             uint8_t newEnable = params.p[0].i ? 1 : 0;
             if (newEnable != lidar.scanEnabled) {
                 lidar.scanEnabled = newEnable;

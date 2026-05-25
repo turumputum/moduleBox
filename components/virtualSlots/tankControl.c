@@ -103,7 +103,7 @@ void tankControl_task(void* arg) {
     while(1){
         command_message_t cmd;
         if (xQueueReceive(me_state.command_queue[slot_num], &cmd, portMAX_DELAY) == pdPASS){
-            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
+            char *command = cmd.str;
             if(strstr(command, ":") == NULL){
                 ESP_LOGE(TAG, "No arguments found. EXIT"); 
             } else {

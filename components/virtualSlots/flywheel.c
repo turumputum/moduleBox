@@ -104,15 +104,15 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
     /* Установка значения счетчика
        Параметр может быть задан инкрементально (+/-) или абсолютно
     */
-    stdcommand_register(&ch->cmds, FLYWHEELCMD_setCount, "setCount", PARAMT_string);
+    stdcommand_register(&ch->cmds, FLYWHEELCMD_setCount, "action/setCount", PARAMT_string);
 
     /* Отчёт состояния в пороговом режиме (0/1)
     */
-    ch->stateReport = stdreport_register(RPTT_int, slot_num, "", "val", 0, 1);
+    ch->stateReport = stdreport_register(RPTT_int, slot_num, "", "event/val", 0, 1);
 
     /* Отчёт значения счетчика
     */
-    ch->countReport = stdreport_register(RPTT_int, slot_num, "", "count");
+    ch->countReport = stdreport_register(RPTT_int, slot_num, "", "event/count");
 }
 
 void flywheel_task(void *arg){

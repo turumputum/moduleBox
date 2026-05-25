@@ -177,44 +177,44 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     /* Числовое значение
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&c->cmds, MYCMD_default, NULL, PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_default, "action/setVal", PARAMT_int);
 
     /* Установить новый целевой цвет
        Цвет задаётся десятичными значениями R G B через пробел
     */
-    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новый режим анимации цветов
     */
-    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "setMode", "default", "flash", "glitch", "swiper", "rainbow", "run");
+    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "action/setMode", "default", "flash", "glitch", "swiper", "rainbow", "run");
 
     /* Установить новое значение приращения
     */
-    stdcommand_register(&c->cmds, MYCMD_setIncrement, "setIncrement", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setIncrement, "action/setIncrement", PARAMT_int);
 
     /* Установить максимальное значение яркости для всех каналов
     */
-    stdcommand_register(&c->cmds, MYCMD_setMaxBright, "setMaxBright", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setMaxBright, "action/setMaxBright", PARAMT_int);
 
     /* Установить значение яркости для ch_0
     */
-   stdcommand_register(&c->cmds, MYCMD_setBright_ch_0, "ch_0/setBright", PARAMT_int);
+   stdcommand_register(&c->cmds, MYCMD_setBright_ch_0, "action/ch_0/setBright", PARAMT_int);
 
    /* Установить значение яркости для ch_1
     */
-   stdcommand_register(&c->cmds, MYCMD_setBright_ch_1, "ch_1/setBright", PARAMT_int);
+   stdcommand_register(&c->cmds, MYCMD_setBright_ch_1, "action/ch_1/setBright", PARAMT_int);
 
    /* Установить значение яркости для ch_2
     */
-   stdcommand_register(&c->cmds, MYCMD_setBright_ch_2, "ch_2/setBright", PARAMT_int);
+   stdcommand_register(&c->cmds, MYCMD_setBright_ch_2, "action/ch_2/setBright", PARAMT_int);
 
     /* Установить минимальное значение яркости
     */
-    stdcommand_register(&c->cmds, MYCMD_setMinBright, "setMinBright", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setMinBright, "action/setMinBright", PARAMT_int);
 
     /* Установить время затухания свечения
     */
-    stdcommand_register(&c->cmds, MYCMD_setFadeTime, "setFadeTime", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setFadeTime, "action/setFadeTime", PARAMT_int);
 }
 
 void pwmLeds_task(void *arg){

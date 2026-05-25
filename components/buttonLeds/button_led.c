@@ -164,37 +164,37 @@ void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
 
 	/* Рапортует при изменении состояния кнопки
 	*/
-	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "press", 0, 1);
+	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/press", 0, 1);
 
 	/* Рапортует при регистрации длинного нажатия
 	*/
-	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "longPress", 0, 1);
+	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "event/longPress", 0, 1);
 
 	/* Рапортует при регистрации двойного нажатия
 	*/
-	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "doubleClick", 0, 1);
+	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "event/doubleClick", 0, 1);
 
-    
+
     /* задаёт текущее состояние светодиода (вкл/выкл)
     Числовое значение 0-1
     */
-    stdcommand_register(&ctx->led.cmds, LED_CMD_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LED_CMD_default, "action/setVal", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
-    stdcommand_register(&ctx->led.cmds, LED_CMD_toggleLedState, "toggleLedState", PARAMT_none);
+    stdcommand_register(&ctx->led.cmds, LED_CMD_toggleLedState, "action/toggleLedState", PARAMT_none);
 
     /* Установить минимальное значение яркости
     */
-    stdcommand_register(&ctx->led.cmds, LED_CMD_setMinBright, "setMinBright", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LED_CMD_setMinBright, "action/setMinBright", PARAMT_int);
 
     /* Установить максимальное значение яркости
     */
-    stdcommand_register(&ctx->led.cmds, LED_CMD_setMaxBright, "setMaxBright", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LED_CMD_setMaxBright, "action/setMaxBright", PARAMT_int);
 
     /* Установить время переходного процесса при изменении яркомсти в миллесекндах
     */
-    stdcommand_register(&ctx->led.cmds, LED_CMD_setFadeTime, "setFadeTime", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LED_CMD_setFadeTime, "action/setFadeTime", PARAMT_int);
 }
 
 void button_led_task(void *arg)

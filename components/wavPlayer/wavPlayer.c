@@ -202,37 +202,37 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 
 	/* Рапортует номер трека при завершении
 	*/
-	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "endOfTrack");
+	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "event/endOfTrack");
 
 	/* Рапортует состояние модуля (0 - выключен, 1 - включен)
 	*/
-	c->stateReport = stdreport_register(RPTT_int, slot_num, "", "state");
+	c->stateReport = stdreport_register(RPTT_int, slot_num, "", "event/state");
 
 
     /* Проиграть трек
        Опционально - номер трека
     */
-    stdcommand_register(&c->cmds, MYCMD_play, "play", PARAMT_string);
+    stdcommand_register(&c->cmds, MYCMD_play, "action/play", PARAMT_string);
 
     /* Остановить проигрывание
-       
+
     */
-    stdcommand_register(&c->cmds, MYCMD_stop, "stop", PARAMT_none);
+    stdcommand_register(&c->cmds, MYCMD_stop, "action/stop", PARAMT_none);
 
     /* Переключить трек
-       
+
     */
-   	stdcommand_register(&c->cmds, MYCMD_shift, "shift", PARAMT_string);
+   	stdcommand_register(&c->cmds, MYCMD_shift, "action/shift", PARAMT_string);
 
     /* Установить громкость
-       
+
     */
-	stdcommand_register(&c->cmds, MYCMD_setVolume, "setVolume", PARAMT_int);
+	stdcommand_register(&c->cmds, MYCMD_setVolume, "action/setVolume", PARAMT_int);
 
     /* Установить состояние модуля (0 - выключен, 1 - включен)
        После включения модуль в режиме стоп
     */
-	stdcommand_register(&c->cmds, MYCMD_setState, "setState", PARAMT_int);
+	stdcommand_register(&c->cmds, MYCMD_setState, "action/setState", PARAMT_int);
 
 
 }

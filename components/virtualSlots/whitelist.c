@@ -83,11 +83,11 @@ void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
     
     /* Запуск проверки
     */
-    stdcommand_register(&ch->cmds, WHITELISTCMD_check, "check", PARAMT_string);
+    stdcommand_register(&ch->cmds, WHITELISTCMD_check, "action/check", PARAMT_string);
 
     /* Возвращает если совпадений не найдено
     */
-    ch->report = stdreport_register(RPTT_int, slot_num, "", "noMatches", 0, 1);
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "event/noMatches", 0, 1);
 }
 
 void whitelist_task(void *arg) {

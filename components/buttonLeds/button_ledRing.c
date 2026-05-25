@@ -110,15 +110,15 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 
 	/* Рапортует при изменении состояния кнопки
 	*/
-	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "press", 0, 1);
+	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/press", 0, 1);
 
 	/* Рапортует при регистрации длинного нажатия
 	*/
-	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "longPress", 0, 1);
+	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "event/longPress", 0, 1);
 
 	/* Рапортует при регистрации двойного нажатия
 	*/
-	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "doubleClick", 0, 1);
+	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "event/doubleClick", 0, 1);
 
     // --- LED Ring logic config ---
     /* Количенство светодиодов
@@ -201,27 +201,27 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 
     /* Задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&ctx->led.cmds, LEDRING_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LEDRING_default, "action/setVal", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
-    stdcommand_register(&ctx->led.cmds, LEDRING_toggleLedState, "toggleLedState", PARAMT_none);
+    stdcommand_register(&ctx->led.cmds, LEDRING_toggleLedState, "action/toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
     пример moduleBox/ledRing_0/setRGB:255 0 0 - установить красный цвет
     */
-    stdcommand_register(&ctx->led.cmds, LEDRING_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
-    
+    stdcommand_register(&ctx->led.cmds, LEDRING_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+
     /* Команда задает положение светового эффекта, используется при подсветке спиннера
     пример moduleBox/ledRing_0/setPos:12
     */
-    stdcommand_register(&ctx->led.cmds, LEDRING_setPos, "setPos", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LEDRING_setPos, "action/setPos", PARAMT_int);
 
     /* Установить новый режим анимации цветов
-    
+
     */
     //todo расписать
-    stdcommand_register_enum(&ctx->led.cmds, LEDRING_setMode, "setMode", "default", "run");
+    stdcommand_register_enum(&ctx->led.cmds, LEDRING_setMode, "action/setMode", "default", "run");
     
 }
 

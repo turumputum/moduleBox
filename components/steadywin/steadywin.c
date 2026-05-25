@@ -581,11 +581,10 @@ void GIM_motor_task(void *arg) {
             char* payload;
             char* cmd = strtok_r(msg.str, ":", &payload);
             //ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            if(strlen(cmd)==strlen(me_state.action_topic_list[slot_num]) + strlen("/action")){
+            if(strlen(cmd)==0){
                 state = atoi(payload);
 
             }else{
-                cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
                 if(strstr(cmd, "setPos")!=NULL){
                    int16_t rawPos = atoi(payload);
                    if(rawPos>maxVal)rawPos = maxVal;

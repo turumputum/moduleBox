@@ -133,7 +133,7 @@ void ticketDispenser_task(void *arg) {
     while(1){
         command_message_t msg;
 		if (xQueueReceive(me_state.command_queue[slot_num], &msg, 0) == pdPASS){
-            targetCount = atoi(msg.str + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/"));
+            targetCount = atoi(msg.str);
             if (targetCount > 0) {
                 ESP_LOGD(TAG, "ticketDispenser_task cmd: %s", msg.str);
                 gpio_set_level(outPin_num, !out_inverse);

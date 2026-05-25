@@ -206,53 +206,53 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     /* Рапортует текущее положение
     - шаг
 	*/
-	c->posReport = stdreport_register(RPTT_string, slot_num, "step", "pos");
+	c->posReport = stdreport_register(RPTT_string, slot_num, "step", "event/pos");
 
     /* Рапортует текущую скорость
-    - шаг\сек
+    - шаг/сек
 	*/
-	c->speedReport = stdreport_register(RPTT_string, slot_num, "step/sek", "speed");
+	c->speedReport = stdreport_register(RPTT_string, slot_num, "step/sek", "event/speed");
 
     /* Рапортует текущий режим базирования
 	*/
-	c->homeReport = stdreport_register(RPTT_string, slot_num, "", "homingState");
+	c->homeReport = stdreport_register(RPTT_string, slot_num, "", "event/homingState");
 
     /* Команда запускает процесс базирования
     */
-    stdcommand_register(&c->cmds, stepCMD_goHome, "goHome", PARAMT_none);
+    stdcommand_register(&c->cmds, stepCMD_goHome, "action/goHome", PARAMT_none);
 
     /* Команда включает, режим управления по положению и устанавливает целевое значение в абсолютном режиме
     */
-    stdcommand_register(&c->cmds, stepCMD_moveToAbs, "moveToAbs", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_moveToAbs, "action/moveToAbs", PARAMT_int);
 
     /* Команда включает, режим управления по положению и устанавливает целевое значение в виде приращения
     */
-    stdcommand_register(&c->cmds, stepCMD_moveToInc, "moveToInc", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_moveToInc, "action/moveToInc", PARAMT_int);
 
     /* Команда включает, режим управления по скорости и устанавливает максимальную скорость движения мотора
     */
-    stdcommand_register(&c->cmds, stepCMD_runSpeed, "runSpeed", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_runSpeed, "action/runSpeed", PARAMT_int);
 
     /* Команда устанавливает максимальную скорость движения мотора
     */
-    stdcommand_register(&c->cmds, stepCMD_setMaxSpeed, "setMaxSpeed", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_setMaxSpeed, "action/setMaxSpeed", PARAMT_int);
 
     /* Команда устанавливает максимальную скорость движения мотора
     */
-    stdcommand_register(&c->cmds, stepCMD_setAccel, "setAccel", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_setAccel, "action/setAccel", PARAMT_int);
 
     /* Команда экстренной остановки
     */
-    stdcommand_register(&c->cmds, stepCMD_stop, "stop", PARAMT_none);
+    stdcommand_register(&c->cmds, stepCMD_stop, "action/stop", PARAMT_none);
 
     /* Команда остановки с учетом пути торможения
     */
-    stdcommand_register(&c->cmds, stepCMD_break, "break", PARAMT_none);
+    stdcommand_register(&c->cmds, stepCMD_break, "action/break", PARAMT_none);
 
     c->homingSensorState=-1;
     /* Команда установки значения датчика нулевого положения
     */
-    stdcommand_register(&c->cmds, stepCMD_setHomingSensor, "setHomingSensor", PARAMT_int);
+    stdcommand_register(&c->cmds, stepCMD_setHomingSensor, "action/setHomingSensor", PARAMT_int);
 
 }
 
@@ -265,7 +265,6 @@ void getHomingSenesorState(int slot_num, int* state){
         if(strstr(cmd, ":")!=NULL){
             cmd = strtok_r(msg.str, ":", &payload);
             ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             if(strstr(cmd, "homingSensor")!=NULL){
                 *state = atoi(payload);
             }

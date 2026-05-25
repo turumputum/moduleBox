@@ -111,15 +111,15 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
 
     /* Рапортует при изменении состояния кнопки
     */
-    ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "press", 0, 1);
+    ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/press", 0, 1);
 
     /* Рапортует при регистрации длинного нажатия
     */
-    ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "longPress", 0, 1);
+    ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "event/longPress", 0, 1);
 
     /* Рапортует при регистрации двойного нажатия
     */
-    ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "doubleClick", 0, 1);
+    ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "event/doubleClick", 0, 1);
 
     // --- RunFire LED logic config ---
     /* Количенство светодиодов
@@ -209,16 +209,16 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
     /* задаёт текущее состояние светодиода (вкл/выкл)
     Числовое значение 0-1
     */
-    stdcommand_register(&ctx->led.cmds, RUNFIRE_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, RUNFIRE_default, "action/setVal", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
-    stdcommand_register(&ctx->led.cmds, RUNFIRE_toggleLedState, "toggleLedState", PARAMT_none);
+    stdcommand_register(&ctx->led.cmds, RUNFIRE_toggleLedState, "action/toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
     пример moduleBox/runFire_0/setRGB:255 0 0 - установить красный цвет
     */
-    stdcommand_register(&ctx->led.cmds, RUNFIRE_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, RUNFIRE_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 }
 
 static void ledUpdate(uint8_t *currentMass, uint8_t *targetMass, uint16_t size, uint8_t increment, bool periodicUpdate, rmt_led_heap_t *rmt_heap, uint8_t slot_num) {

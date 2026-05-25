@@ -72,9 +72,9 @@ void watchdog_task(void *arg) {
     WATCHDOG_CONFIG c = {0};
     configure_watchdog(&c, slot_num);
 
-    int strl = strlen(me_state.action_topic_list[slot_num]) + strlen("/action/restart") + 1;
+    int strl = strlen("restart") + 1;
     char tmpstr[strl];
-    sprintf(tmpstr, "%s/action/%s", me_state.action_topic_list[slot_num], "restart");
+    sprintf(tmpstr, "restart");
     xQueueSend(me_state.command_queue[slot_num], &tmpstr, 0);
     
     esp_timer_handle_t virtual_timer = NULL;
@@ -98,7 +98,7 @@ void watchdog_task(void *arg) {
         
         command_message_t cmd;
         if (xQueueReceive(me_state.command_queue[slot_num], &cmd, 0) == pdPASS){
-            char *command = cmd.str + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
+            char *command = cmd.str;
             
             if(!memcmp(command, "restart", 7)){ 
                 if(esp_timer_is_active(virtual_timer)){

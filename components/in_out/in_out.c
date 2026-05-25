@@ -176,7 +176,7 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
 
     /* Рапортует при изменении состояния входного сигнала
 	*/
-    ctx->stateReport = stdreport_register(RPTT_int, slot_num, "state", "val", 0, 1);
+    ctx->stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/val", 0, 1);
 
 
     // =============================================================================
@@ -186,15 +186,15 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
 
     /* Команда для установки состояния выходного сигнала
 	*/
-    stdcommand_register(&ctx->cmds, OUT_CMD_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_default, "action/setVal", PARAMT_int);
 
     /* Команда для переключения состояния выходного сигнала
 	*/
-    stdcommand_register(&ctx->cmds, OUT_CMD_toggle, "toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_toggle, "action/toggle", PARAMT_none);
 
     /* Команда формирование импульса, длинна импульса задается занчением в миллисекундах
 	*/
-    stdcommand_register(&ctx->cmds, OUT_CMD_impulse, "impulse", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_impulse, "action/impulse", PARAMT_none);
 }
 
 

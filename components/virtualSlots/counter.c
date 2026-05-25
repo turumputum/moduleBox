@@ -92,11 +92,11 @@ void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
     /* Установка значений счетчика
        Параметр может быть задан инкрементально или абсолютно
     */
-    stdcommand_register(&ch->cmds, COUNTERCMD_set, "set", PARAMT_string);
+    stdcommand_register(&ch->cmds, COUNTERCMD_set, "action/set", PARAMT_string);
 
     /* Отчёт значения счетчика
     */
-    ch->report = stdreport_register(RPTT_int, slot_num, "", "val");
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "event/val");
 }
 
 void counter_task(void *arg) {

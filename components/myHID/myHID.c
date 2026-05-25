@@ -74,7 +74,6 @@ void HID_task(void *arg) {
             char* payload;
             char* cmd = strtok_r(msg.str, ":", &payload);
             ESP_LOGD(TAG, "Input command %s payload:%s", cmd, payload);
-            cmd = cmd + strlen(me_state.action_topic_list[slot_num]) + strlen("/action/");
             if(strstr(cmd, "press")!=NULL){
                 send_hid_key_press(atoi(payload));
             }else if(strstr(cmd, "release")!=NULL){

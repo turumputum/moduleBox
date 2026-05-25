@@ -346,20 +346,20 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&c->cmds, MYCMD_default, NULL, PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_default, "action/setVal", PARAMT_int);
 
-    /* Установить новый целевой цвет. 
+    /* Установить новый целевой цвет.
        Цвет задаётся десятичными значениями R G B через пробел
     */
-    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новый режим анимации цветов
     */
-    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "setMode", "default", "flash", "glitch", "swiper", "rainbow", "run");
+    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "action/setMode", "default", "flash", "glitch", "swiper", "rainbow", "run");
 
     /* Установить новое значение приращения
     */
-    stdcommand_register(&c->cmds, MYCMD_setIncrement, "setIncrement", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setIncrement, "action/setIncrement", PARAMT_int);
     
 }
 void smartLed_task(void *arg){
@@ -818,7 +818,7 @@ void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
 
     /* Анимация эфекта
     */
-    stdcommand_register_enum(&c->cmds, MYCMD_swipe, "swipe", "up", "down", "left", "right");
+    stdcommand_register_enum(&c->cmds, MYCMD_swipe, "action/swipe", "up", "down", "left", "right");
 }
 void swiperLed_task(void *arg)
 {
@@ -1100,16 +1100,16 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&c->cmds, LEDRINGCMD_default, NULL, PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_default, "action/setVal", PARAMT_int);
 
-    /* Установить новый целевой цвет. 
+    /* Установить новый целевой цвет.
        Цвет задаётся десятичными значениями R G B через пробел
     */
-    stdcommand_register(&c->cmds, LEDRINGCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новую текущую позичию
     */
-    stdcommand_register(&c->cmds, LEDRINGCMD_setPos, "setPos", PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_setPos, "action/setPos", PARAMT_int);
     //stdcommand_register(&c->cmds, MYCMD_setPos, "setPos", PARAMT_string);
 
 }
@@ -1367,11 +1367,11 @@ void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
     /* Установить новый целевой цвет.
        Цвет задаётся десятичными значениями R G B через пробел
     */
-    stdcommand_register(&c->cmds, MYCMD_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Установить новую текущую позичию
     */
-    stdcommand_register(&c->cmds, MYCMD_setPos, "setPos", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setPos, "action/setPos", PARAMT_int);
 }
 void ledBar_task(void *arg)
 {

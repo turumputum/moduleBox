@@ -40,8 +40,9 @@ void stdcommand_init(PSTDCOMMANDS       cmd,
 
     cmd->slot_num = slot_num;
 
-    /* Авто-регистрация action/enable (Конституция §6) */
-    stdcommand_register(cmd, STDCMD_ENABLE, "enable", PARAMT_int);
+    /* Авто-регистрация action/enable (Конституция §6).
+       Регистрируем с полным префиксом action/ — manifesto увидит как литерал. */
+    stdcommand_register(cmd, STDCMD_ENABLE, "action/enable", PARAMT_int);
 }
 int _stdcommand_register(PSTDCOMMANDS       cmd,
                          int                id,
@@ -54,6 +55,15 @@ int _stdcommand_register(PSTDCOMMANDS       cmd,
     va_list         list;
 
     va_start(list, count);
+
+    /* Регистрация по полному имени с префиксом направления, например
+       "action/ch_2/setBright" — manifesto увидит литерал и положит в манифест.
+       Во время выполнения executor уже отрезал "action/" из входящего
+       сообщения, поэтому для сопоставления храним суффикс без префикса. */
+    if (keyword && strncmp(keyword, "action/", 7) == 0)
+    {
+        keyword += 7;
+    }
 
     cmd->keywords[i].keyword    = keyword;
     cmd->keywords[i].id         = id;
@@ -89,6 +99,12 @@ int _stdcommand_register_enum(PSTDCOMMANDS       cmd,
     va_list         list;
 
     va_start(list, count);
+
+    /* Аналогично _stdcommand_register: храним суффикс без префикса "action/". */
+    if (keyword && strncmp(keyword, "action/", 7) == 0)
+    {
+        keyword += 7;
+    }
 
     cmd->keywords[i].keyword    = keyword;
     cmd->keywords[i].id         = id;
@@ -231,27 +247,18 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
     char *              keyword;
     char *              delim;
     char *              value           = NULL;
-    int                 len;
-  
+
 
     if (xQueueReceive(me_state.command_queue[cmd->slot_num], &cmd->msg, TO) == pdPASS)
     {
-        len = strlen(me_state.action_topic_list[cmd->slot_num]);
+        /* Сообщение в очереди уже короткое: "<name>[:<value>]"
+           (executor отрезает "<deviceName>/<module>_<slot>/action/" заранее).
+           Парсим его напрямую. */
+        ESP_LOGD(TAG, "Slot:%d input cmd:'%s'", cmd->slot_num, cmd->msg.str);
 
-        ESP_LOGD(TAG, "Slot:%d input cmd:'%s' topic:'%s' len:%d", cmd->slot_num, cmd->msg.str, me_state.action_topic_list[cmd->slot_num], len);
-
-        if (strlen(cmd->msg.str) > len)
+        if (strlen(cmd->msg.str) > 0)
         {
-            keyword = cmd->msg.str + len + 1;
-
-            /* action_topic_list содержит базу "<deviceName>/<module>_<slot>".
-               Суффикс "action/" (по Конституции) пропускается тут — единая
-               точка разбора, чтобы модули не клеили его руками. Поддерживаем
-               и старый формат "<base>/keyword" для совместимости. */
-            if (strncmp(keyword, "action/", 7) == 0)
-            {
-                keyword += 7;
-            }
+            keyword = cmd->msg.str;
 
             params->count = 0;
 
@@ -364,7 +371,7 @@ int stdcommand_receive(PSTDCOMMANDS       cmd,
         }
         else
         {
-            ESP_LOGW(TAG, "Slot:%d msg too short to contain command: '%s' (len=%d, topic_len=%d)", cmd->slot_num, cmd->msg.str, (int)strlen(cmd->msg.str), len);
+            ESP_LOGW(TAG, "Slot:%d empty cmd received", cmd->slot_num);
         }
 
         if (-1 == result)

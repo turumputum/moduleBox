@@ -97,11 +97,11 @@ void configure_dialer(PDIALER_CONFIG ch, int slot_num)
 
     /* Сброс текущего набираемого номера
     */
-    stdcommand_register(&ch->cmds, DIALERCMD_reset, "reset", PARAMT_none);
+    stdcommand_register(&ch->cmds, DIALERCMD_reset, "action/reset", PARAMT_none);
 
     /* Отчёт набранного номера
     */
-    ch->numberReport = stdreport_register(RPTT_string, slot_num, "", "val");
+    ch->numberReport = stdreport_register(RPTT_string, slot_num, "", "event/val");
 }
 
 void dialer_task(void* arg) {

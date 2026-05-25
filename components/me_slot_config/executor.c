@@ -246,11 +246,29 @@ void executer_task(void * param){
 			}else{
 				for(int i=0; i<NUM_OF_SLOTS; i++){
 					if(me_state.action_topic_list[i]==NULL) continue;
+					int base_len = strlen(me_state.action_topic_list[i]);
 					//ESP_LOGD(TAG, "Checking slot[%d] topic:'%s' queue:%d", i, me_state.action_topic_list[i], me_state.command_queue[i]!=NULL);
-					if(strstr(msg.str, me_state.action_topic_list[i])!=NULL){
-						ESP_LOGD(TAG, "Forward cmd:%s to slot:%d", msg.str, i);
+					/* Сообщение должно начинаться (или содержать как подстроку) base слота.
+					   Используем strstr ради совместимости с device-name-стрипом в кросслинке. */
+					char *match = strstr(msg.str, me_state.action_topic_list[i]);
+					if(match != NULL){
+						/* Отрезаем "<base>/action/" в одной точке (Конституция §3).
+						   В очередь модуля кладём короткое "<keyword>[:<value>]". */
+						char *suffix = match + base_len;
+						if(*suffix == '/') suffix++;
+						if(strncmp(suffix, "action/", 7) == 0){
+							suffix += 7;
+						}else{
+							ESP_LOGW(TAG, "Slot:%d msg without /action/ prefix: '%s'", i, msg.str);
+							continue;
+						}
+						command_message_t forward = {0};
+						forward.slot_num = i;
+						strncpy(forward.str, suffix, MAX_STRING_LENGTH-1);
+						forward.str[MAX_STRING_LENGTH-1] = 0;
+						ESP_LOGD(TAG, "Forward cmd:%s to slot:%d (full:%s)", forward.str, i, msg.str);
 						if(me_state.command_queue[i]!=NULL){
-							xQueueSend(me_state.command_queue[i], &msg, portMAX_DELAY);
+							xQueueSend(me_state.command_queue[i], &forward, portMAX_DELAY);
 							sum++;
 						}else{
 							ESP_LOGE(TAG, "Slot queue is not initialized");

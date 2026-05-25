@@ -137,26 +137,26 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
     // Register commands
     /* Команда для установки состояния выходного сигнала канала 0
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "ch_0", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "action/ch_0", PARAMT_int);
     /* Команда для установки состояния выходного сигнала канала 1
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "ch_1", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "action/ch_1", PARAMT_int);
 
     /* Команда для переключения состояния выходного сигнала канала 0
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "ch_0/toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "action/ch_0/toggle", PARAMT_none);
 
     /* Команда для переключения состояния выходного сигнала канала 1
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "ch_1/toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "action/ch_1/toggle", PARAMT_none);
 
     /* Команда для импульсного включения выходного сигнала канала 0
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "ch_0/impulse", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "action/ch_0/impulse", PARAMT_int);
 
     /* Команда для импульсного включения выходного сигнала канала 1
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "ch_1/impulse", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "action/ch_1/impulse", PARAMT_int);
 }
 
 
@@ -322,39 +322,39 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
     // Register commands
     /* Команда для установки состояния выходного сигнала канала 0
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "ch_0", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "action/ch_0", PARAMT_int);
     
     /* Команда для установки состояния выходного сигнала канала 1
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "ch_1", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "action/ch_1", PARAMT_int);
     
     /* Команда для установки состояния выходного сигнала канала 2
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_default, "ch_2", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_default, "action/ch_2", PARAMT_int);
 
     /* Команда для переключения состояния выходного сигнала канала 0
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "ch_0/toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "action/ch_0/toggle", PARAMT_none);
 
     /* Команда для переключения состояния выходного сигнала канала 1
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "ch_1/toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "action/ch_1/toggle", PARAMT_none);
 
     /* Команда для переключения состояния выходного сигнала канала 2
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_toggle, "ch_2/toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_toggle, "action/ch_2/toggle", PARAMT_none);
 
     /* Команда для импульсного включения выходного сигнала канала 0
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "ch_0/impulse", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "action/ch_0/impulse", PARAMT_int);
 
     /* Команда для импульсного включения выходного сигнала канала 1
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "ch_1/impulse", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "action/ch_1/impulse", PARAMT_int);
 
     /* Команда для импульсного включения выходного сигнала канала 2
     */
-    stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_impulse, "ch_2/impulse", PARAMT_int);
+    stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_impulse, "action/ch_2/impulse", PARAMT_int);
 }
 
 static void out_3ch_task(void *arg) {
@@ -538,15 +538,15 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
     // Register commands
     /* Команда для установки состояния реле
     */
-    stdcommand_register(&ctx->cmds, RELAY_CMD_set, NULL, PARAMT_int);
+    stdcommand_register(&ctx->cmds, RELAY_CMD_set, "action/setVal", PARAMT_int);
 
     /* Команда для переключения состояния реле
     */
-    stdcommand_register(&ctx->cmds, RELAY_CMD_toggle, "toggle", PARAMT_none);
+    stdcommand_register(&ctx->cmds, RELAY_CMD_toggle, "action/toggle", PARAMT_none);
 
     /* Команда для импульсного включения реле (длительность в мс)
     */
-    stdcommand_register(&ctx->cmds, RELAY_CMD_impulse, "impulse", PARAMT_int);
+    stdcommand_register(&ctx->cmds, RELAY_CMD_impulse, "action/impulse", PARAMT_int);
 }
 
 static void relay_task(void *arg) {

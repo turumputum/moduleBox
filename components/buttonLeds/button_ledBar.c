@@ -99,15 +99,15 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
 
 	/* Рапортует при изменении состояния кнопки
 	*/
-	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "unit", "press", 0, 1);
+	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "unit", "event/press", 0, 1);
 
 	/* Рапортует при регистрации длинного нажатия
 	*/
-	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "unit", "longPress", 0, 1);
+	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "unit", "event/longPress", 0, 1);
 
 	/* Рапортует при регистрации двойного нажатия
 	*/
-	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "doubleClick", 0, 1);
+	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "event/doubleClick", 0, 1);
 
     // --- LED Bar logic config ---
     /* Количенство светодиодов
@@ -179,21 +179,21 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     /* задаёт текущее состояние светодиода (вкл/выкл)
     Числовое значение 0-1
     */
-    stdcommand_register(&ctx->led.cmds, LEDBAR_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LEDBAR_default, "action/setVal", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
-    stdcommand_register(&ctx->led.cmds, LEDBAR_toggleLedState, "toggleLedState", PARAMT_none);
+    stdcommand_register(&ctx->led.cmds, LEDBAR_toggleLedState, "action/toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
     пример moduleBox/ledRing_0/setRGB:255 0 0 - установить красный цвет
     */
-    stdcommand_register(&ctx->led.cmds, LEDBAR_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LEDBAR_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
     /* Команда задает положение светового эффекта
     пример moduleBox/ledBar_0/setPos:12
     */
-    stdcommand_register(&ctx->led.cmds, LEDBAR_setPos, "setPos", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LEDBAR_setPos, "action/setPos", PARAMT_int);
 }
 
 static uint8_t colorChek(uint8_t currentColor, uint8_t targetColor, uint8_t increment){

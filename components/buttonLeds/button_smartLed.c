@@ -110,15 +110,15 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
 
 	/* Рапортует при изменении состояния кнопки
 	*/
-	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "press", 0, 1);
+	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/press", 0, 1);
 
 	/* Рапортует при регистрации длинного нажатия
 	*/
-	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "longPress", 0, 1);
+	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "event/longPress", 0, 1);
 
 	/* Рапортует при регистрации двойного нажатия
 	*/
-	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "doubleClick", 0, 1);
+	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "event/doubleClick", 0, 1);
 
     // --- Smart LED logic config ---
     /* Количенство светодиодов
@@ -193,26 +193,26 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     /* Числовое значение
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&ctx->led.cmds, SMARTLED_default, NULL, PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, SMARTLED_default, "action/setVal", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
-    stdcommand_register(&ctx->led.cmds, SMARTLED_toggleLedState, "toggleLedState", PARAMT_none);
+    stdcommand_register(&ctx->led.cmds, SMARTLED_toggleLedState, "action/toggleLedState", PARAMT_none);
 
     /* Команда задает цвет подсветки
     пример moduleBox/smartLed_0/setRGB:255 0 0 - установить красный цвет
     */
-    stdcommand_register(&ctx->led.cmds, SMARTLED_setRGB, "setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
-    
+    stdcommand_register(&ctx->led.cmds, SMARTLED_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
+
     /* Установить новый режим анимации цветов
-    
+
     */
     //todo расписать
-    stdcommand_register_enum(&ctx->led.cmds, SMARTLED_setMode, "setMode", "default", "flash", "rainbow");
-    
+    stdcommand_register_enum(&ctx->led.cmds, SMARTLED_setMode, "action/setMode", "default", "flash", "rainbow");
+
     /* Установить новое значение fadeTime, скорости анимации
     */
-    stdcommand_register(&ctx->led.cmds, SMARTLED_setFadeTime, "setFadeTime", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, SMARTLED_setFadeTime, "action/setFadeTime", PARAMT_int);
 }
 
 static void setAllLed_color(uint8_t *pixel_array, RgbColor color, int16_t bright, uint16_t num_of_led){
