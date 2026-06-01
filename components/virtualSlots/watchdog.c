@@ -47,7 +47,7 @@ void configure_watchdog(PWATCHDOG_CONFIG ch, int slot_num)
     /* Время до срабатывания watchdog в секундах
        По умолчанию 3600 с
     */
-    ch->time = get_option_int_val(slot_num, "time", "s", 3600, 1, UINT32_MAX);
+    ch->time = get_option_int_val(slot_num, "time", "s", 3600, 1, INT32_MAX);
     ESP_LOGD(TAG, "Set time :%ld for slot:%d", ch->time, slot_num);
 
     char t_str[strlen(me_config.deviceName) + strlen("/watchdog_0") + 3];

@@ -48,7 +48,7 @@ void configure_timer(PTIMER_CONFIG ch, int slot_num){
     /* Время через которое сработает таймер, единицы измерения мс
        По умолчанию 1000 мс
     */
-    ch->time = get_option_int_val(slot_num, "time", "ms", 1000, 1, UINT32_MAX);
+    ch->time = get_option_int_val(slot_num, "time", "ms", 1000, 1, INT32_MAX);
     ESP_LOGD(TAG, "Set time :%ld for slot:%d", ch->time, slot_num);
 
     /* Не стандартный топик для таймера

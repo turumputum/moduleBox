@@ -94,6 +94,7 @@ typedef struct {
 
   int32_t targetPos;
   int32_t currentPos;
+  int32_t absPos;      // истинная абсолютная позиция: не сбрасывается хаком runSpeed (currentPos=0)
   int32_t breakWay;
   int32_t breakPoint;
 
@@ -129,6 +130,7 @@ typedef struct {
   .targetSpeed = 0,\
   .targetPos = 0,\
   .currentPos = 0,\
+  .absPos = 0,\
   .breakWay = 0,\
   .accel = 100,\
 	.dir = 0,\

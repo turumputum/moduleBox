@@ -135,26 +135,26 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
     }
 
     // Register commands
-    /* Команда для установки состояния выходного сигнала канала 0
+    /* Команда для установки состояния выходного сигнала, значение 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "action/ch_0", PARAMT_int);
-    /* Команда для установки состояния выходного сигнала канала 1
+    /* Команда для установки состояния выходного сигнала, значение 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "action/ch_1", PARAMT_int);
 
-    /* Команда для переключения состояния выходного сигнала канала 0
+    /* Команда для переключения состояния выходного сигнала, значение игнорируется
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "action/ch_0/toggle", PARAMT_none);
 
-    /* Команда для переключения состояния выходного сигнала канала 1
+    /* Команда для переключения состояния выходного сигнала, значение игнорируется
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "action/ch_1/toggle", PARAMT_none);
 
-    /* Команда для импульсного включения выходного сигнала канала 0
+    /* Команда для импульсного включения, значение длительность импульса в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "action/ch_0/impulse", PARAMT_int);
 
-    /* Команда для импульсного включения выходного сигнала канала 1
+    /* Команда для импульсного включения, значение длительность импульса в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "action/ch_1/impulse", PARAMT_int);
 }
@@ -275,33 +275,27 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
-    /* Настраивает инверсию выходного сигнала для канала 0
-    0-1 по умолчанию 0
+    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
     */
     ctx->inverseMass[0] = get_option_int_val(slot_num, "inverse_0", "bool", 0, 0, 1);
     
-    /* Настраивает инверсию выходного сигнала для канала 1
-    0-1 по умолчанию 0
+    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
     */
     ctx->inverseMass[1] = get_option_int_val(slot_num, "inverse_1", "bool", 0, 0, 1);
 
-    /* Настраивает инверсию выходного сигнала для канала 2
-    0-1 по умолчанию 0
+    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
     */
     ctx->inverseMass[2] = get_option_int_val(slot_num, "inverse_2", "bool", 0, 0, 1);
 
-    /* Настраивает значение по умолчанию для канала 0
-    0-1 по умолчанию 0
+    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
     */
     ctx->defaultStateMass[0] = get_option_int_val(slot_num, "defState_0", "bool", 0, 0, 1);
     
-    /* Настраивает значение по умолчанию для канала 1
-    0-1 по умолчанию 0
+    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
     */
     ctx->defaultStateMass[1] = get_option_int_val(slot_num, "defState_1", "bool", 0, 0, 1);
 
-    /* Настраивает значение по умолчанию для канала 2
-    0-1 по умолчанию 0
+    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
     */
     ctx->defaultStateMass[2] = get_option_int_val(slot_num, "defState_2", "bool", 0, 0, 1);
 
@@ -320,39 +314,39 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
     }
 
     // Register commands
-    /* Команда для установки состояния выходного сигнала канала 0
+    /* Команда для установки состояния выходного сигнала, значение 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "action/ch_0", PARAMT_int);
     
-    /* Команда для установки состояния выходного сигнала канала 1
+    /* Команда для установки состояния выходного сигнала, значение 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "action/ch_1", PARAMT_int);
     
-    /* Команда для установки состояния выходного сигнала канала 2
+    /* Команда для установки состояния выходного сигнала, значение 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_default, "action/ch_2", PARAMT_int);
 
-    /* Команда для переключения состояния выходного сигнала канала 0
+    /* Команда для переключения состояния выходного сигнала, значение игнорируется
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "action/ch_0/toggle", PARAMT_none);
 
-    /* Команда для переключения состояния выходного сигнала канала 1
+    /* Команда для переключения состояния выходного сигнала, значение игнорируется
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "action/ch_1/toggle", PARAMT_none);
 
-    /* Команда для переключения состояния выходного сигнала канала 2
+    /* Команда для переключения состояния выходного сигнала, значение игнорируется
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_toggle, "action/ch_2/toggle", PARAMT_none);
 
-    /* Команда для импульсного включения выходного сигнала канала 0
+    /* Команда для импульсного включения, значение длительность импульса в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "action/ch_0/impulse", PARAMT_int);
 
-    /* Команда для импульсного включения выходного сигнала канала 1
+    /* Команда для импульсного включения, значение длительность импульса в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "action/ch_1/impulse", PARAMT_int);
 
-    /* Команда для импульсного включения выходного сигнала канала 2
+    /* Команда для импульсного включения, значение длительность импульса в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_impulse, "action/ch_2/impulse", PARAMT_int);
 }
@@ -511,13 +505,11 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
-    /* Настраивает инверсию выходного сигнала
-    0-1 по умолчанию 0
+    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
     */
     ctx->inverse = get_option_int_val(slot_num, "inverse", "bool", 0, 0, 1);
 
-    /* Настраивает значение по умолчанию
-    0-1 по умолчанию 0
+    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
     */
     ctx->defaultState = get_option_int_val(slot_num, "defState", "bool", 0, 0, 1);
 
@@ -536,11 +528,11 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
     }
 
     // Register commands
-    /* Команда для установки состояния реле
+    /* Команда для установки состояния реле, значение 0-1
     */
     stdcommand_register(&ctx->cmds, RELAY_CMD_set, "action/setVal", PARAMT_int);
 
-    /* Команда для переключения состояния реле
+    /* Команда для переключения состояния реле, значение игнорируется
     */
     stdcommand_register(&ctx->cmds, RELAY_CMD_toggle, "action/toggle", PARAMT_none);
 

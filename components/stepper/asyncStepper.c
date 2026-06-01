@@ -125,6 +125,10 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 #define STATE_DECEL 2
 #define STATE_STOP 3
 
+// Минимальный период step-импульса в тиках mcpwm (resolution=1MHz -> 5 тиков = 200kHz).
+// Защищает таймер mcpwm от слишком высокой частоты при большом currentSpeed.
+#define STEPPER_MIN_PERIOD 5
+
 void stepper_getCurrentPos(stepper_t *stepper){
     int pos = 0;
     pcnt_unit_get_count(stepper->pcntUnit, &pos);
@@ -143,6 +147,7 @@ void stepper_getCurrentPos(stepper_t *stepper){
     }
     
     stepper->currentPos = stepper->currentPos + delta;
+    stepper->absPos = stepper->absPos + delta; // истинная позиция, переживает хак runSpeed
     //ESP_LOGD(TAG, "currentPos: %ld pos:%ld prevPos:%ld delta:%ld dir:%d", stepper->currentPos, pos, stepper->pcnt_prevPos, delta, stepper->dir);
     stepper->pcnt_prevPos = pos;
 }
@@ -161,7 +166,7 @@ void stepper_break(stepper_t *stepper) {
     stepper->runSpeedFlag = 0;
     stepper_getCurrentPos(stepper);
     int64_t chisl = (((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
-    float znam = 2 * stepper->accel;
+    float znam = 2.0f * stepper->accel;
     float accel_distance = chisl / znam;
     int64_t target =stepper->currentPos + accel_distance*stepper->dir; 
     stepper_moveTo(stepper, target);
@@ -327,7 +332,11 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint);
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MAX);
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MIN);
-    int32_t watchPoint = distance;
+    // ВАЖНО: считаем в int64. distance может превышать INT32_MAX (диапазон позиции
+    // INT32_MIN..INT32_MAX), и усечение в int32 ДО свертки ломало бы модуль 32767.
+    // Асимметрия 32767/32768 - не ошибка: это периоды аккумуляции HW PCNT для
+    // high_limit (INT16_MAX) и low_limit (INT16_MIN) соответственно.
+    int64_t watchPoint = distance;
 
     stepper_checkDir(stepper);
 
@@ -340,7 +349,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
             watchPoint+=INT16_MIN;
         }
     }
-    stepper->pcnt_watchPoint = watchPoint;
+    stepper->pcnt_watchPoint = (int16_t)watchPoint;
 
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
     if(stepper->dir==DIR_CW){
@@ -353,7 +362,9 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     stepper->pcnt_prevPos = 0;
     
     
-    int64_t reachableSpeed = sqrt(((int64_t)(2*stepper->accel*llabs(distance))+((int64_t)stepper->currentSpeed*(int64_t)stepper->currentSpeed))/2);
+    // Все множители приводим к int64 ДО умножения, иначе 2*accel считается в uint32
+    // и переполняется при больших accel (до INT32_MAX).
+    int64_t reachableSpeed = sqrt(((int64_t)2*stepper->accel*llabs(distance)+((int64_t)stepper->currentSpeed*(int64_t)stepper->currentSpeed))/2);
 
     if(reachableSpeed<stepper->maxSpeed){
         stepper->targetSpeed = reachableSpeed;
@@ -363,7 +374,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     //pcnt_unit_start(stepper->pcntUnit);
     //int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
     int64_t chisl = ((int64_t)stepper->targetSpeed * (int64_t)stepper->targetSpeed);
-    float znam = 2 * stepper->accel;
+    float znam = 2.0f * stepper->accel;
     float break_distance = chisl / znam;
     ESP_LOGD(TAG, "chisl:%lld znam:%f break_distance: %f maxSpeed: %ld currentSpeed: %ld", chisl, znam, break_distance, stepper->maxSpeed, stepper->currentSpeed);
     if(break_distance>llabs(distance)){
@@ -383,7 +394,9 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
 }
 
 void stepper_speedUpdate(stepper_t *stepper, int32_t period){  
-    int32_t speedIncrement = (stepper->accel/1000)*period;
+    // Прирост скорости за период: Δv = accel * (period_ms / 1000).
+    // Умножаем ДО деления (иначе accel<1000 даёт 0), int64 - защита от переполнения.
+    int32_t speedIncrement = ((int64_t)stepper->accel * period) / 1000;
     
     if(stepper->runSpeedFlag==1){
         if(llabs(stepper->targetPos-stepper->currentPos)<stepper->breakWay*2){
@@ -426,6 +439,7 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
             if(abs(stepper->currentSpeed)>0){
                 uint32_t period = abs((int32_t)stepper->resolution/stepper->currentSpeed);
                 if(period>UINT16_MAX)period=UINT16_MAX;
+                if(period<STEPPER_MIN_PERIOD)period=STEPPER_MIN_PERIOD; // верхний предел частоты step
                 //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
                 mcpwm_timer_set_period(stepper->mcpwmTimer, period);
             }else if((stepper->currentPos==stepper->targetPos)&&(stepper->state!=STOP)){
@@ -443,4 +457,5 @@ void stepper_setZero(stepper_t *stepper) {
     ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
     stepper->pcnt_prevPos = 0;
     stepper->currentPos = 0;
+    stepper->absPos = 0;
 }

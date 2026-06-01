@@ -9,12 +9,23 @@
 #include <stdio.h>
 
 #include "esp_peripherals.h"
+
+/* Принудительно включаем DEBUG-уровень для этого файла, чтобы видеть
+   диагностику ESP_LOGD сразу после прошивки без правки sdkconfig. */
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+
 #include "esp_log.h"
 #include "stateConfig.h"
 
 #include <manifest.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_heap_caps.h"
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
@@ -240,10 +251,28 @@ bool checkExistent()
                     if (!strcasecmp(fno.fname, MANIFESTO_FNAME))
                     {
                         struct stat st;
-                        if (stat(MANIFESTO_FULL_FNAME, &st) == 0 && st.st_size >= 1024) {
-                            result = true;
+                        if (stat(MANIFESTO_FULL_FNAME, &st) != 0 || st.st_size < 1024) {
+                            ESP_LOGW(TAG, "manifest file too small (%ld bytes), will recreate",
+                                     (long)(stat(MANIFESTO_FULL_FNAME, &st) == 0 ? st.st_size : -1));
                         } else {
-                            ESP_LOGW(TAG, "manifest file too small (%ld bytes), will recreate", (long)st.st_size);
+                            /* Размер ок — валидируем содержимое.
+                               FAT может оставить файл с NUL-префиксом если
+                               power-cut пришёл между fopen('w') и fclose:
+                               кластеры аллоцированы, но данные не легли. */
+                            FILE *f = fopen(MANIFESTO_FULL_FNAME, "r");
+                            if (f != NULL) {
+                                char head[4] = {0};
+                                size_t got = fread(head, 1, sizeof(head) - 1, f);
+                                fclose(f);
+                                if (got > 0 && head[0] == '{') {
+                                    result = true;
+                                } else {
+                                    ESP_LOGW(TAG, "manifest corrupted (head: %02x %02x %02x), will recreate",
+                                             (unsigned char)head[0], (unsigned char)head[1], (unsigned char)head[2]);
+                                }
+                            } else {
+                                ESP_LOGW(TAG, "manifest cannot be reopened for validation, will recreate");
+                            }
                         }
                     }
                     else
@@ -276,38 +305,90 @@ bool checkExistent()
 
     return result;
 }
+/* Пишет манифест на SD-карту через ОДИН большой write().
+   Workaround для бага в FATFS/SDMMC IDF v5.5.4: для файлов >~64 КБ
+   серия мелких write()'ов обновляет директорию (правильный size),
+   но первый кластер остаётся незаписанным (NUL). Один большой
+   write() уходит на SD как multi-block transfer и работает корректно. */
+static int _writeManifestoOnce(const char *path)
+{
+    const char *        tmp;
+    GET_MANIFEST_FUNC   f;
+    remove(path);
+
+    /* Считаем общий размер: configDescription + (sep + module_i) * N + tail */
+    size_t totalSize = strlen(configDescription);
+    for (int i = 0; (f = funcs[i]) != NULL; i++) {
+        if ((tmp = (*f)()) != NULL) {
+            totalSize += (0 == i) ? 1 : 2;
+            totalSize += strlen(tmp);
+        }
+    }
+    totalSize += 5; /* "\n]\n}\n" */
+
+    /* Большой буфер — пытаемся в SPIRAM, fallback в internal heap */
+    char *bigBuf = heap_caps_malloc(totalSize + 16, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!bigBuf) bigBuf = heap_caps_malloc(totalSize + 16, MALLOC_CAP_8BIT);
+    if (!bigBuf) {
+        ESP_LOGE(TAG, "manifest: cannot allocate %zu byte buffer", totalSize);
+        return ESP_FAIL;
+    }
+
+    size_t pos = 0;
+    size_t cdLen = strlen(configDescription);
+    memcpy(bigBuf + pos, configDescription, cdLen); pos += cdLen;
+    for (int i = 0; (f = funcs[i]) != NULL; i++) {
+        if ((tmp = (*f)()) != NULL) {
+            const char *sep = (0 == i) ? "\n" : ",\n";
+            size_t slen = strlen(sep);
+            memcpy(bigBuf + pos, sep, slen); pos += slen;
+            size_t tlen = strlen(tmp);
+            memcpy(bigBuf + pos, tmp, tlen); pos += tlen;
+        }
+    }
+    memcpy(bigBuf + pos, "\n]\n}\n", 5); pos += 5;
+
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        ESP_LOGE(TAG, "manifest open('%s') failed errno=%d", path, errno);
+        heap_caps_free(bigBuf);
+        return ESP_FAIL;
+    }
+
+    ssize_t w = write(fd, bigBuf, pos);
+    fsync(fd);
+    close(fd);
+    heap_caps_free(bigBuf);
+
+    if (w != (ssize_t)pos) {
+        ESP_LOGE(TAG, "manifest write short: %zd of %zu", w, pos);
+        return ESP_FAIL;
+    }
+
+    /* Verify: читаем первые 3 байта чтобы поймать NUL-corruption если
+       баг вернётся (например после обновления IDF). */
+    int rfd = open(path, O_RDONLY);
+    if (rfd >= 0) {
+        unsigned char head[4] = {0};
+        ssize_t got = read(rfd, head, 3);
+        close(rfd);
+        if (got > 0 && head[0] == '{') return ESP_OK;
+        ESP_LOGE(TAG, "manifest verify: head=%02x %02x %02x", head[0], head[1], head[2]);
+    }
+    return ESP_FAIL;
+}
+
 int saveManifesto()
 {
-	int 			    result 		= ESP_FAIL;
-	FILE *			    manFile;
-	const char * 	    tmp;
-    GET_MANIFEST_FUNC   f;
+    int result = ESP_FAIL;
 
     if (!checkExistent())
     {
-        if ((manFile = fopen(MANIFESTO_FULL_FNAME, "w")) != NULL)
-        {
-            fprintf(manFile, "%s", configDescription);
-
-            for (int i = 0; (f = funcs[i]) != NULL; i++)
-            {
-                if ((tmp = (*f)()) != NULL)
-                {
-                    fprintf(manFile, "%s%s", 0 == i ? "\n" : ",\n", tmp);
-                }
-            }
-
-            fprintf(manFile, "%s", "\n]\n}\n");
-
+        result = _writeManifestoOnce(MANIFESTO_FULL_FNAME);
+        if (result == ESP_OK) {
             ESP_LOGI(TAG, "manifest saved");
-
-            result = ESP_OK;
-            
-            fclose(manFile);
-        }
-        else
-        {
-            ESP_LOGE(TAG, "manifest save error: fopen() failed");
+        } else {
+            ESP_LOGE(TAG, "manifest save failed");
         }
     }
     else
@@ -316,5 +397,5 @@ int saveManifesto()
         result = ESP_OK;
     }
 
-	return result;
+    return result;
 }

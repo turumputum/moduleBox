@@ -613,23 +613,24 @@ void app_main(void)
 			scheduleTicks = now;
 		}
 
-		/* Диагностика — раз в 60 с пишет одну JSON-строку в /sdcard/log.txt
-		   через mblog (НЕ в MQTT, чтобы не засорять брокер).
-		   Помогает ловить multi-day деградации (heap leak, MQTT half-open,
-		   socket-leak, падение mDNS/MQTT-таска). */
+		/* Диагностика отключена — раскомментировать при отладке зависаний.
+		   reportSystemDiag() пишет JSON в /sdcard/log.txt раз в минуту,
+		   logTaskList() — дамп задач каждые 15 минут. */
+#if 0
 		if ((now - diagTicks) >= pdMS_TO_TICKS(60 * 1000))
 		{
 			reportSystemDiag();
 			diagTicks = now;
 		}
 
-		/* Длинный дамп списка задач (~2 КБ) — раз в 15 минут, тоже в SD-лог.
-		   Даёт stack high-water mark по каждой задаче. */
 		if ((now - taskListTicks) >= pdMS_TO_TICKS(15 * 60 * 1000))
 		{
 			logTaskList();
 			taskListTicks = now;
 		}
+#else
+		(void)diagTicks; (void)taskListTicks;
+#endif
 
 		vTaskDelay(pdMS_TO_TICKS(200));
 	}

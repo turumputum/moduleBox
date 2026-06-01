@@ -72,7 +72,7 @@ void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
     /* Таймаут в миллисекундах (0 = без таймаута)
        По умолчанию 0
     */
-    ch->timeout = get_option_int_val(slot_num, "timeout", "ms", 0, 0, UINT32_MAX);
+    ch->timeout = get_option_int_val(slot_num, "timeout", "ms", 0, 0, INT32_MAX);
     ESP_LOGD(TAG, "Set timeout:%lu ms for slot:%d", ch->timeout, slot_num);
 
     /* Не стандартный топик для conductor
