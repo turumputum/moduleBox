@@ -112,7 +112,7 @@ void crosslinker_(char* 	str,
 					event = strtok_r(event, ":", &eventVal);
 					//ESP_LOGD(TAG, "Event:%s eventVal:%s", event, eventVal);
 				}
-				if((strstr(trigerVal, "==")!= NULL)||(strstr(trigerVal, ">")!= NULL)||(strstr(trigerVal, "<")!= NULL)){
+				if(trigerVal!=NULL && ((strstr(trigerVal, "==")!= NULL)||(strstr(trigerVal, ">")!= NULL)||(strstr(trigerVal, "<")!= NULL))){
 					//ESP_LOGD(TAG, "Lets work whith bolean operator");
 					char operator='0';
 					char *leftVal=NULL;
@@ -191,6 +191,7 @@ void crosslinker_(char* 	str,
 				char output_action[strlen(me_config.deviceName) + strlen(action) + 50];
 
 				for(int i=0; i<NUM_OF_SLOTS; i++){
+					if(me_state.action_topic_list[i]==NULL) continue;
 					//ESP_LOGD(TAG, "compare action:%s topic:%s",action, me_state.action_topic_list[i]);
 					if(strstr(action, me_state.action_topic_list[i])!=NULL){
 						//ESP_LOGD(TAG, "Found custom action topic:%s", me_state.action_topic_list[i]);
@@ -204,8 +205,14 @@ void crosslinker_(char* 	str,
 					}
 				}
 
+				/* strtok может вернуть NULL для пустой/только-разделитель строки.
+				   Также действие могло потеряться из-за повреждения буфера. Защищаемся. */
+				action = strtok(action, ":");
+				if(action==NULL){
+					ESP_LOGW(TAG, "crosslink: action NULL after strtok, skipping");
+					goto skip;
+				}
 				if(actionVal!=NULL){
-					action = strtok(action, ":");
 					sprintf(output_action, "%s/%s:%s", me_config.deviceName, action, actionVal);
 				}else{
 					sprintf(output_action, "%s/%s", me_config.deviceName, action);
@@ -235,6 +242,10 @@ void crosslinker(char* str){
 	int slot_num;
 
 	for(int i=0; i<NUM_OF_SLOTS; i++){
+		if(me_state.trigger_topic_list[i]==NULL){
+			slot_num = -1;
+			continue;
+		}
 		if(strstr(str, me_state.trigger_topic_list[i])!=NULL){
 			slot_num = i;
 			break;
