@@ -126,6 +126,11 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
     // --- Command system init ---
     stdcommand_init(&lidar->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&lidar->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Минимальное значение дистанции в мм
     Значения меньше этого порога игнорируются
     Числовое значение 0-40000, по умолчанию 0

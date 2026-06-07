@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 #include "stdcommand.h"
+#include "stdreport.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -100,6 +101,11 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Настраивает инверсию выходного сигнала для канала 0
     0-1 по умолчанию 0
     */
@@ -291,6 +297,11 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
     */
     ctx->inverseMass[0] = get_option_int_val(slot_num, "inverse_0", "bool", 0, 0, 1);
@@ -535,6 +546,11 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
     */
     ctx->inverse = get_option_int_val(slot_num, "inverse", "bool", 0, 0, 1);

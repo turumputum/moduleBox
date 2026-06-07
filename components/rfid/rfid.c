@@ -19,6 +19,7 @@
 #include "me_slot_config.h"
 
 #include <stdcommand.h>
+#include <stdreport.h>
 
 //#define CONFIG_PN532DEBUG 1
 // #define CONFIG_MIFAREDEBUG 1
@@ -35,6 +36,11 @@ void pn532Uart_task(void* arg) {
     STDCOMMANDS cmds;
     stdcommand_init(&cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Если флаг поднят - модуль стартует в выключенном состоянии,
        до прихода action/enable 1 (Конституция §6).
     */

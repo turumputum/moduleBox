@@ -93,6 +93,11 @@ void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
 
     stdcommand_init(&ch->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Обновление текущей позиции от энкодера
     */
     stdcommand_register(&ch->cmds, CONDUCTORCMD_currentPos, "action/currentPos", PARAMT_int);

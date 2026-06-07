@@ -68,6 +68,11 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
 {
     stdcommand_init(&ctx->led.cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     // --- Button logic config ---
     /* Флаг определяет инверсию кнопки
     */

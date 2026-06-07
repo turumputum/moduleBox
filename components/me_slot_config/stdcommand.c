@@ -40,9 +40,9 @@ void stdcommand_init(PSTDCOMMANDS       cmd,
 
     cmd->slot_num = slot_num;
 
-    /* Авто-регистрация action/enable (Конституция §6).
-       Регистрируем с полным префиксом action/ — manifesto увидит как литерал. */
-    stdcommand_register(cmd, STDCMD_ENABLE, "action/enable", PARAMT_int);
+    /* Модули обязаны явно регистрировать action/enable в своём configure().
+       Так manifesto видит вызов как литерал и кладёт команду в манифест,
+       и не требуется магия в препроцессоре. */
 }
 int _stdcommand_register(PSTDCOMMANDS       cmd,
                          int                id,

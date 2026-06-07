@@ -26,6 +26,7 @@
 #include "rgbHsv.h"
 
 #include <stdcommand.h>
+#include <stdreport.h>
 
 // #include <generated_files/gen_smartLed.h>
 
@@ -275,6 +276,11 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
@@ -772,6 +778,11 @@ void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 16, 1, 1024);
@@ -1010,6 +1021,11 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
@@ -1288,6 +1304,11 @@ void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
+    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
