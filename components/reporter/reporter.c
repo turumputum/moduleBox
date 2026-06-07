@@ -92,8 +92,11 @@ void crosslinker_(char* 	str,
 			}
 			//trigger = strtok_r(crosslinkCopy, "->", &action);
 			//ESP_LOGD(TAG, "Trigger:%s action:%s actionVal:%s", trigger, action, actionVal);
-			if(trigger[0]==' '){
-				trigger = trigger+1;//  cut " " at begin
+			/* После strtok_r по ',' второй и далее кросслинки могут начинаться
+			   с одного или нескольких пробелов/табов (пользователи часто
+			   пишут `, ...` или `,  ...` для читаемости). Срезаем все. */
+			while(trigger[0]==' ' || trigger[0]=='\t'){
+				trigger++;
 			}
 			if(strstr(trigger, "#")!= NULL){
 				if(strstr(trigger, ":")!= NULL){
