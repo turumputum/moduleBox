@@ -379,21 +379,21 @@ void audioLAN_task(void *arg){
     }
 
 
+    /* Сначала конфиг + регистрация топиков, ДО ожидания LAN.
+       Иначе action_topic_list[0] остаётся NULL и executor выбрасывает
+       приходящие команды (включая retained action/enable от брокера). */
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
+    PRTPCONFIG c = calloc(1, sizeof(RTPCONFIG));
+    STDCOMMAND_PARAMS       params = { 0 };
+    char str[255];
+
+    configure_audioLAN(c, slot_num);
+
     vTaskDelay(pdMS_TO_TICKS(1000));
     while (me_state.LAN_init_res != ESP_OK){
 		vTaskDelay(pdMS_TO_TICKS(100));
 	}
-    ESP_LOGI(TAG, "Lan inited lets configure the slot");
-
-    PRTPCONFIG c = calloc(1, sizeof(RTPCONFIG));
-    STDCOMMAND_PARAMS       params = { 0 };
-    char str[255];
-	
-
-
-    configure_audioLAN(c, slot_num);
-
+    ESP_LOGI(TAG, "Lan inited lets start the pipeline");
 
     gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
     esp_rom_gpio_pad_select_gpio(led_pin);

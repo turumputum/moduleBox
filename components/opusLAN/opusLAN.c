@@ -392,18 +392,21 @@ void opusLAN_task(void *arg){
 		vTaskDelete(NULL);
     }
 
+    /* Конфиг + регистрация топиков ДО ожидания LAN, чтобы executor мог
+       роутить приходящие команды (включая retained action/enable от брокера),
+       пока пайплайн ещё не запущен. */
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    while (me_state.LAN_init_res != ESP_OK){
-		vTaskDelay(pdMS_TO_TICKS(100));
-	}
-    ESP_LOGI(TAG, "Lan inited, configuring opusLAN slot");
-
     POPUSCONFIG c = calloc(1, sizeof(OPUSCONFIG));
     STDCOMMAND_PARAMS       params = { 0 };
     char str[255];
 
     configure_opusLAN(c, slot_num);
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    while (me_state.LAN_init_res != ESP_OK){
+		vTaskDelay(pdMS_TO_TICKS(100));
+	}
+    ESP_LOGI(TAG, "Lan inited, starting opusLAN pipeline");
 
     gpio_num_t led_pin = SLOTS_PIN_MAP[slot_num][3];
     esp_rom_gpio_pad_select_gpio(led_pin);
