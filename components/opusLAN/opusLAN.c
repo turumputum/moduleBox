@@ -72,7 +72,6 @@ typedef struct __tag_OPUSCONFIG{
     int                     jbuf_ms;         /* jitter buffer target in ms */
     int                     latency_ms;      /* target latency / sync delay in ms (40-500, default 240) */
     
-    int                    stateReport;
     int                    volumeReport;
     int                    addressReport;
 
@@ -353,9 +352,8 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 
-    /* Рапортует состояние модуля вкл/выкл
-	*/
-	c->stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/state");
+    /* event/enable (retained) — публикуется инфраструктурой
+       stdreport_enable() автоматически (Конституция §6, [[constitution-migration]]). */
 
     /* Рапортует при изменении громкости
 	*/
@@ -418,7 +416,6 @@ void opusLAN_task(void *arg){
         ESP_LOGD(TAG,"opusLAN_%d slot state DISABLE", slot_num);
     }
 
-    stdreport_i(c->stateReport, c->state);
     stdreport_i(c->volumeReport, c->volume);
     { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
 
@@ -481,14 +478,18 @@ void opusLAN_task(void *arg){
                 break;
 
             case STDCMD_ENABLE:
-                if((atoi(cmd_arg)==ENABLE)&&(c->state != ENABLE)){
-                    audio_pipeline_resume(c->pipeline);
-                }else if((atoi(cmd_arg)==DISABLE)&&(c->state != DISABLE)){
-                    audio_pipeline_pause(c->pipeline);
+                /* event/enable retained — публикует stdcommand_receive() автоматически.
+                   Здесь только локальное действие: pause/resume пайплайна. */
+                if (params.count > 0) {
+                    int new_state = params.p[0].i ? ENABLE : DISABLE;
+                    if (new_state == ENABLE && c->state != ENABLE) {
+                        audio_pipeline_resume(c->pipeline);
+                    } else if (new_state == DISABLE && c->state != DISABLE) {
+                        audio_pipeline_pause(c->pipeline);
+                    }
+                    c->state = new_state;
+                    ESP_LOGD(TAG, "[opusLAN_%d] enable:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
                 }
-                c->state = atoi(cmd_arg);
-                ESP_LOGD(TAG, "[opusLAN_%d] enable:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
-                stdreport_i(c->stateReport, c->state);
                 break;
 
             case opusCMD_setVolume:

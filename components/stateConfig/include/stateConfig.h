@@ -117,8 +117,7 @@ typedef struct {
 
 	char *deviceName;
 	int logLevel;
-	long logMaxSize;
-	int  logChapters;
+	uint8_t cleanLogOnStart;   /* 1 - стереть все логи при старте */
 	int  statusAllChannels;
 	int  statusPeriod;
 	uint8_t USB_debug;

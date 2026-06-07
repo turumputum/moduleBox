@@ -11,6 +11,9 @@
 #include "esp_timer.h"
 #include "esp_crt_bundle.h"
 #include <inttypes.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <mbdebug.h>
 
 
 
@@ -63,6 +66,71 @@ static void mqtt_watchdog_stop(void) {
         mqtt_watchdog_running = false;
         ESP_LOGD(TAG, "MQTT watchdog stopped");
     }
+}
+
+/* ---- MQTT liveness watchdog (защита от half-open) --------------------------
+   Событийный mqtt_watchdog взводится ТОЛЬКО по MQTT_EVENT_DISCONNECTED и
+   бесполезен против half-open: TCP мёртв, но DISCONNECTED не приходит,
+   is_connected остаётся 1 навсегда. Здесь — независимый механизм:
+     - mqtt_heartbeat_task раз в MQTT_HB_PERIOD_S публикует QOS-1 heartbeat;
+       при доставке брокер шлёт PUBACK -> MQTT_EVENT_PUBLISHED -> last_published_us.
+     - отдельный esp_timer ТОЛЬКО читает s_mqtt_diag (без вызовов в mqtt-клиент,
+       чтобы не упереться в тот же api_lock, если publish залип) и перезагружает
+       плату, если подтверждённой активности не было дольше mqttWatchdogTimeout.
+   Порог общий с обычным watchdog: mqttWatchdogTimeout==0 отключает оба. */
+#define MQTT_HB_PERIOD_S 30
+
+static esp_timer_handle_t mqtt_liveness_timer = NULL;
+
+static void mqtt_heartbeat_task(void *arg) {
+    char hbTopic[160];
+    snprintf(hbTopic, sizeof(hbTopic), "clients/%s/hb", me_config.deviceName);
+    char payload[24];
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(MQTT_HB_PERIOD_S * 1000));
+        if (!s_mqtt_diag.is_connected) continue;
+        uint64_t up_s = (uint64_t)(esp_timer_get_time() / 1000000);
+        snprintf(payload, sizeof(payload), "%llu", (unsigned long long)up_s);
+        /* QOS 1: при живом соединении прилетит PUBACK -> last_published_us
+           обновится. При half-open publish не подтвердится (или зависнет),
+           last_published_us устаревает -> сработает таймер ниже. */
+        esp_mqtt_client_publish(client, hbTopic, payload, 0, 1, 0);
+    }
+}
+
+static void mqtt_liveness_timer_cb(void *arg) {
+    if (me_config.mqttWatchdogTimeout == 0) return;
+    if (!s_mqtt_diag.is_connected) return;   /* disconnected -> ловит mqtt_watchdog */
+
+    int64_t now = esp_timer_get_time();
+    /* пока не было ни одного PUBLISHED — отсчёт от момента connect */
+    int64_t ref = s_mqtt_diag.last_published_us ? s_mqtt_diag.last_published_us
+                                                : s_mqtt_diag.last_connect_us;
+    if (ref == 0) return;
+
+    int64_t age_s = (now - ref) / 1000000;
+    if (age_s > me_config.mqttWatchdogTimeout) {
+        ESP_LOGE(TAG, "MQTT liveness timeout: %lld s without confirmed publish "
+                      "(is_connected=1, half-open). Restarting...", (long long)age_s);
+        mblog(E, "MQTT half-open frozen -> restart");
+        esp_restart();
+    }
+}
+
+static void mqtt_liveness_start(void) {
+    if (me_config.mqttWatchdogTimeout == 0) return;
+    if (mqtt_liveness_timer == NULL) {
+        const esp_timer_create_args_t targs = {
+            .callback = mqtt_liveness_timer_cb,
+            .name = "mqtt_live"
+        };
+        esp_timer_create(&targs, &mqtt_liveness_timer);
+        esp_timer_start_periodic(mqtt_liveness_timer, (uint64_t)MQTT_HB_PERIOD_S * 1000000ULL);
+    }
+    xTaskCreatePinnedToCore(mqtt_heartbeat_task, "mqtt_hb", 1024 * 3, NULL,
+                            configMAX_PRIORITIES - 20, NULL, 0);
+    ESP_LOGD(TAG, "MQTT liveness watchdog started: hb=%ds, timeout=%ds",
+             MQTT_HB_PERIOD_S, me_config.mqttWatchdogTimeout);
 }
 
 extern QueueHandle_t exec_mailbox;
@@ -314,6 +382,9 @@ int mqtt_app_start(void)
 		.session.keepalive = 60,  // Увеличено с 15 — даёт больше запаса при нагрузке на CPU
 		.session.last_will.topic = willTopic,
 		.session.last_will.msg = "0",
+		// Таймаут сетевой операции: при half-open PINGREQ без PINGRESP в пределах
+		// этого окна породит ошибку транспорта -> DISCONNECTED -> reconnect.
+		.network.timeout_ms = 5000,
     };
 
 	// Set login/password if configured
@@ -345,6 +416,7 @@ int mqtt_app_start(void)
 	esp_mqtt_client_start(client);
 
 	mqtt_watchdog_start();
+	mqtt_liveness_start();
 
 	ESP_LOGI(TAG, "MQTT QOS=%d, WatchdogTimeout=%d sec, retain=false, TLS=%s, auth=%s",
 		me_config.mqttQOS, me_config.mqttWatchdogTimeout,

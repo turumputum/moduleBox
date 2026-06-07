@@ -521,8 +521,10 @@ static int count_open_sockets(void){
 	int count = 0;
 	int max_fd = LWIP_SOCKET_OFFSET + CONFIG_LWIP_MAX_SOCKETS;
 	for(int fd = LWIP_SOCKET_OFFSET; fd < max_fd; fd++){
-		/* fcntl(F_GETFD) вернёт -1 для закрытого/невалидного сокета */
-		int flags = fcntl(fd, F_GETFD, 0);
+		/* lwIP не реализует F_GETFD (флаги дескриптора), только F_GETFL
+		   (статус-флаги сокета) — он же используется в audioLAN. F_GETFL
+		   вернёт -1 (errno=EBADF) для закрытого/невалидного сокета. */
+		int flags = fcntl(fd, F_GETFL, 0);
 		if(flags >= 0) count++;
 	}
 	return count;

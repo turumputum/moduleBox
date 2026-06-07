@@ -110,6 +110,7 @@ void counter_task(void *arg) {
 
     int32_t state = 0;
     int32_t prevState = INT32_MIN;
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
 
@@ -126,18 +127,27 @@ void counter_task(void *arg) {
 
         if(state != prevState){
             prevState = state;
-            stdreport_i(c.report, state);
-            ESP_LOGD(TAG, "Counter report:%ld", state);
+            if(active_state){
+                stdreport_i(c.report, state);
+                ESP_LOGD(TAG, "Counter report:%ld", state);
+            }
         }
 
         int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);
         char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
-        
+
         switch (cmd){
             case -1: // none
                 break;
 
-            case COUNTERCMD_set: 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[counter_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
+            case COUNTERCMD_set:
                 if(cmd_arg[0] == '+'){
                     counter += atoi(cmd_arg + 1);
                 } else if(cmd_arg[0] == '-'){

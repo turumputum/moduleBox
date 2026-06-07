@@ -206,6 +206,7 @@ static void out_2ch_task(void *arg) {
 
     waitForWorkPermit(slot_num);
     STDCOMMAND_PARAMS params = {0};
+    bool active_state = 1;
 
     while (1) {
         // Check for OUTPUT commands (non-blocking)
@@ -214,10 +215,25 @@ static void out_2ch_task(void *arg) {
         if(cmd>=0){
             ESP_LOGD(TAG, "Slot_%d input cmd_num:%d val:%ld ", slot_num, cmd, params.p[0].i);
         }
+        /* Disabled: ignore output-control commands. enable/disable обрабатываем сами. */
+        if (!active_state && cmd != STDCMD_ENABLE) continue;
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[out_2ch_%d] enable:%d", slot_num, active_state);
+                    if (!active_state) {
+                        /* На выключении сбрасываем выходы в default-состояние */
+                        for (int i = 0; i < ctx.numOfCh; i++) {
+                            _set_out_level(&ctx, ctx.defaultStateMass[i], i);
+                        }
+                    }
+                }
+                break;
+
             case OUT_CMD_ch_0_default:
                 // ESP_LOGD(TAG, "OUT_CMD_ch_0_default val:%ld ", params.p[0].i);
-                _set_out_level(&ctx, params.p[0].i, 0); 
+                _set_out_level(&ctx, params.p[0].i, 0);
                 break;
 
             case OUT_CMD_ch_1_default:
@@ -226,7 +242,7 @@ static void out_2ch_task(void *arg) {
                 break;
 
             case OUT_CMD_ch_0_toggle:
-                _set_out_level(&ctx, !ctx.stateMass[0], 0); 
+                _set_out_level(&ctx, !ctx.stateMass[0], 0);
                 break;
 
             case OUT_CMD_ch_1_toggle:
@@ -235,21 +251,21 @@ static void out_2ch_task(void *arg) {
 
             case OUT_CMD_ch_0_impulse:
                 int length_0 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[0], 0); 
+                _set_out_level(&ctx, !ctx.stateMass[0], 0);
                 ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_0, (length_0) * 1000));
                 // ESP_LOGD(TAG, "Started impulse_timer_0 for %d ms", length_0);
-                break; 
+                break;
 
             case OUT_CMD_ch_1_impulse:
                 int length_1 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[1], 1); 
+                _set_out_level(&ctx, !ctx.stateMass[1], 1);
                 ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_1, (length_1) * 1000));
                 break;
 
             default:
                 break;
         }
-        
+
     }
 }
 
@@ -403,6 +419,7 @@ static void out_3ch_task(void *arg) {
     esp_timer_create(&impulse_timer_2_args, &impulse_timer_2);
 
     waitForWorkPermit(slot_num);
+    bool active_state = 1;
 
     while (1) {
         // Check for OUTPUT commands
@@ -411,10 +428,23 @@ static void out_3ch_task(void *arg) {
         if(cmd >= 0){
             ESP_LOGD(TAG, "Slot_%d input cmd_num:%d val:%ld", slot_num, cmd, params.p[0].i);
         }
-        
+        if (!active_state && cmd != STDCMD_ENABLE) continue;
+
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[out_3ch_%d] enable:%d", slot_num, active_state);
+                    if (!active_state) {
+                        for (int i = 0; i < ctx.numOfCh; i++) {
+                            _set_out_level(&ctx, ctx.defaultStateMass[i], i);
+                        }
+                    }
+                }
+                break;
+
             case OUT_CMD_ch_0_default:
-                _set_out_level(&ctx, params.p[0].i, 0); 
+                _set_out_level(&ctx, params.p[0].i, 0);
                 break;
 
             case OUT_CMD_ch_1_default:
@@ -572,6 +602,7 @@ static void relay_task(void *arg) {
     esp_timer_create(&impulse_timer_args, &impulse_timer);
 
     waitForWorkPermit(slot_num);
+    bool active_state = 1;
 
     while (1) {
         STDCOMMAND_PARAMS params = {0};
@@ -579,8 +610,20 @@ static void relay_task(void *arg) {
         if (cmd >= 0) {
             ESP_LOGD(TAG, "Slot_%d relay cmd_num:%d val:%ld", slot_num, cmd, params.p[0].i);
         }
+        if (!active_state && cmd != STDCMD_ENABLE) continue;
 
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[relay_%d] enable:%d", slot_num, active_state);
+                    if (!active_state) {
+                        ctx.state = ctx.defaultState;
+                        gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
+                    }
+                }
+                break;
+
             case RELAY_CMD_set:
                 ctx.state = params.p[0].i;
                 gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);

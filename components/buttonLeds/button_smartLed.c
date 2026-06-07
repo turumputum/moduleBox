@@ -289,7 +289,8 @@ void button_smartLed_task(void *arg)
     int16_t targetBright = ctx->led.minBright;
     RgbColor currentRGB = {0, 0, 0};
     bool changeCompletedLogged = false;
-    
+    bool active_state = 1;
+
     update_led_smart(&ctx->led, pixels, &rmt_heap, slot_num, &currentRGB, &currentBright, &targetBright);
 
     waitForWorkPermit(slot_num);
@@ -302,6 +303,12 @@ void button_smartLed_task(void *arg)
             ESP_LOGD(TAG, "Slot_%d input cmd num:%d", slot_num, cmd);
         }
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_smartLed_%d] enable:%d", slot_num, active_state);
+                }
+                break;
             case SMARTLED_default:
                 ctx->led.state = params.p[0].i ^ ctx->led.inverse;
                 if (ctx->led.state == 0) currentBright = targetBright - 1;
@@ -326,14 +333,16 @@ void button_smartLed_task(void *arg)
                 break;
         }
 
-        uint8_t msg;
-        int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
+        if (active_state) {
+            uint8_t msg;
+            int button_raw = gpio_get_level(pin_in);
+            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+                button_raw = gpio_get_level(pin_in);
+            }
+            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
         }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_smart(&ctx->led, pixels, &rmt_heap, slot_num, &currentRGB, &currentBright, &targetBright);
 

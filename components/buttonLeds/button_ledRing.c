@@ -354,6 +354,7 @@ void button_ledRing_task(void *arg)
     float currentPos = 0;
     float targetPos = 0;
     uint8_t prevState = 255;
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -364,6 +365,12 @@ void button_ledRing_task(void *arg)
         if(cmd>=0)ESP_LOGD(TAG, "Button LED Ring Slot %d: received command %d param:%ld", slot_num, cmd,  params.p[0].i);
 
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_ledRing_%d] enable:%d", slot_num, active_state);
+                }
+                break;
             case LEDRING_default:
                 ctx->led.state = ((params.p[0].i != 0) ? 1 : 0) ^ ctx->led.inverse;
                 ESP_LOGD(TAG, "LED Ring Slot %d: set state to %d", slot_num, ctx->led.state);
@@ -388,14 +395,16 @@ void button_ledRing_task(void *arg)
                 break;
         }
 
-        uint8_t msg;
-        int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
+        if (active_state) {
+            uint8_t msg;
+            int button_raw = gpio_get_level(pin_in);
+            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+                button_raw = gpio_get_level(pin_in);
+            }
+            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
         }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_ring(&ctx->led, current_pixels, target_pixels, &rmt_heap, slot_num, &currentPos, &targetPos, &prevState);
 

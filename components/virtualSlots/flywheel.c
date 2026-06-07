@@ -128,6 +128,7 @@ void flywheel_task(void *arg){
     float _flywheelCount = 0;
     uint8_t flywheel_state = 0;
     uint8_t _flywheel_state = 0;
+    bool active_state = 1;
 
     TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -148,12 +149,12 @@ void flywheel_task(void *arg){
 
             if(flywheel_state != _flywheel_state){
                 _flywheel_state = flywheel_state;
-                stdreport_i(c.stateReport, flywheel_state);
+                if(active_state) stdreport_i(c.stateReport, flywheel_state);
             }
         } else {
             if((int)flywheelCount != (int)_flywheelCount){
                 _flywheelCount = flywheelCount;
-                stdreport_i(c.countReport, (int)flywheelCount);
+                if(active_state) stdreport_i(c.countReport, (int)flywheelCount);
             }
         }
 
@@ -162,6 +163,13 @@ void flywheel_task(void *arg){
 
         switch (cmd){
             case -1: // none
+                break;
+
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[flywheel_%d] enable:%d", slot_num, active_state);
+                }
                 break;
 
             case FLYWHEELCMD_setCount:

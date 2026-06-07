@@ -97,19 +97,28 @@ void whitelist_task(void *arg) {
     WHITELIST_CONFIG c = {0};
     configure_whitelist(&c, slot_num);
     STDCOMMAND_PARAMS params = {0};
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
-    
+
     while(1){
         int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);
         char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
         ESP_LOGD(TAG, "Slot_num:%d cmd:%d arg:%s", slot_num, cmd, cmd_arg);
-        
+
         switch (cmd){
             case -1: // none
                 break;
 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[whitelist_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
             case WHITELISTCMD_check:
+                if(!active_state) break;
                 int count = 0;
                 if(cmd_arg != NULL){
                     FILE* file = fopen(c.filename, "r");

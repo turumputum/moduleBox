@@ -108,22 +108,31 @@ void timer_task(void *arg) {
     };
     esp_timer_create(&delay_timer_args, &virtual_timer);
 
+    bool active_state = 1;
+
     waitForWorkPermit(slot_num);
 
     while(1){
         uint8_t tmp;
         if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 10) == pdPASS){
-            stdreport_s(c.timerEndReport, "");
+            if(active_state) stdreport_s(c.timerEndReport, "");
         }
 
         int cmd = stdcommand_receive(&c.cmds, &params, 5);
         char * cmd_arg = (params.count > 0) ? params.p[0].p : (char *)"0";
-        
+
         switch (cmd){
             case -1: // none
                 break;
 
-            case TIMERCMD_start: 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[timer_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
+            case TIMERCMD_start:
                 int val = atoi(cmd_arg);
                 if(val == 0){
                     val = c.time;

@@ -133,7 +133,8 @@ void conductor_task(void *arg) {
     int32_t targetPosition = 0;
     int8_t isMoving = 0;
     int64_t lastCommandTime = 0;
-    
+    bool active_state = 1;
+
     waitForWorkPermit(slot_num);
 
     while (1) {
@@ -142,24 +143,31 @@ void conductor_task(void *arg) {
             int64_t currentTime = esp_timer_get_time() / 1000;
             if (currentTime - lastCommandTime > c.timeout) {
                 ESP_LOGD(TAG, "Timeout reached, stopping motor");
-                stdreport_s(c.stopReport, "");
+                if(active_state) stdreport_s(c.stopReport, "");
                 lastCommandTime = esp_timer_get_time() / 1000;
                 isMoving = 0;
             }
         }
-        
+
         int cmd = stdcommand_receive(&c.cmds, &params, isMoving ? 10 : portMAX_DELAY);
 
         switch (cmd) {
             case -1: // none
                 break;
 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[conductor_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
             case CONDUCTORCMD_currentPos:
                 currentPosition = params.p[0].i;
-                
+
                 // Проверка достижения целевой позиции
                 if (isMoving && currentPosition == targetPosition) {
-                    stdreport_s(c.stopReport, "");
+                    if(active_state) stdreport_s(c.stopReport, "");
                     lastCommandTime = esp_timer_get_time() / 1000;
                     isMoving = 0;
                     ESP_LOGD(TAG, "Target position reached: %ld", currentPosition);
@@ -212,10 +220,10 @@ void conductor_task(void *arg) {
                     
                     // Отправка команды движения
                     if (direction > 0) {
-                        stdreport_s(c.runUpReport, "");
+                        if(active_state) stdreport_s(c.runUpReport, "");
                         ESP_LOGD(TAG, "Moving up to target: %ld from current: %ld", targetPosition, currentPosition);
                     } else {
-                        stdreport_s(c.runDownReport, "");
+                        if(active_state) stdreport_s(c.runDownReport, "");
                         ESP_LOGD(TAG, "Moving down to target: %ld from current: %ld", targetPosition, currentPosition);
                     }
                     
@@ -226,7 +234,7 @@ void conductor_task(void *arg) {
             }
 
             case CONDUCTORCMD_stop:
-                stdreport_s(c.stopReport, "");
+                if(active_state) stdreport_s(c.stopReport, "");
                 lastCommandTime = esp_timer_get_time() / 1000;
                 isMoving = 0;
                 ESP_LOGD(TAG, "Stop command received");

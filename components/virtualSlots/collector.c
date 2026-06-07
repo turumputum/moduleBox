@@ -104,7 +104,8 @@ void collector_task(void *arg) {
     memset(str, 0, sizeof(str));
     uint32_t dial_start_time = 0;
     uint8_t state_flag = 0;
-    
+    bool active_state = 1;
+
     waitForWorkPermit(slot_num);
 
     while(1){
@@ -113,6 +114,13 @@ void collector_task(void *arg) {
 
         switch (cmd){
             case -1: // none
+                break;
+
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[collector_%d] enable:%d", slot_num, active_state);
+                }
                 break;
 
             case COLLECTORCMD_clear:
@@ -141,7 +149,9 @@ void collector_task(void *arg) {
 
         if(state_flag == 1){
             if(((pdTICKS_TO_MS(xTaskGetTickCount()) - dial_start_time) >= c.waitingTime) || (string_lenght >= c.stringMaxLenght)){
-                stdreport_s(c.report, str);
+                if(active_state){
+                    stdreport_s(c.report, str);
+                }
                 memset(str, 0, c.stringMaxLenght);
                 state_flag = 0;
                 string_lenght = 0;

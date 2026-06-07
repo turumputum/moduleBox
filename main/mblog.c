@@ -7,10 +7,12 @@
 
 #include <stdio.h>
 #include <stdarg.h>
-#include <sys/stat.h> 
-#include <stdbool.h>  
+#include <sys/stat.h>
+#include <stdbool.h>
+#include <time.h>
 #include <mbdebug.h>
 #include <stateConfig.h>
+#include <esp_vfs_fat.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -24,6 +26,14 @@
 
 #define DEF_LOG_FILE_BASE_NAME  "/sdcard/log"
 
+/* Кольцо из не более чем LOG_FILE_COUNT файлов log.0.txt .. log.N.txt.
+   Пишем (append) в текущий; при достижении лимита переходим к следующему
+   по кругу и перезаписываем его. Размер файла <= LOG_MAX_FILE_SIZE, но
+   меньше, если на диске мало места (бюджет = доступно / LOG_FILE_COUNT). */
+#define LOG_FILE_COUNT      3
+#define LOG_MAX_FILE_SIZE   (1024 * 1024)
+#define LOG_MIN_FILE_SIZE   (8 * 1024)
+
 //#define LOG_BUFF_SIZE       2048
 
 // ---------------------------------------------------------------------------
@@ -32,6 +42,10 @@
 
 static  SemaphoreHandle_t   logMutex    = NULL;
 static  FILE *              logFile     = NULL;
+
+static  int                 s_curIdx    = 0;        /* индекс текущего файла кольца */
+static  long                s_capPerFile = LOG_MAX_FILE_SIZE; /* лимит на файл, байт */
+static  bool                s_logReady  = false;    /* выполнена ли инициализация кольца */
 
 extern configuration        me_config;
 
@@ -68,40 +82,66 @@ void mblog_init()
     logMutex    = xSemaphoreCreateMutex();
 }
 
-bool file_exists (char *filename) 
+static void _logName(char *dst, size_t n, int idx)
 {
-  struct stat   buffer;   
-  return (stat (filename, &buffer) == 0);
+    snprintf(dst, n, "%s.%d.txt", DEF_LOG_FILE_BASE_NAME, idx);
 }
 
-static void _shiftLogs()
+static long _fileSize(const char *fn)
 {
-    char                 srcFname    [ 64 ];
-    char                 tgtFname    [ 64 ];
+    struct stat st;
+    return (stat(fn, &st) == 0) ? (long)st.st_size : -1;
+}
 
-    int startNum = me_config.logChapters - 1;
+/* Однократная инициализация кольца логов (под logMutex, при первом mblog).
+   cleanLogOnStart - стереть все файлы. Иначе - продолжить дозапись в самый
+   свежий файл по mtime (на старте новых записей ещё нет, поэтому max mtime =
+   последний писанный в прошлой сессии; RTC для этого не нужен). */
+static void _logSetup(void)
+{
+    char fn[64];
 
-    for (int i = startNum; i != 0; i--)
+    /* старая схема писала в безномерной log.txt - в кольце он не используется,
+       удаляем один раз чтобы не занимал место */
+    remove(DEF_LOG_FILE_BASE_NAME ".txt");
+
+    if (me_config.cleanLogOnStart)
     {
-        sprintf(tgtFname, "%s.%d.txt", DEF_LOG_FILE_BASE_NAME, i);
-
-        if ((i == startNum) && file_exists(tgtFname))
-        {
-    //        printf("@@@ removing %s\n", tgtFname);
-            remove(tgtFname);
-        }
-
-        if (i == 1)
-            sprintf(srcFname, "%s.txt", DEF_LOG_FILE_BASE_NAME);
-        else
-            sprintf(srcFname, "%s.%d.txt", DEF_LOG_FILE_BASE_NAME, i - 1);        
-
-//        printf("@@@ moving %s -> %s\n", srcFname, tgtFname);
-        if (file_exists(srcFname))
-        {
-            rename(srcFname, tgtFname);
-        }
+        for (int i = 0; i < LOG_FILE_COUNT; i++) { _logName(fn, sizeof(fn), i); remove(fn); }
+        s_curIdx = 0;
     }
+    else
+    {
+        time_t newest = 0;
+        int    newestIdx = -1;
+        for (int i = 0; i < LOG_FILE_COUNT; i++)
+        {
+            _logName(fn, sizeof(fn), i);
+            struct stat st;
+            if (stat(fn, &st) == 0 && (newestIdx < 0 || st.st_mtime >= newest))
+            {
+                newest = st.st_mtime;
+                newestIdx = i;
+            }
+        }
+        s_curIdx = (newestIdx >= 0) ? newestIdx : 0;
+    }
+
+    /* лимит на файл: min(1MB, доступно/3); доступно = свободно + уже занятое логами */
+    long cap = LOG_MAX_FILE_SIZE;
+    long existing = 0;
+    for (int i = 0; i < LOG_FILE_COUNT; i++) { _logName(fn, sizeof(fn), i); long s = _fileSize(fn); if (s > 0) existing += s; }
+
+    uint64_t total = 0, freeb = 0;
+    if (esp_vfs_fat_info("/sdcard", &total, &freeb) == ESP_OK)
+    {
+        long byBudget = ((long)freeb + existing) / LOG_FILE_COUNT;
+        if (byBudget < cap) cap = byBudget;
+    }
+    if (cap < LOG_MIN_FILE_SIZE) cap = LOG_MIN_FILE_SIZE;
+    s_capPerFile = cap;
+
+    s_logReady = true;
 }
 void mblog(esp_log_level_t level, const char *msg, ...)
 {
@@ -126,17 +166,26 @@ void mblog(esp_log_level_t level, const char *msg, ...)
 
                 printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
 
-                if ((logFile = fopen(DEF_LOG_FILE_BASE_NAME ".txt", "a")) != NULL)
+                if (!s_logReady) _logSetup();
+
+                char fn[64];
+                _logName(fn, sizeof(fn), s_curIdx);
+
+                if ((logFile = fopen(fn, "a")) != NULL)
                 {
                     fprintf(logFile, "%s\n", logBuff);
 
-                    sz = ftell(logFile);
+                    long fsz = ftell(logFile);
 
                     fclose(logFile);
 
-                    if (me_config.logChapters > 0 && sz > (me_config.logMaxSize / me_config.logChapters))
+                    /* достигли лимита - переходим к следующему файлу по кругу
+                       и перезаписываем его (стираем перед первой записью) */
+                    if (fsz >= s_capPerFile)
                     {
-                        _shiftLogs();
+                        s_curIdx = (s_curIdx + 1) % LOG_FILE_COUNT;
+                        _logName(fn, sizeof(fn), s_curIdx);
+                        remove(fn);
                     }
                 }
 

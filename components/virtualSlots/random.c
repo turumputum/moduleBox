@@ -91,17 +91,26 @@ void random_task(void *arg) {
     RND_CONFIG c = {0};
     configure_random(&c, slot_num);
     STDCOMMAND_PARAMS params = {0};
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
 
     while(1){
         int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);
-        
+
         switch (cmd){
             case -1: // none
                 break;
 
-            case RNDCMD_gen: 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[random_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
+            case RNDCMD_gen:
+                if(!active_state) break;
                 int16_t val = (rand() % (c.maxVal - c.minVal + 1)) + c.minVal;
                 ESP_LOGD(TAG, "Gen:%d max:%ld min:%ld", val, c.maxVal, c.minVal);
                 stdreport_i(c.report, val);

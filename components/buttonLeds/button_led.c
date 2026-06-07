@@ -240,6 +240,7 @@ void button_led_task(void *arg)
     int16_t appliedBright = -1;
     int16_t targetBright = ctx->led.state ? ctx->led.maxBright : ctx->led.minBright;
     bool brightnessCompletedLogged = false;
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -251,6 +252,14 @@ void button_led_task(void *arg)
             ESP_LOGD(TAG, "Slot_%d input cmd num:%d", slot_num, cmd);
         }
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_led_%d] enable:%d", slot_num, active_state);
+                    if (!active_state) targetBright = 0;
+                    else targetBright = ctx->led.state ? ctx->led.maxBright : ctx->led.minBright;
+                }
+                break;
             case LED_CMD_default:
                 ctx->led.state = params.p[0].i ^ ctx->led.inverse;
                 targetBright = ctx->led.state ? ctx->led.maxBright : ctx->led.minBright;
@@ -281,14 +290,16 @@ void button_led_task(void *arg)
                 break;
         }
 
-        uint8_t msg;
-        int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
+        if (active_state) {
+            uint8_t msg;
+            int button_raw = gpio_get_level(pin_in);
+            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+                button_raw = gpio_get_level(pin_in);
+            }
+            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
         }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_basic(&ctx->led, &ledc_channel, &currentBright, &appliedBright, &targetBright);
 

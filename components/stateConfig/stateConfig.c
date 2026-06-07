@@ -110,10 +110,8 @@ static int handler(void *user, const char *section, const char *name, const char
 			}
 		}
 
-	} else if (MATCH("SYSTEM", "logMaxSize")) {//-----------------------------------------------
-		pconfig->logMaxSize = strz_to_bytes(value);
-	} else if (MATCH("SYSTEM", "logChapters")) {//-----------------------------------------------
-		pconfig->logChapters = atoi(value);
+	} else if (MATCH("SYSTEM", "cleanLogOnStart")) {//-----------------------------------------------
+		pconfig->cleanLogOnStart = atoi(value);
 	} else if (MATCH("SYSTEM", "statusPeriod")) {//-----------------------------------------------
 		pconfig->statusPeriod = atoi(value);
 	} else if (MATCH("SYSTEM", "statusAllChannels")) {//-----------------------------------------------
@@ -222,8 +220,7 @@ void load_Default_Config(void) {
 
 	me_config.deviceName = strdup("moduleBox");
 	me_config.logLevel = ESP_LOG_WARN;
-	me_config.logMaxSize = 50 * 1024;
-	me_config.logChapters = 1;
+	me_config.cleanLogOnStart = 0;
 	me_config.statusPeriod = 0;
 	me_config.statusAllChannels = true;
 	me_config.USB_debug = 0;

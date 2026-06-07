@@ -331,6 +331,7 @@ void button_ledBar_task(void *arg)
     RgbColor currentRGB = {0, 0, 0};
     int targetPos = 0;
     uint8_t prevState = 255; // force recalc on first cycle
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -338,6 +339,12 @@ void button_ledBar_task(void *arg)
     while (1) {
         STDCOMMAND_PARAMS params = {0};
         switch (stdcommand_receive(&ctx->led.cmds, &params, 0)) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_ledBar_%d] enable:%d", slot_num, active_state);
+                }
+                break;
             case LEDBAR_default:
                 ctx->led.state = params.p[0].i;
                 break;
@@ -356,14 +363,16 @@ void button_ledBar_task(void *arg)
                 break;
         }
 
-        uint8_t msg;
-        int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
+        if (active_state) {
+            uint8_t msg;
+            int button_raw = gpio_get_level(pin_in);
+            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+                button_raw = gpio_get_level(pin_in);
+            }
+            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
         }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_bar(&ctx->led, pixels, current_bright_mass, target_bright_mass, &rmt_heap, slot_num, &currentRGB, &targetPos, &prevState);
 

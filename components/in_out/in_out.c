@@ -291,12 +291,13 @@ static void in_out_task(void *arg) {
 
     waitForWorkPermit(slot_num);
 
+    bool active_state = 1;
     STDCOMMAND_PARAMS params = {0};
 
     // Main loop - handle both input and output
     for (;;) {
         uint8_t tmp;
-        
+
         // Check for INPUT events (with timeout to also handle OUTPUT commands)
         if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, pdMS_TO_TICKS(10)) == pdPASS) {
             // Read current INPUT state
@@ -317,8 +318,10 @@ static void in_out_task(void *arg) {
             if (ctx.state != ctx.prevState) {
                 ctx.prevState = ctx.state;
 
-                // Send report
-                stdreport_i(ctx.stateReport, ctx.state);
+                // Send report only when enabled
+                if (active_state) {
+                    stdreport_i(ctx.stateReport, ctx.state);
+                }
 
                 tick = xTaskGetTickCount();
                 if (ctx.debounceGap != 0) {
@@ -334,26 +337,41 @@ static void in_out_task(void *arg) {
             ESP_LOGD(TAG, "Slot_%d input cmd num:%d", slot_num, cmd);
         }
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "enable:%d slot:%d", active_state, slot_num);
+                    if (!active_state) {
+                        // reset output to default state on disable
+                        ctx.out_state = ctx.defaultState;
+                        set_out_level(&ctx, ctx.out_state);
+                    }
+                }
+                break;
+
             case OUT_CMD_default:
+                if (!active_state) break;
                 ctx.out_state = params.p[0].i;
-                set_out_level(&ctx, ctx.out_state); 
+                set_out_level(&ctx, ctx.out_state);
                 break;
 
             case OUT_CMD_toggle:
+                if (!active_state) break;
                 ctx.out_state = !ctx.out_state;
-                set_out_level(&ctx, ctx.out_state); 
+                set_out_level(&ctx, ctx.out_state);
                 break;
 
             case OUT_CMD_impulse:
+                if (!active_state) break;
                 int length = params.p[0].i;
                 ctx.out_state = !ctx.out_state;
-                set_out_level(&ctx, ctx.out_state); 
+                set_out_level(&ctx, ctx.out_state);
                 ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (length) * 1000));
 
             default:
                 break;
         }
-        
+
     }
 }
 

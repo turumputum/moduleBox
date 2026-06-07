@@ -92,6 +92,7 @@ void masquerade_task(void *arg) {
     MASQUERADE_CONFIG c = {0};
     configure_masquerade(&c, slot_num);
     STDCOMMAND_PARAMS params = {0};
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
 
@@ -103,8 +104,16 @@ void masquerade_task(void *arg) {
             case -1: // none
                 break;
 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[masquerade_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
             case MASQUERADEMCMD_set:
                 if(cmd_arg != NULL){
+                    if(!active_state) break;
                     ESP_LOGD(TAG, "Masquerade slot:%d value:%s -> %s", slot_num, cmd_arg, me_state.trigger_topic_list[slot_num]);
                     stdreport_s(c.report, cmd_arg);
                 }

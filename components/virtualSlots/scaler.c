@@ -111,6 +111,7 @@ void scaler_task(void* arg) {
     SCALER_CONFIG c = {0};
     configure_scaler(&c, slot_num);
     STDCOMMAND_PARAMS params = {0};
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
 
@@ -121,8 +122,16 @@ void scaler_task(void* arg) {
             case -1: // none
                 break;
 
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[scaler_%d] enable:%d", slot_num, active_state);
+                }
+                break;
+
             case SCALERCMD_set:
             {
+                if(!active_state) break;
                 int32_t inputVal = params.p[0].i;
                 
                 if(inputVal < c.inputMinVal){

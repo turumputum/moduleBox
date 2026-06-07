@@ -384,6 +384,7 @@ void button_runFire_task(void *arg)
     int prev_button_state = -1;
     int phase = 0;
     uint8_t prevState = 255; // force update on first cycle
+    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -393,6 +394,12 @@ void button_runFire_task(void *arg)
         int cmd = stdcommand_receive(&ctx->led.cmds, &params, 0);
 
         switch (cmd) {
+            case STDCMD_ENABLE:
+                if (params.count > 0) {
+                    active_state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_runFire_%d] enable:%d", slot_num, active_state);
+                }
+                break;
             case RUNFIRE_default:
                 ctx->led.state = params.p[0].i ? 1 : 0;
                 break;
@@ -406,14 +413,16 @@ void button_runFire_task(void *arg)
                 break;
         }
 
-        uint8_t msg;
-        int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
+        if (active_state) {
+            uint8_t msg;
+            int button_raw = gpio_get_level(pin_in);
+            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+                button_raw = gpio_get_level(pin_in);
+            }
+            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
         }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_runFire(&ctx->led, current_pixels, target_pixels, &rmt_heap, slot_num, &phase, &prevState);
 
