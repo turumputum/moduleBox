@@ -401,6 +401,29 @@ void audioLAN_task(void *arg){
 	gpio_set_level(led_pin, c->state);
 
     waitForWorkPermit(slot_num);
+
+    /* Дренируем queued action/enable до старта пайплайна.
+       Иначе retained MQTT 'enable:0' приходит в очередь ДО pipelineStart,
+       мы открываем stream/создаём drain task, потом вынуждены сразу
+       pause-close — и первая последующая enable:1 застаёт pipeline в
+       полузакрытом состоянии (drain task завершается посередине синка).
+       Применяем enable к c->state, чтобы pipelineStart сразу пошёл
+       в правильном направлении. */
+    {
+        STDCOMMAND_PARAMS p = {0};
+        int drained = 0;
+        for (;;) {
+            int cmd = stdcommand_receive(&c->cmds, &p, 0);
+            if (cmd < 0) break;
+            if (cmd == STDCMD_ENABLE && p.count > 0) {
+                c->state = p.p[0].i ? ENABLE : DISABLE;
+                drained++;
+            }
+        }
+        if (drained) ESP_LOGI(TAG, "[audioLAN_%d] drained %d queued enable cmds, final state=%d",
+                              slot_num, drained, c->state);
+    }
+
     pipelineStart(c);
     _setVolume_num(c->board_handle, c->volume);
     if(c->state == ENABLE){
