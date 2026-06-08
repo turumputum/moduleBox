@@ -182,6 +182,9 @@ static void out_2ch_task(void *arg) {
         gpio_set_direction(ctx.out_pinMass[i], GPIO_MODE_OUTPUT);
         ESP_LOGD(TAG, "SETUP OUT_pin_%d Slot:%d", ctx.out_pinMass[i], slot_num);
     }
+    esp_rom_gpio_pad_select_gpio(SLOTS_PIN_MAP[slot_num][2]);
+    gpio_set_direction(SLOTS_PIN_MAP[slot_num][2], GPIO_MODE_OUTPUT);
+    gpio_set_level(SLOTS_PIN_MAP[slot_num][2], 1);// для модулей out_2ch пин nsleep
 
     // Set default states
     vTaskDelay(pdMS_TO_TICKS(100));

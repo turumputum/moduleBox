@@ -494,10 +494,20 @@ void audioLAN_task(void *arg){
 
             case STDCMD_ENABLE:
                 /* event/enable retained — публикует stdcommand_receive() автоматически.
-                   Здесь только локальное действие: pause/resume пайплайна. */
+                   Здесь только локальное действие: pause/resume пайплайна.
+
+                   DISABLE -> ENABLE: используем pipelineStop+pipelineStart вместо
+                   audio_pipeline_resume. Resume после долгой паузы (особенно
+                   после hot-switch multicast в paused-состоянии) приводит к тому,
+                   что ESP-ADF element framework вызывает cfg.close на rtp-stream
+                   сразу после первого jbuf PLAYING — drain task умирает, звука
+                   нет. Полный рестарт pipeline стабильно работает. */
                 if (params.count > 0) {
                     int new_state = params.p[0].i ? ENABLE : DISABLE;
                     if (new_state == ENABLE && c->state != ENABLE) {
+                        pipelineStop(c);
+                        pipelineStart(c);
+                        _setVolume_num(c->board_handle, c->volume);
                         audio_pipeline_resume(c->pipeline);
                     } else if (new_state == DISABLE && c->state != DISABLE) {
                         audio_pipeline_pause(c->pipeline);
