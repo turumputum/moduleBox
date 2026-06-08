@@ -274,8 +274,11 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
         .flags.update_cmp_on_tez = true,
     };
     ESP_ERROR_CHECK(mcpwm_new_comparator(stepper->mcpwmOper, &comparator_config, &stepper->mcpwmComparator));
-    
-    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(stepper->mcpwmComparator, pulseWidth));
+
+    // Желаемая длительность HIGH импульса step (мкс при резолюции 1МГц).
+    // Реальное значение пересчитывается в stepper_setPeriod: HIGH = min(pulseWidth, period/2).
+    stepper->pulseWidth = pulseWidth ? pulseWidth : 1;
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(stepper->mcpwmComparator, stepper->pulseWidth));
 
     mcpwm_generator_config_t generator_config = {
         .gen_gpio_num = stepper->stepPin,
@@ -293,6 +296,35 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
     ESP_ERROR_CHECK(mcpwm_timer_enable(stepper->mcpwmTimer));
     ESP_LOGD(TAG, "init speedStepper end");
     return ESP_OK;
+}
+
+
+// Единая точка установки периода step-импульса.
+// period - в тиках таймера (мкс при резолюции 1МГц).
+// HIGH-уровень импульса не может занимать больше половины периода, иначе high и low
+// перестают быть равными - на высокой частоте урезаем pulseWidth до period/2 и пишем warning.
+void stepper_setPeriod(stepper_t *stepper, uint32_t period){
+    if(period < STEPPER_MIN_PERIOD) period = STEPPER_MIN_PERIOD;
+    if(period > UINT16_MAX)         period = UINT16_MAX;
+
+    uint32_t high = stepper->pulseWidth;
+    uint32_t halfPeriod = period / 2;
+    uint8_t clamped = 0;
+    if(high > halfPeriod){
+        high = halfPeriod;
+        if(high < 1) high = 1;
+        clamped = 1;
+    }
+
+    // warn-once: логируем только при входе в режим урезания, чтобы не спамить каждый период
+    if(clamped && !stepper->pulseClamped){
+        ESP_LOGW(TAG, "step freq too high: pulse %uus needs period>=%uus but period=%luus - HIGH clamped to %luus (50%% duty)",
+                 stepper->pulseWidth, (unsigned)(stepper->pulseWidth*2), period, high);
+    }
+    stepper->pulseClamped = clamped;
+
+    mcpwm_comparator_set_compare_value(stepper->mcpwmComparator, high);
+    mcpwm_timer_set_period(stepper->mcpwmTimer, period);
 }
 
 
@@ -384,7 +416,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     stepper->breakPoint = stepper->targetPos-(break_distance*stepper->dir);
     stepper->breakWay = break_distance;
     if(stepper->state==STOP){
-        mcpwm_timer_set_period(stepper->mcpwmTimer, UINT16_MAX);
+        stepper_setPeriod(stepper, UINT16_MAX);
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP));
         stepper->state=RUN;
     }
@@ -438,10 +470,9 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
             }
             if(abs(stepper->currentSpeed)>0){
                 uint32_t period = abs((int32_t)stepper->resolution/stepper->currentSpeed);
-                if(period>UINT16_MAX)period=UINT16_MAX;
-                if(period<STEPPER_MIN_PERIOD)period=STEPPER_MIN_PERIOD; // верхний предел частоты step
-                //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld speedIncrement: %ld period: %ld currentPos:%ld targetPos:%ld", stepper->currentSpeed, stepper->targetSpeed, speedIncrement, period, stepper->currentPos, stepper->targetPos);
-                mcpwm_timer_set_period(stepper->mcpwmTimer, period);
+                // период клампится в stepper_setPeriod (MIN_PERIOD..UINT16_MAX),
+                // там же пересчитывается HIGH импульса под текущую частоту
+                stepper_setPeriod(stepper, period);
             }else if((stepper->currentPos==stepper->targetPos)&&(stepper->state!=STOP)){
                 stepper_stop(stepper);
             }

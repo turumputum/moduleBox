@@ -61,6 +61,7 @@ typedef struct __tag_STEPPERCONFIG{
     int32_t                 targetPos;
 	uint32_t				homingSpeed;
 	uint32_t				homingTimeout;
+	uint8_t					pulseWidth;
 	int32_t				    maxVal;
     int32_t                 minVal;
 	int 					speedReportFlag;
@@ -204,6 +205,13 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	c->homingTimeout =  get_option_int_val(slot_num, "homingTimeout", "sek", 30, 0, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingTimeout:%ld", slot_num, c->homingTimeout);
 
+    /* Длительность импульса step
+    - микросекунды
+	- если частота слишком высока для равных уровней HIGH-LOW - урезается до половины периода с варнингом в лог
+	*/
+	c->pulseWidth =  get_option_int_val(slot_num, "pulseWidth", "us", 5, 1, 10);
+    ESP_LOGD(TAG, "[stepper_%d] pulseWidth:%d", slot_num, c->pulseWidth);
+
     /* Максимальное значение положения
     - шагов
 	*/
@@ -307,7 +315,7 @@ void stepper_task(void *arg){
     stepper.accel = c->accel;
     stepper.maxSpeed = c->maxSpeed;
 
-	esp_err_t step_err = stepper_init(&stepper, stepper.stepPin, stepper.dirPin, 10);
+	esp_err_t step_err = stepper_init(&stepper, stepper.stepPin, stepper.dirPin, c->pulseWidth);
 	if (step_err != ESP_OK) {
 		ESP_LOGW(TAG, "PCNT unit limit reached (slot:%d), task terminated. err:%d",
 		         slot_num, step_err);

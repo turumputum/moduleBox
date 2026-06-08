@@ -100,6 +100,9 @@ typedef struct {
 
   int32_t accel;
 
+  uint16_t pulseWidth;   // желаемая длительность HIGH импульса step, мкс (1-10)
+  uint8_t pulseClamped;  // флаг warn-once: HIGH урезан до period/2 на высокой частоте
+
   int8_t dir;
   int8_t runSpeedFlag;
   int8_t state;
@@ -133,12 +136,15 @@ typedef struct {
   .absPos = 0,\
   .breakWay = 0,\
   .accel = 100,\
+  .pulseWidth = 5,\
+  .pulseClamped = 0,\
 	.dir = 0,\
   .runSpeedFlag = 0,\
   .state = STOP,\
 }
 
 esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);
+void stepper_setPeriod(stepper_t *stepper, uint32_t period);
 void stepper_getCurrentPos(stepper_t *stepper);
 void stepper_moveTo(stepper_t *stepper, int32_t pos);
 void stepper_speedUpdate(stepper_t *stepper, int32_t period);
