@@ -244,10 +244,13 @@ void executer_task(void * param){
 				sum++;
 
 			}else{
+				/* Брокер отдаёт нам обратно все наши же event-публикации
+				   (wildcard-подписка вида <dev>/<mod>_<slot>/#). Это echo,
+				   не команда - молча игнорим, не считаем за "не найденную". */
+				bool is_event_echo = (strstr(msg.str, "/event/") != NULL);
 				for(int i=0; i<NUM_OF_SLOTS; i++){
 					if(me_state.action_topic_list[i]==NULL) continue;
 					int base_len = strlen(me_state.action_topic_list[i]);
-					//ESP_LOGD(TAG, "Checking slot[%d] topic:'%s' queue:%d", i, me_state.action_topic_list[i], me_state.command_queue[i]!=NULL);
 					/* Сообщение должно начинаться (или содержать как подстроку) base слота.
 					   Используем strstr ради совместимости с device-name-стрипом в кросслинке. */
 					char *match = strstr(msg.str, me_state.action_topic_list[i]);
@@ -259,7 +262,10 @@ void executer_task(void * param){
 						if(strncmp(suffix, "action/", 7) == 0){
 							suffix += 7;
 						}else{
-							ESP_LOGW(TAG, "Slot:%d msg without /action/ prefix: '%s'", i, msg.str);
+							/* Не action — пропускаем без шума (своё же event echo). */
+							if(is_event_echo){
+								sum++; /* подавляем "Action not found" в сводке */
+							}
 							continue;
 						}
 						command_message_t forward = {0};
@@ -275,6 +281,8 @@ void executer_task(void * param){
 						}
 					}
 				}
+				/* Чужие event-echo, не относящиеся к нашим слотам, тоже не шумим. */
+				if(sum==0 && is_event_echo) sum++;
 			}
 			if(sum==0){
 				usbprint("Action not found!!!");
