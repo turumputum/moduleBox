@@ -282,12 +282,6 @@ fmt_cleanup:
 void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 	/* Светодиод индикации наличия SD-карты
 	*/
 	c->ledPin = SLOTS_PIN_MAP[slot_num][3];
@@ -363,6 +357,16 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 		me_state.action_topic_list[slot_num]=c->custom_topic;
 		me_state.trigger_topic_list[slot_num]=c->custom_topic;
 	}
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 static PSDCARDPINSET check_pinset(PSDCARDPINSET ps)

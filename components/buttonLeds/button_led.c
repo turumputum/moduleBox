@@ -60,12 +60,6 @@ typedef enum
 void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
 {
     stdcommand_init(&ctx->led.cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     // --- Button logic config ---
     /* Флаг определяет инверсию кнопки
     */
@@ -200,6 +194,16 @@ void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
     /* Установить время переходного процесса при изменении яркомсти в миллесекндах
     */
     stdcommand_register(&ctx->led.cmds, LED_CMD_setFadeTime, "action/setFadeTime", PARAMT_int);
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 void button_led_task(void *arg)

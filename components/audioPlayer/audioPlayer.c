@@ -163,12 +163,6 @@ void fill_equalizer_gains(int low_gain, int mid_gain, int high_gain, int *set_ga
 void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Уровень громкости
     */
 	c->volume = get_option_int_val(slot_num, "volume", "", 70, 0, 100);
@@ -281,6 +275,16 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 
     /* action/enable - авто-регистрируется в stdcommand_init (Конституция §6).
        Обрабатывается в case STDCMD_ENABLE. */
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 void audio_task(void *arg) {

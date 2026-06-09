@@ -66,12 +66,6 @@ typedef enum
 void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 {
     stdcommand_init(&ctx->led.cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     // --- Button logic config ---
     /* Флаг определяет инверсию кнопки
     */
@@ -228,6 +222,16 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
     //todo расписать
     stdcommand_register_enum(&ctx->led.cmds, LEDRING_setMode, "action/setMode", "default", "run");
     
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 static void ledUpdate(uint8_t *currentMass, uint8_t *targetMass, uint16_t size, uint8_t increment, bool periodicUpdate, rmt_led_heap_t *rmt_heap, uint8_t slot_num) {

@@ -69,12 +69,6 @@ typedef enum
 void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
 {
     stdcommand_init(&ctx->led.cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     // --- Button logic config ---
     /* Флаг определяет инверсию кнопки
     */
@@ -218,6 +212,16 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     /* Установить новое значение fadeTime, скорости анимации
     */
     stdcommand_register(&ctx->led.cmds, SMARTLED_setFadeTime, "action/setFadeTime", PARAMT_int);
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 static void setAllLed_color(uint8_t *pixel_array, RgbColor color, int16_t bright, uint16_t num_of_led){

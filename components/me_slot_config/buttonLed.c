@@ -130,12 +130,6 @@ static void IRAM_ATTR button_isr_handler(ISRCFG * cfg)
 void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 {
     stdcommand_init(&ch->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 	if (mode == 0) // Button
 	{
 		/* Флаг определяет инверсию кнопки
@@ -270,6 +264,16 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
 	ch->doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "event/doubleClick", 0, 1);
 
 	ch->event_filter = 0;
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 // static void _button_report(const char * 		prefix, 
 // 						   int 					button_state, 

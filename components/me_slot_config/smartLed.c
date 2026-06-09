@@ -275,12 +275,6 @@ void init_runEffect(uint8_t* led_strip_pixels, uint16_t numOfLed, uint8_t minBri
 void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Количенство светодиодов
     */
     c->num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
@@ -367,6 +361,16 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     */
     stdcommand_register(&c->cmds, MYCMD_setIncrement, "action/setIncrement", PARAMT_int);
     
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 void smartLed_task(void *arg){
     //PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));

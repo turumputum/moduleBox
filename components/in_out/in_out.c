@@ -110,12 +110,6 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
 
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     // ========== INPUT CONFIGURATION ==========
     
     /* Флаг определяет инверсию входного сигнала
@@ -200,6 +194,16 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
     /* Команда формирование импульса, длинна импульса задается занчением в миллисекундах
 	*/
     stdcommand_register(&ctx->cmds, OUT_CMD_impulse, "action/impulse", PARAMT_none);
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 

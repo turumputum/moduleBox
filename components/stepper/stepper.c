@@ -105,12 +105,6 @@ static int64_t stepper_wrapmod(int64_t a, int64_t m){
 */
 void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     stdcommand_init(&c->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Если флаг поднят - модуль стартует в выключенном состоянии,
        до прихода action/enable 1 (Конституция §6).
     */
@@ -290,6 +284,16 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     */
     stdcommand_register(&c->cmds, stepCMD_setHomingSensor, "action/setHomingSensor", PARAMT_int);
 
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 

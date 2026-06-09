@@ -76,12 +76,6 @@ void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
     }
 
     stdcommand_init(&ch->cmds, slot_num);
-
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
-    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
     /* Добавить данные в строку коллектора
     */
     stdcommand_register(&ch->cmds, COLLECTORCMD_add, "action/add", PARAMT_string);
@@ -93,6 +87,16 @@ void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
     /* Отчёт собранной строки
     */
     ch->report = stdreport_register(RPTT_string, slot_num, "", "event/val");
+
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 void collector_task(void *arg) {
