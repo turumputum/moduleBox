@@ -292,7 +292,7 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
 
     /* Состояние по умолчанию
     */
-    c->state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
+    c->state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1);
     ESP_LOGD(TAG, "Set def_state:%d for slot:%d", c->state, slot_num);
         
     /* Величина приращения
@@ -352,7 +352,7 @@ void configure_button_smartLed(PSMARTLEDCONFIG c, int slot_num)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&c->cmds, MYCMD_default, "action/setVal", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_default, "action/ledEnable", PARAMT_int);
 
     /* Установить новый целевой цвет.
        Цвет задаётся десятичными значениями R G B через пробел
@@ -1071,7 +1071,7 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
 
     /* Состояние по умолчанию
     */
-    c->state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
+    c->state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1);
     ESP_LOGD(TAG, "Set def_state:%d for slot:%d", c->state, slot_num);
       
     /* Инверсия направления эффекта
@@ -1116,7 +1116,7 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&c->cmds, LEDRINGCMD_default, "action/setVal", PARAMT_int);
+    stdcommand_register(&c->cmds, LEDRINGCMD_default, "action/ledEnable", PARAMT_int);
 
     /* Установить новый целевой цвет.
        Цвет задаётся десятичными значениями R G B через пробел
@@ -1349,7 +1349,7 @@ void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
 
     /* Состояние по умолчанию
     */
-    c->state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
+    c->state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1);
     ESP_LOGD(TAG, "Set def_state:%d for slot:%d", c->state, slot_num);
 
     /* Инверсия направления эффекта

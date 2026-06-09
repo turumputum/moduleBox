@@ -171,7 +171,7 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 
     /* Состояние по умолчанию
     */
-    ctx->led.state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1) ^ ctx->led.inverse;
+    ctx->led.state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1) ^ ctx->led.inverse;
 
     /* Смещение эффекта
     */
@@ -206,7 +206,7 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 
     /* Задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&ctx->led.cmds, LEDRING_default, "action/setVal", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LEDRING_default, "action/ledEnable", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */

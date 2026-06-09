@@ -160,7 +160,7 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
 
     /* Состояние по умолчанию
     */
-    ctx->led.state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
+    ctx->led.state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1);
 
     /* Инверсия направления эффекта
     - если флаг не поднят движение идёт от 0 к numOfLed
@@ -214,7 +214,7 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
     /* задаёт текущее состояние светодиода (вкл/выкл)
     Числовое значение 0-1
     */
-    stdcommand_register(&ctx->led.cmds, RUNFIRE_default, "action/setVal", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, RUNFIRE_default, "action/ledEnable", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */

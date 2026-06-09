@@ -151,7 +151,7 @@ void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
 
    /* Состояние по умолчанию
    */
-   ctx->led.state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1) ^ ctx->led.inverse;
+   ctx->led.state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1) ^ ctx->led.inverse;
 
    if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
        char* custom_topic=NULL;
@@ -183,7 +183,7 @@ void configure_button_led(PMODULE_CONTEXT ctx, int slot_num)
     /* задаёт текущее состояние светодиода (вкл/выкл)
     Числовое значение 0-1
     */
-    stdcommand_register(&ctx->led.cmds, LED_CMD_default, "action/setVal", PARAMT_int);
+    stdcommand_register(&ctx->led.cmds, LED_CMD_default, "action/ledEnable", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */

@@ -255,7 +255,7 @@ void configure_button_led(PBUTTONLEDCONFIG ch, int slot_num, int mode)
     /* Числовое значение.
        задаёт текущее состояние светодиода (вкл/выкл)
     */
-    stdcommand_register(&ch->cmds, MYCMD_default, "action/setVal", PARAMT_int);
+    stdcommand_register(&ch->cmds, MYCMD_default, "action/ledEnable", PARAMT_int);
 
 	/* Возвращает состояние нажатия кнопки
 	*/
