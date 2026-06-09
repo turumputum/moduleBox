@@ -38,7 +38,6 @@ typedef struct __tag_MOSFETCONFIG
     uint16_t                fadeTime;
     RgbColor                targetRGB;
     uint8_t                 ledMode;
-    uint8_t                 state;
     int                     active_state;
     STDCOMMANDS             cmds;
 
@@ -46,8 +45,7 @@ typedef struct __tag_MOSFETCONFIG
 
 typedef enum
 {
-    MYCMD_default = 0,
-    MYCMD_setRGB,
+    MYCMD_setRGB = 0,
     MYCMD_setMode,
     MYCMD_setIncrement,
     MYCMD_setMaxBright,
@@ -101,11 +99,13 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    /* Включить (1) или выключить (0) модуль (Конституция §6).
+       По умолчанию 1; флаг disableOnStart инвертирует на старте. */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* Состояние модуля - активен (1) или спит (0). Retained. */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
+
     /* Если флаг поднят - модуль стартует в выключенном состоянии,
        до прихода action/enable 1 (Конституция §6).
     */
@@ -162,17 +162,15 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     else
         ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", c->targetRGB.r, c->targetRGB.g, c->targetRGB.b, slot_num);
 
+    /* defaultState убран - используйте disableOnStart для управления
+       начальным включением модуля (Конституция §6). */
+
     /* Задаёт режим анимации */
     if ((c->ledMode = get_option_enum_val(slot_num, "ledMode", "default", "flash", "glitch", "swiper", "rainbow", "run", NULL)) < 0)
     {
         ESP_LOGE(TAG, "ledMode: unricognized value");
         c->ledMode = MODE_DEFAULT;
     }
-
-    /* Состояние по умолчанию
-    */
-    c->state = get_option_int_val(slot_num, "defaultState", "", 0, 1, 4096);
-    ESP_LOGD(TAG, "Set def_state:%d for slot:%d", c->state, slot_num);
 
 	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
 		char* custom_topic=NULL;
@@ -186,11 +184,6 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
-
-    /* Числовое значение
-       задаёт текущее состояние светодиода (вкл/выкл)
-    */
-    stdcommand_register(&c->cmds, MYCMD_default, "action/setVal", PARAMT_int);
 
     /* Установить новый целевой цвет
        Цвет задаётся десятичными значениями R G B через пробел
@@ -318,10 +311,6 @@ void pwmLeds_task(void *arg){
                 }
                 break;
 
-            case MYCMD_default:
-                c.state = params.p[0].i;
-                break;
-
             case MYCMD_setRGB:
                 c.targetRGB.r = params.p[0].i;
                 c.targetRGB.g = params.p[1].i;
@@ -370,16 +359,11 @@ void pwmLeds_task(void *arg){
                 break;                
         }
 
-        if (!c.active_state) {
-            /* Модуль выключен через action/enable - PWM каналы не трогаем */
-            vTaskDelayUntil(&lastWakeTime, c.refreshPeriod);
-            continue;
-        }
-
-        if(c.state==0){
-            targetBright =abs(255*c.inverse-c.min_bright);
+        if (!c.active_state){
+            /* Модуль выключен через action/enable - тушим до min_bright. */
+            targetBright = abs(255*c.inverse-c.min_bright);
             checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
-			set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB,currentBright);
+            set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB,currentBright);
         }else{
             if (c.ledMode==MODE_DEFAULT){
                 targetBright = abs(255*c.inverse-c.max_bright); 

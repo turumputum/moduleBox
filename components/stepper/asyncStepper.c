@@ -381,6 +381,13 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
             watchPoint+=INT16_MIN;
         }
     }
+    // Точка останова цели не должна совпадать с граничной watch-точкой аккумуляции
+    // (INT16_MAX / INT16_MIN). Иначе второй add падает ('add watchpoint failed'),
+    // PCNT остается с единственной watch-точкой на high_limit и уходит в вырожденное
+    // состояние (видно при runSpeed: distance кратен 32767 -> watchPoint == 32767).
+    // Сдвиг на 1 шаг на точность останова не влияет.
+    if(watchPoint >= INT16_MAX) watchPoint = INT16_MAX - 1;
+    if(watchPoint <= INT16_MIN) watchPoint = INT16_MIN + 1;
     stepper->pcnt_watchPoint = (int16_t)watchPoint;
 
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
