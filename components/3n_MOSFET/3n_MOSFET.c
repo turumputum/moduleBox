@@ -99,12 +99,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6).
-       По умолчанию 1; флаг disableOnStart инвертирует на старте. */
-    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    /* === OPTIONS === */
 
     /* Если флаг поднят - модуль стартует в выключенном состоянии,
        до прихода action/enable 1 (Конституция §6).
@@ -185,6 +180,12 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6).
+       По умолчанию 1; флаг disableOnStart инвертирует на старте. */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
     /* Установить новый целевой цвет
        Цвет задаётся десятичными значениями R G B через пробел
     */
@@ -204,15 +205,15 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 
     /* Установить значение яркости для ch_0
     */
-   stdcommand_register(&c->cmds, MYCMD_setBright_ch_0, "action/ch_0/setBright", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setBright_ch_0, "action/ch_0/setBright", PARAMT_int);
 
-   /* Установить значение яркости для ch_1
+    /* Установить значение яркости для ch_1
     */
-   stdcommand_register(&c->cmds, MYCMD_setBright_ch_1, "action/ch_1/setBright", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setBright_ch_1, "action/ch_1/setBright", PARAMT_int);
 
-   /* Установить значение яркости для ch_2
+    /* Установить значение яркости для ch_2
     */
-   stdcommand_register(&c->cmds, MYCMD_setBright_ch_2, "action/ch_2/setBright", PARAMT_int);
+    stdcommand_register(&c->cmds, MYCMD_setBright_ch_2, "action/ch_2/setBright", PARAMT_int);
 
     /* Установить минимальное значение яркости
     */
@@ -221,6 +222,11 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     /* Установить время затухания свечения
     */
     stdcommand_register(&c->cmds, MYCMD_setFadeTime, "action/setFadeTime", PARAMT_int);
+
+    /* === EVENTS === */
+
+    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 void pwmLeds_task(void *arg){
