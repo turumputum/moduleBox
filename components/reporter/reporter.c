@@ -324,7 +324,7 @@ void send_report(reporter_message_t * msg)
 	}
 }
 
-void spread_the_word_task(void)
+void spread_the_word_task(void *arg)
 {
 	//char tmpStr[555];
 	reporter_message_t received_message;
@@ -361,7 +361,7 @@ void forward_report(char *msg, int slot_num)
 		ESP_LOGE(TAG, "Der Heap ist kaputt");
 }
 
-void reporter_task(void){
+void reporter_task(void *arg){
 	reporter_message_t received_message;
 	for(;;){
 		if (xQueueReceive(me_state.reporter_queue, &received_message, portMAX_DELAY) == pdPASS){
@@ -386,11 +386,11 @@ void reporter_task(void){
 	}
 }
 void reporter_init(void){
-	me_state.reporter_queue=xQueueCreate(150, sizeof(reporter_message_t));
+	me_state.reporter_queue=xQueueCreate(512, sizeof(reporter_message_t));
 	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 	//xTaskCreate (reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 
-	me_state.reporter_spread_queue=xQueueCreate(150, sizeof(reporter_message_t));
+	me_state.reporter_spread_queue=xQueueCreate(512, sizeof(reporter_message_t));
 	xTaskCreatePinnedToCore(spread_the_word_task, "reporter_spread_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 }
 

@@ -126,8 +126,9 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 #define STATE_STOP 3
 
 void stepper_getCurrentPos(stepper_t *stepper){
-    int32_t pos = 0;
-    pcnt_unit_get_count(stepper->pcntUnit, &pos);
+    int pcntPos = 0;
+    pcnt_unit_get_count(stepper->pcntUnit, &pcntPos);
+    int32_t pos = pcntPos;
     
     int32_t delta= pos - stepper->pcnt_prevPos;
     if (abs(delta) > (INT16_MAX/2)) {
@@ -180,7 +181,7 @@ static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt
         pcnt_unit_clear_count(stepper->pcntUnit);
         stepper->pcnt_prevPos = 0;
     }
-    int32_t tmpCnt = 0;
+    int tmpCnt = 0;
     pcnt_unit_get_count(stepper->pcntUnit, &tmpCnt);
     if(tmpCnt!=stepper->pcnt_watchPoint){
         pcnt_unit_clear_count(stepper->pcntUnit);
@@ -257,26 +258,41 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
         .count_mode = MCPWM_TIMER_COUNT_MODE_UP,
         .flags.update_period_on_empty = true,
     }; 
-    ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config, &stepper->mcpwmTimer));
+    // Исчерпание MCPWM таймеров (3 на группу) при заполнении многих слотов stepper'ом
+    // не должно валить всю плату через ESP_ERROR_CHECK->abort - возвращаем ошибку,
+    // вызывающая задача gracefully завершится и слот просто отключится.
+    esp_err_t mcpwm_err = mcpwm_new_timer(&timer_config, &stepper->mcpwmTimer);
+    if (mcpwm_err != ESP_OK) {
+        return mcpwm_err;
+    }
 
     mcpwm_operator_config_t operator_config = {
         .group_id = 0,
     };
-    ESP_ERROR_CHECK(mcpwm_new_operator(&operator_config, &stepper->mcpwmOper));
+    mcpwm_err = mcpwm_new_operator(&operator_config, &stepper->mcpwmOper);
+    if (mcpwm_err != ESP_OK) {
+        return mcpwm_err;
+    }
     ESP_ERROR_CHECK(mcpwm_operator_connect_timer(stepper->mcpwmOper, stepper->mcpwmTimer));
 
     mcpwm_comparator_config_t comparator_config = {
         .flags.update_cmp_on_tez = true,
     };
-    ESP_ERROR_CHECK(mcpwm_new_comparator(stepper->mcpwmOper, &comparator_config, &stepper->mcpwmComparator));
-    
+    mcpwm_err = mcpwm_new_comparator(stepper->mcpwmOper, &comparator_config, &stepper->mcpwmComparator);
+    if (mcpwm_err != ESP_OK) {
+        return mcpwm_err;
+    }
+
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(stepper->mcpwmComparator, pulseWidth));
 
     mcpwm_generator_config_t generator_config = {
         .gen_gpio_num = stepper->stepPin,
         .flags.io_loop_back = true,
     };
-    ESP_ERROR_CHECK(mcpwm_new_generator(stepper->mcpwmOper, &generator_config, &stepper->mcpwmGenerator));
+    mcpwm_err = mcpwm_new_generator(stepper->mcpwmOper, &generator_config, &stepper->mcpwmGenerator);
+    if (mcpwm_err != ESP_OK) {
+        return mcpwm_err;
+    }
 
     // go high on counter empty
     ESP_ERROR_CHECK(mcpwm_generator_set_action_on_timer_event(stepper->mcpwmGenerator,MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH)));

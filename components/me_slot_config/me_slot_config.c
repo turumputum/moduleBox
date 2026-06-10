@@ -138,6 +138,8 @@ int init_slots(void){
 			start_in_out_task(i);
 		}else if(!strcmp(mode, "in_2ch")){
 			start_in_2ch_task(i);	// W, NOC
+		}else if(!strcmp(mode, "in_3ch")){
+			start_in_3ch_task(i);	// W, NOC
 		}else if(!strcmp(mode, "out_2ch")){
 			start_out_2ch_task(i);		// W, NOC
 		}else if(!strcmp(mode, "relay")){
@@ -426,6 +428,7 @@ int get_option_enum_val(int slot_num, char* option, ...)
 int get_option_color_val(RgbColor * output, int slot_num, char* string, char * default_value)
 {
 	int 		result	= ESP_FAIL;
+	int 		found	= 0;
 	char *		begin;
 	char *		value;
 	char *		end;
@@ -433,6 +436,7 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 
 	if ((begin = strstr(me_config.slot_options[slot_num], string)) != NULL)
 	{
+		found = 1;
 		if ((end = strchr(begin, ',')) == NULL)
 		{ end = begin + strlen(begin); }
 		len = end - begin;
@@ -461,8 +465,11 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 	{
 		ESP_LOGW(TAG, "Color options not found, lets parse default:%s", default_value);
 		parseRGB(output, default_value);
+		// Опция не задана - это норма- дефолт применён, ошибкой не считаем-
+		// только реально кривое значение (found && !OK) оставляем как ESP_FAIL-
+		if (!found) result = ESP_OK;
 	}
-	
+
 	return result;
 }
 

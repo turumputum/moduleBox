@@ -18,3 +18,8 @@ script.env
 managed_components/
 Manifest.json
 dependencies.lock
+
+# pyTest run artifacts
+slot_test_run.out
+pyTest/slot_test_run.out
+pyTest/slot_test_logs/

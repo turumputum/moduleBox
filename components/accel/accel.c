@@ -100,18 +100,18 @@ void MPU9250_kick_task(void *arg) {
 
 
     // Сброс устройства
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x80}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x6B, 0x80}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Включение акселерометра
-    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x6B, 0x00}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x6B, 0x00}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 
     // Настройка диапазона акселерометра (±16g)
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x1C, 0x18}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x1C, 0x18}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     //Turn on the internal low-pass filter for accelerometer with 10.2Hz bandwidth
-    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x1D, 0x05}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x1D, 0x05}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     //turn on the bypass multiplexer
-    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, &(uint8_t[]){0x37, 0x02}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    //i2c_master_write_to_device(i2c_num, MPU9250_ADDR, (uint8_t[]){0x37, 0x02}, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 
     
 

@@ -53,7 +53,7 @@ typedef struct {
     int in_pin_num;
     int reportDelay;
     int debounceGap;
-    void* stateReport;
+    int stateReport;
     int state;
     int prevState;
     
@@ -79,7 +79,7 @@ typedef enum
     .inverse_in = 0, \
     .reportDelay = 0, \
     .debounceGap = 0, \
-    .stateReport = NULL, \
+    .stateReport = 0, \
     .state = 0, \
     .prevState = 0, \
     .inverse_out = 0, \

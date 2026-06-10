@@ -248,11 +248,13 @@ void encoder_inc_task(void *arg){
             }
 		}
 
-        err = pcnt_unit_get_count(pcnt_unit, &rawVal);
+        int pcntVal = 0;
+        err = pcnt_unit_get_count(pcnt_unit, &pcntVal);
 		if (err != ESP_OK) {
             ESP_LOGE(TAG, "pcnt_get_counter_value failed: %d", err);
             return;
 		}
+		rawVal = pcntVal;
 
 		int32_t delta= rawVal - prewRawVal;
 		if (abs(delta) > (INT16_MAX/2)) {
@@ -309,7 +311,7 @@ void encoder_inc_task(void *arg){
                 sprintf(str, "%ld", diff);
             }
 
-			stdreport_s(c.report, &str);
+			stdreport_s(c.report, str);
             //report(str, slot_num);
 			//ESP_LOGD(TAG,"Report:%s",str);
             prev_pos = pos;
@@ -520,7 +522,7 @@ void encoderAS5600_task(void *arg)
 
 	int i2c_num = me_state.free_i2c_num;
 	me_state.free_i2c_num++;
-	if(i2c_num == I2C_NUM_MAX) {
+	if(i2c_num >= I2C_NUM_MAX) {
 		sprintf(tmpStr, "No free I2C driver for slot:%d task terminated", slot_num);
 		ESP_LOGW(TAG, "%s", tmpStr);
 		mblog(W, tmpStr);

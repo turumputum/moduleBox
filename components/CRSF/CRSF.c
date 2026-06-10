@@ -157,7 +157,7 @@ void crsf_rx_task(void* arg) {
                         if(frame.type == 0x16) {
                             //ESP_LOGD(TAG, "Received payload: %x %x %x %x %x %x", frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3], frame.payload[4], frame.payload[5]);
                             int32_t rawChannels[numOfChannel];
-                            UnpackChannels(&frame.payload, rawChannels);
+                            UnpackChannels(frame.payload, rawChannels);
                             for(int i=0; i<8; i++){
                                 if(abs(rawChannels[i]-channels[i])>deadBand){
                                    

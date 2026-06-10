@@ -72,10 +72,10 @@ void watchdog_task(void *arg) {
     WATCHDOG_CONFIG c = {0};
     configure_watchdog(&c, slot_num);
 
-    int strl = strlen(me_state.action_topic_list[slot_num]) + strlen("restart") + 1;
-    char tmpstr[strl];
-    sprintf(tmpstr, "%s/%s", me_state.action_topic_list[slot_num], "restart");
-    xQueueSend(me_state.command_queue[slot_num], &tmpstr, NULL);
+    command_message_t initCmd = {0};
+    initCmd.slot_num = slot_num;
+    sprintf(initCmd.str, "%s/%s", me_state.action_topic_list[slot_num], "restart");
+    xQueueSend(me_state.command_queue[slot_num], &initCmd, 0);
     
     esp_timer_handle_t virtual_timer = NULL;
     const esp_timer_create_args_t delay_timer_args = {

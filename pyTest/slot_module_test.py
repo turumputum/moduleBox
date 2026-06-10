@@ -94,6 +94,8 @@ WARNING_PATTERNS = [
     re.compile(r"\bE \(\d+\) pcnt: (pcnt_register_to_group.*no free unit|pcnt_new_unit.*register unit failed)"),  # кончились PCNT unit'ы (4 на ESP32-S3)
     re.compile(r"\bE \(\d+\) ENCODERS: AS5600 not found on slot:"),     # AS5600 физически не подключён к слоту (I2C)
     re.compile(r"\bE \(\d+\) ENCODERS: No free I2C driver for slot:"),  # кончились I2C драйверы (ESP-IDF I2C limit)
+    re.compile(r"\bE \(\d+\) mcpwm: .*no free \w+ in group"),           # кончились MCPWM timer/operator (2 группы x 3 на ESP32-S3) — stepper>3
+    re.compile(r"\bE \(\d+\) [\w_:.]+: LEDC channels? (has|have) ended"), # кончились LEDC каналы (8 на ESP32-S3) — pwmLeds/button LED при слотах сверх ~2
 ]
 
 # Модули с особой логикой слотов (если манифест неправильно описывает диапазон).

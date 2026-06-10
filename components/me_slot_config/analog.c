@@ -245,7 +245,10 @@ void analog_task(void *arg)
         me_state.trigger_topic_list[slot_num] = ctx.custom_topic;
     }
 
-    uint8_t oversample = 150;
+    // 150 чтений legacy-adc1_get_raw подряд (критсекция+regi2c на каждом) при
+    // нескольких analog-слотах на одном ядре морили IDLE -> task_wdt. 16 усреднений
+    // дают короткий burst, период vTaskDelayUntil доминирует и IDLE получает время.
+    uint8_t oversample = 16;
     uint16_t result = 0, prev_result = 0xFFFF;
     int threshState = 0;
     TickType_t threshPendingTick = 0;
@@ -357,10 +360,18 @@ void analog_task(void *arg)
             }
         }
 
-        if (ctx.periodic != 0) {
-            vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(ctx.periodic));
+        TickType_t period = (ctx.periodic != 0) ? pdMS_TO_TICKS(ctx.periodic) : pdMS_TO_TICKS(32);
+        if (period == 0) period = 1;
+        // При нескольких analog-слотах на одном ядре цикл может не уложиться в период -
+        // тогда vTaskDelayUntil не блокируется и lastWakeTime навсегда отстаёт, задача
+        // крутится без yield и морит IDLE -> task_wdt. Если просрочили - ресинкаем
+        // и отдаём хотя бы один тик, иначе обычная периодика.
+        TickType_t now = xTaskGetTickCount();
+        if ((now - lastWakeTime) >= period) {
+            lastWakeTime = now;
+            vTaskDelay(1);
         } else {
-            vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(32));
+            vTaskDelayUntil(&lastWakeTime, period);
         }
     }
 }

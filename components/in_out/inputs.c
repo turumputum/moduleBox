@@ -388,9 +388,10 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
 static void in_3ch_task(void *arg) {
     int slot_num = (int)(intptr_t)arg;
     in_3ch_context_t ctx = IN_3CH_CONTEXT_DEFAULT();
-    
+
     configure_in_3ch(&ctx, slot_num);
-    
+    me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
+
     uint8_t tmp;
     ctx.lastTick = xTaskGetTickCount();
 

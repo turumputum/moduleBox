@@ -240,7 +240,7 @@ void TOFxxxF_task(void* arg) {
             } else {
                 index++;
                 if (index == 7) {
-                    if (crc16_modbus(&rawByte,5) == (rawByte[6] << 8 | rawByte[5])) {
+                    if (crc16_modbus(rawByte,5) == (rawByte[6] << 8 | rawByte[5])) {
                         int16_t receivedDistance = (rawByte[3] << 8) | rawByte[4];
                         if(receivedDistance>0){
                             distanceSens.currentPos = abs((rawByte[3] << 8) | rawByte[4]);

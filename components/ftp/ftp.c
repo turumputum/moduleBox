@@ -1061,7 +1061,7 @@ static void ftp_process_cmd (PCLIENT cl) {
 
 					if (cl->ftp_data.d_sd != -1)
 					{
-						if (connect(cl->ftp_data.d_sd, (struct sockaddr_in *)&portDef, sizeof(portDef)) == 0)
+						if (connect(cl->ftp_data.d_sd, (struct sockaddr *)&portDef, sizeof(portDef)) == 0)
 						{
 							ftp_send_reply(cl, 200, "PORT command successful.");
 						}
