@@ -23,3 +23,7 @@ dependencies.lock
 slot_test_run.out
 pyTest/slot_test_run.out
 pyTest/slot_test_logs/
+
+# python bytecode
+pyTest/__pycache__/
+__pycache__/

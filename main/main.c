@@ -18,6 +18,8 @@
 
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "esp_heap_caps.h"
+#include "esp_rom_sys.h"
 
 #include "esp_peripherals.h"
 #include "periph_sdcard.h"
@@ -451,8 +453,18 @@ uint64_t get_free_bytes_on_disk()
 }
 
 
-void app_main(void)	
+// OOM-инструментовка- вызывается ядром при ЛЮБОМ провале heap_caps_malloc/calloc/realloc-
+// caps показывает откуда просили (0x...0800 = MALLOC_CAP_INTERNAL, 0x...0400 = SPIRAM)-
+// IRAM_ATTR + esp_rom_printf чтобы быть ISR/lock-safe- внутри НЕ зовём malloc-
+static void IRAM_ATTR oom_failed_alloc_cb(size_t size, uint32_t caps, const char *function_name)
 {
+	esp_rom_printf("OOM: req=%u caps=0x%x fn=%s\n",
+	               (unsigned)size, (unsigned)caps, function_name ? function_name : "?");
+}
+
+void app_main(void)
+{
+	heap_caps_register_failed_alloc_callback(oom_failed_alloc_cb);
 
 	setLogLevel(4);
 	me_state.free_i2c_num=0;

@@ -478,13 +478,15 @@ int get_next_ledc_channel(void)
 	if (me_state.ledc_chennelCounter >= 8)
 	{
 		char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
-		sprintf(tmpStr, "LEDC channel limit reached: %d", me_state.ledc_chennelCounter);
-		mblog(E, tmpStr);
-		
-		sprintf(tmpStr, "%s/system/error:LEDC channel limit reached", me_config.deviceName);
-		report(tmpStr, 0);
-		heap_caps_free(tmpStr);
-		
+		if (tmpStr != NULL) {
+			sprintf(tmpStr, "LEDC channel limit reached: %d", me_state.ledc_chennelCounter);
+			mblog(E, tmpStr);
+
+			sprintf(tmpStr, "%s/system/error:LEDC channel limit reached", me_config.deviceName);
+			report(tmpStr, 0);
+			heap_caps_free(tmpStr);
+		}
+
 		return -1;
 	}
 	return me_state.ledc_chennelCounter++;

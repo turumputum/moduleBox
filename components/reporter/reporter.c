@@ -328,6 +328,10 @@ void spread_the_word_task(void *arg)
 {
 	//char tmpStr[555];
 	reporter_message_t received_message;
+	if (me_state.reporter_spread_queue == NULL) {
+		ESP_LOGE(TAG, "reporter_spread_queue create FAILED (OOM) - spread task disabled");
+		vTaskDelete(NULL);
+	}
 	for(;;){
 		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, portMAX_DELAY) == pdPASS)
 		{
@@ -349,6 +353,10 @@ void forward_report(char *msg, int slot_num)
 		send_message.str = copy;
 
 		send_message.slot_num = slot_num;
+		if (me_state.reporter_spread_queue == NULL) {
+			heap_caps_free(copy);
+			return;   // очередь не создалась (OOM) - не ассертим
+		}
 		esp_err_t ret = xQueueSend(me_state.reporter_spread_queue, &send_message, 5);
 
 		if(ret!= pdPASS){
@@ -363,6 +371,10 @@ void forward_report(char *msg, int slot_num)
 
 void reporter_task(void *arg){
 	reporter_message_t received_message;
+	if (me_state.reporter_queue == NULL) {
+		ESP_LOGE(TAG, "reporter_queue create FAILED (OOM) - reporter task disabled");
+		vTaskDelete(NULL);
+	}
 	for(;;){
 		if (xQueueReceive(me_state.reporter_queue, &received_message, portMAX_DELAY) == pdPASS){
 			int len = strlen(received_message.str) + strlen(me_state.trigger_topic_list[received_message.slot_num]) + 6;
@@ -410,6 +422,10 @@ void report(char *msg, int slot_num){
 	send_message.str = copy;
 
 	send_message.slot_num = slot_num;
+	if (me_state.reporter_queue == NULL) {
+		heap_caps_free(copy);
+		return;   // очередь не создалась (OOM) - не ассертим
+	}
 	esp_err_t ret = xQueueSend(me_state.reporter_queue, &send_message, 5);
 	//ESP_LOGD(TAG, "Set message:%s to report queue: %d", send_message.str, send_message.slot_num);
 	if(ret!= pdPASS){

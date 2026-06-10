@@ -823,8 +823,9 @@ void configure_button_swiperLed(PSMARTLEDCONFIG c, int slot_num)
 void swiperLed_task(void *arg)
 {
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    if (c == NULL) { vTaskDelete(NULL); }   // OOM - слот тихо отключается
     STDCOMMAND_PARAMS       params = { 0 };
-   
+
 	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
 
@@ -863,6 +864,12 @@ void swiperLed_task(void *arg)
     swiperLed.ledBrightMass = (uint8_t*) malloc(swiperLed.num_led * sizeof(uint8_t));
 	swiperLed.ledAngleRadian = 2 * M_PI / swiperLed.num_led;
 	swiperLed.ledsCoordinate = (uint16_t*) malloc(swiperLed.num_led / 2 * sizeof(uint16_t));
+	if (swiperLed.ledBrightMass == NULL || swiperLed.ledsCoordinate == NULL) {
+		free(swiperLed.ledBrightMass);
+		free(swiperLed.ledsCoordinate);
+		free(c);
+		vTaskDelete(NULL);   // OOM - слот тихо отключается
+	}
 	swiperLed.state = LED_STOP;
 
     setMinBright(&swiperLed);
@@ -1114,8 +1121,9 @@ void configure_button_ledRing(PSMARTLEDCONFIG c, int slot_num)
 
 }
 void ledRing_task(void *arg){
-    
+
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    if (c == NULL) { vTaskDelete(NULL); }   // OOM - слот тихо отключается
     uint8_t prevState=255;
 	int slot_num = (int)(intptr_t)arg;
 	uint8_t pin_num = SLOTS_PIN_MAP[slot_num][1];
@@ -1376,6 +1384,7 @@ void configure_button_ledBar(PSMARTLEDCONFIG c, int slot_num)
 void ledBar_task(void *arg)
 {
     PSMARTLEDCONFIG c = calloc(1, sizeof(SMARTLEDCONFIG));
+    if (c == NULL) { vTaskDelete(NULL); }   // OOM - слот тихо отключается
     STDCOMMAND_PARAMS       params = { 0 };
     
 	int slot_num = (int)(intptr_t)arg;

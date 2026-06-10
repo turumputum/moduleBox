@@ -14,7 +14,10 @@
 
 #include <manifest.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
@@ -208,36 +211,78 @@ bool checkExistent()
 int saveManifesto()
 {
 	int 			    result 		= ESP_FAIL;
-	FILE *			    manFile;
 	const char * 	    tmp;
     GET_MANIFEST_FUNC   f;
 
     if (!checkExistent())
     {
-        if ((manFile = fopen(MANIFESTO_FULL_FNAME, "w")) != NULL)
+        // IDF 5.5.4 FATFS портит файлы >64КБ при многих мелких write()-
+        // (манифест ~130КБ)- Собираем весь JSON в один буфер и пишем
+        // одним POSIX write()- stdio fwrite не годится- он буферизует и всё
+        // равно дробит на мелкие записи-
+        static const char * const trailer = "\n]\n}\n";
+
+        // 1й проход- считаем итоговый размер
+        size_t total = strlen(configDescription);
+        for (int i = 0; (f = funcs[i]) != NULL; i++)
         {
-            fprintf(manFile, "%s", configDescription);
-
-            for (int i = 0; (f = funcs[i]) != NULL; i++)
+            if ((tmp = (*f)()) != NULL)
             {
-                if ((tmp = (*f)()) != NULL)
-                {
-                    fprintf(manFile, "%s%s", 0 == i ? "\n" : ",\n", tmp);
-                }
+                total += (0 == i ? 1 : 2) + strlen(tmp);   // разделитель '\n' или ',\n'
             }
+        }
+        total += strlen(trailer);
 
-            fprintf(manFile, "%s", "\n]\n}\n");
+        // буфер >16КБ уходит в PSRAM (не давит на internal RAM)
+        char * buf = malloc(total + 1);
+        if (buf == NULL)
+        {
+            ESP_LOGE(TAG, "manifest save error: out of memory (%u bytes)", (unsigned)(total + 1));
+            return ESP_FAIL;
+        }
 
-            ESP_LOGI(TAG, "manifest saved");
+        // 2й проход- собираем единый буфер
+        char * p = buf;
+        size_t n = strlen(configDescription);
+        memcpy(p, configDescription, n); p += n;
+        for (int i = 0; (f = funcs[i]) != NULL; i++)
+        {
+            if ((tmp = (*f)()) != NULL)
+            {
+                const char * sep = (0 == i) ? "\n" : ",\n";
+                size_t sl = strlen(sep);
+                memcpy(p, sep, sl); p += sl;
+                size_t tl = strlen(tmp);
+                memcpy(p, tmp, tl); p += tl;
+            }
+        }
+        n = strlen(trailer);
+        memcpy(p, trailer, n); p += n;
 
-            result = ESP_OK;
-            
-            fclose(manFile);
+        size_t buflen = (size_t)(p - buf);
+
+        // один write() => FATFS получает весь файл одной f_write- обходим баг
+        int fd = open(MANIFESTO_FULL_FNAME, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0)
+        {
+            ssize_t written = write(fd, buf, buflen);
+            close(fd);
+            if (written == (ssize_t)buflen)
+            {
+                ESP_LOGI(TAG, "manifest saved (%u bytes, single write)", (unsigned)buflen);
+                result = ESP_OK;
+            }
+            else
+            {
+                ESP_LOGE(TAG, "manifest write short: %d/%u", (int)written, (unsigned)buflen);
+            }
         }
         else
         {
-            ESP_LOGE(TAG, "manifest save error: fopen() failed");
+            ESP_LOGE(TAG, "manifest save error: open() failed");
         }
+
+        free(buf);
     }
     else
     {
