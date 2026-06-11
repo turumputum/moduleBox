@@ -50,6 +50,7 @@ from pathlib import Path
 
 # ──────────────────── Маркеры лога ────────────────────
 OOM_RE = re.compile(r"OOM:\s*req=(\d+)\s+caps=0x([0-9a-fA-F]+)\s+fn=(\S+)")
+SKIP_RE = re.compile(r"\[(\d+)\] mode '([^']*)' SKIPPED.*low internal RAM (\d+) < (\d+)")
 HEAP_BOOT_RE = re.compile(r"free Heap size (\d+)")
 LOW_HEAP_RE = re.compile(r"Free heap size is LOW - (\d+)")
 WORKING_RE = re.compile(r"Load complite, start working")
@@ -128,6 +129,7 @@ def run_once(cdc, debug, disk_path, n_slots, module, options_str, window):
     res = {
         "slots": n_slots, "module": module, "options": options_str,
         "oom_events": [],          # (req, caps_decoded, fn)
+        "skips": [],               # (slot, mode, free, threshold) - сработал OOM-guard
         "panic": None,             # (kind, line)
         "booted": False,           # дошли до 'Load complite, start working'
         "heap_boot": None,         # первый 'free Heap size'
@@ -150,6 +152,12 @@ def run_once(cdc, debug, disk_path, n_slots, module, options_str, window):
             ev = (int(m.group(1)), decode_caps(m.group(2)), m.group(3))
             res["oom_events"].append(ev)
             log_warn(f"  OOM: req={ev[0]}B caps={ev[1]} fn={ev[2]}")
+            continue
+
+        sk = SKIP_RE.search(line)
+        if sk:
+            res["skips"].append((int(sk.group(1)), sk.group(2), int(sk.group(3)), int(sk.group(4))))
+            log_warn(f"  GUARD: слот {sk.group(1)} '{sk.group(2)}' пропущен (free {sk.group(3)} < {sk.group(4)})")
             continue
 
         for pat, kind in PANIC_PATTERNS:
@@ -178,6 +186,8 @@ def run_once(cdc, debug, disk_path, n_slots, module, options_str, window):
     # классификация
     if res["panic"]:
         res["verdict"] = "CRASH"
+    elif res["skips"] and res["booted"]:
+        res["verdict"] = "GUARDED"          # OOM-guard сработал- слоты пропущены- плата жива
     elif res["oom_events"] and res["booted"]:
         res["verdict"] = "GRACEFUL_OOM"
     elif res["oom_events"] and not res["booted"]:
@@ -192,13 +202,14 @@ def run_once(cdc, debug, disk_path, n_slots, module, options_str, window):
 def print_verdict(res):
     v = res["verdict"]
     color = {
-        "OK": C.OK, "GRACEFUL_OOM": C.WARN,
+        "OK": C.OK, "GUARDED": C.OK, "GRACEFUL_OOM": C.WARN,
         "CRASH": C.FAIL, "OOM_NO_BOOT": C.FAIL, "HANG": C.FAIL,
     }.get(v, C.INFO)
     heap = f"heap boot={res['heap_boot']} work={res['heap_working']}"
     oom = f"{len(res['oom_events'])} OOM" if res["oom_events"] else "no OOM"
+    grd = f", {len(res['skips'])} skip" if res["skips"] else ""
     print(f"  {color}[{v}]{C.END} {res['slots']}x {res['module']} "
-          f"({res['options']}) — {oom}, {heap}")
+          f"({res['options']}) — {oom}{grd}, {heap}")
     if res["panic"]:
         print(f"        {C.FAIL}{res['panic'][0]}: {res['panic'][1]}{C.END}")
     if res["oom_events"]:
@@ -270,15 +281,23 @@ def main():
     finally:
         if not args.no_cleanup:
             log_head("Очистка config.ini")
-            if wait_for_disk(disk_path):
-                write_oom_config(disk_path, 0, "empty", "")
+            # после CRASH устройство в reboot-loop и D: может не смонтироваться -
+            # пробуем затереть конфиг с ретраями, проверяя реальный успех записи
+            wiped = False
+            for attempt in range(5):
+                if wait_for_disk(disk_path) and write_oom_config(disk_path, 0, "empty", ""):
+                    wiped = True
+                    break
+                time.sleep(1.0)
+            if wiped:
                 log_ok("config.ini затёрт")
                 time.sleep(REBOOT_GRACE)
                 eject_volume(disk_path)
                 cdc.restart()
                 time.sleep(2)
             else:
-                log_fail(f"Диск {disk_path} не вернулся — конфиг не затёрт")
+                log_fail(f"Диск {disk_path} не вернулся/не записался - конфиг НЕ затёрт. "
+                         f"Достань SD и впиши mode=empty вручную, либо power-cycle")
         cdc.close(); debug.close()
 
     # итог
@@ -286,11 +305,17 @@ def main():
     for r in results:
         print_verdict(r)
     crash = next((r for r in results if r["verdict"] in ("CRASH", "OOM_NO_BOOT", "HANG")), None)
+    guarded = [r for r in results if r["verdict"] == "GUARDED"]
     graceful = [r for r in results if r["verdict"] == "GRACEFUL_OOM"]
     if crash:
         print(f"\n  {C.FAIL}{C.BOLD}OOM приводит к НЕ-graceful отказу: "
               f"{crash['verdict']} на {crash['slots']} слотах{C.END}")
         sys.exit(1)
+    elif guarded:
+        n = min(r['slots'] for r in guarded)
+        print(f"\n  {C.OK}{C.BOLD}OOM-guard сработал (с {n} слотов слоты пропускаются), "
+              f"плата устойчива - крашей нет{C.END}")
+        sys.exit(0)
     elif graceful:
         print(f"\n  {C.WARN}{C.BOLD}OOM обработан gracefully "
               f"(min слотов с OOM: {min(r['slots'] for r in graceful)}){C.END}")

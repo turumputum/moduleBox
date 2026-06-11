@@ -1,0 +1,113 @@
+
+[1m╔════════════════════════════════════════════════════════╗
+║   moduleBox OOM / Heap-Exhaustion Test                 ║
+╚════════════════════════════════════════════════════════╝[0m
+  [92m[PASS][0m  USB CDC: COM14
+  [92m[PASS][0m  Debug UART: COM4
+  [92m[PASS][0m  Диск: D:
+
+[1m────────────────────────────────────────────────────────────
+  Развёртка: 1..10 слотов button_smartLed по 1000 диодов
+────────────────────────────────────────────────────────────[0m
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 1 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (1x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  boot OK, free heap=100527[0m
+  [92m[OK][0m 1x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=100527
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 2 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (2x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [2m  boot OK, free heap=87519[0m
+  [92m[OK][0m 2x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=87519
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 3 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (3x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [2m  boot OK, free heap=74643[0m
+  [92m[OK][0m 3x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=74643
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 4 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (4x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [2m  boot OK, free heap=61731[0m
+  [92m[OK][0m 4x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=61731
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 5 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (5x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [2m  boot OK, free heap=50507[0m
+  [92m[OK][0m 5x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=50507
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 6 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (6x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [2m  boot OK, free heap=35979[0m
+  [92m[OK][0m 6x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=35979
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 7 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (7x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [2m  boot OK, free heap=23151[0m
+  [92m[OK][0m 7x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=23151
+
+[1m────────────────────────────────────────────────────────────
+  Шаг: 8 слот(ов)
+────────────────────────────────────────────────────────────[0m
+  [2m  диск D: извлечён[0m
+  [96m[INFO][0m  system/restart (8x button_smartLed numOfLed=numOfLed:1000)...
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [93m[WARN][0m    OOM: req=1516B caps=INTERNAL|DMA fn=heap_caps_aligned_alloc
+  [91m[FAIL][0m    PANIC[panic]: Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
+  [91m[FAIL][0m    PANIC[backtrace]: Backtrace: 0x40056f59:0x3fce8f50 0x403792f4:0x3fce8f60 0x40379f06:0x3fce8f80 0x40379f91:0x3fce8fb0 0x4037a0da:0x3fce8ff0 0x42047f5f:0x3fce9010 0x4211aad7:0x3fce9070 0x42046e13:0x3fce9090 0x420480c3:0x3fce90c0 0x42047b3b:0x3fce9100 0x40382ad9:0x3fce9140
+  [91m[FAIL][0m    PANIC[reboot]: Rebooting...
+  [91m[CRASH][0m 8x button_smartLed (numOfLed:1000) — 1 OOM, heap boot=256463 work=None
+        [91mreboot: Rebooting...[0m
+        [2mOOM x1: caps=INTERNAL|DMA fn=heap_caps_aligned_alloc[0m
+  [93m[WARN][0m  Останов развёртки на 8 слотах: CRASH
+
+[1m────────────────────────────────────────────────────────────
+  Очистка config.ini
+────────────────────────────────────────────────────────────[0m
+  [91m[FAIL][0m  Запись config.ini: [Errno 22] Invalid argument: 'D:config.ini'
+  [92m[PASS][0m  config.ini затёрт
+  [2m  CDC не отвечает, переоткрываем...[0m
+  [93m[WARN][0m  CDC COM14: Cannot configure port, something went wrong. Original message: OSError(22, 'Указано несуществующее устройство.', None, 433)
+  [93m[WARN][0m  CDC COM14: could not open port 'COM14': FileNotFoundError(2, 'Не удается найти указанный файл.', None, 2)
+
+[1m────────────────────────────────────────────────────────────
+  ИТОГ
+────────────────────────────────────────────────────────────[0m
+  [92m[OK][0m 1x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=100527
+  [92m[OK][0m 2x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=87519
+  [92m[OK][0m 3x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=74643
+  [92m[OK][0m 4x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=61731
+  [92m[OK][0m 5x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=50507
+  [92m[OK][0m 6x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=35979
+  [92m[OK][0m 7x button_smartLed (numOfLed:1000) — no OOM, heap boot=256463 work=23151
+  [91m[CRASH][0m 8x button_smartLed (numOfLed:1000) — 1 OOM, heap boot=256463 work=None
+        [91mreboot: Rebooting...[0m
+        [2mOOM x1: caps=INTERNAL|DMA fn=heap_caps_aligned_alloc[0m
+
+  [91m[1mOOM приводит к НЕ-graceful отказу: CRASH на 8 слотах[0m

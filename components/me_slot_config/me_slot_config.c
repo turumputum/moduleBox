@@ -83,6 +83,14 @@ adc_channel_t SLOT_ADC_MAP[6]={
 };
 
 
+// OOM-guard- ниже этого свободного INTERNAL RAM новый слот не стартуем-
+// ВАЖНО- сетевой стек (Ethernet/WiFi + FTP + mDNS + MQTT- ~65КБ) поднимается
+// ПОСЛЕ init_slots- поэтому если сеть включена- резервируем под неё заранее-
+// иначе после слотов сеть доедает internal RAM и входящий кадр падает с
+// LoadProhibited в IDF-драйвере W5500 (setup_dma_priv_buffer- см- oom_test)-
+#define SLOT_RESERVE_BASE     (40 * 1024)   // система- USB- reporter- DMA (I2S/RMT)
+#define SLOT_RESERVE_NETWORK  (80 * 1024)   // Ethernet/WiFi + FTP + mDNS + MQTT + RX-буферы
+
 int init_slots(void){
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
@@ -111,6 +119,23 @@ int init_slots(void){
 		ESP_LOGD(TAG,"[%d] check mode: '%s'", i, me_config.slot_mode[i]);
 
 		const char *mode = me_config.slot_mode[i];
+
+		// OOM-guard- реальный модуль не стартуем при нехватке internal RAM-
+		if (strlen(mode) && strcmp(mode, "empty") && strcmp(mode, "SD_card")) {
+			size_t reserve = SLOT_RESERVE_BASE;
+			if (me_config.LAN_enable || me_config.WIFI_enable)
+				reserve += SLOT_RESERVE_NETWORK;   // сеть стартует ПОСЛЕ слотов - резервируем заранее
+			size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+			if (freeInternal < reserve) {
+				char msg[128];
+				snprintf(msg, sizeof(msg),
+				         "[%d] mode '%s' SKIPPED- low internal RAM %u < %u (reserved for system/Ethernet)",
+				         i, mode, (unsigned)freeInternal, (unsigned)reserve);
+				ESP_LOGE(TAG, "%s", msg);
+				mblog(E, msg);
+				continue;
+			}
+		}
 
 		if(!strlen(mode) || !strcmp(mode, "empty") || !strcmp(mode, "SD_card")){
 			// empty
