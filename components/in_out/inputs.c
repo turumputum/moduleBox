@@ -176,11 +176,7 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", ctx->refreshPeriod, slot_num);
 
     // Setup topic
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        char* custom_topic = get_option_string_val(slot_num, "topic", "/in_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
-        ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    } else {
+    {
         char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
         sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
@@ -222,28 +218,38 @@ static void in_2ch_task(void *arg) {
     
     configure_in_2ch(&ctx, slot_num);
     me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
-    
+
     uint8_t tmp;
-    ctx.lastTick = xTaskGetTickCount();
+
+    // Per-channel debounce: a new level must hold continuously for
+    // debounceGap ms before it is accepted as the channel state.
+    int cand_0 = ctx.prevState_0, cand_1 = ctx.prevState_1;
+    int64_t since_0 = 0, since_1 = 0;
+    int64_t gap_us = (int64_t)ctx.debounceGap * 1000;
 
     while (1) {
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, ctx.refreshPeriod / portTICK_PERIOD_MS)) {
-            vTaskDelay(ctx.debounceGap / portTICK_PERIOD_MS);
-        }
+        // While a candidate is still settling, poll at the debounce
+        // resolution; otherwise idle until the next edge or refreshPeriod.
+        int pending = (cand_0 != ctx.prevState_0) || (cand_1 != ctx.prevState_1);
+        TickType_t wait = pending ? pdMS_TO_TICKS(ctx.debounceGap)
+                                  : pdMS_TO_TICKS(ctx.refreshPeriod);
+        if (wait < 1) wait = 1;
+        xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, wait);
 
-        TickType_t now = xTaskGetTickCount();
-        if ((now - ctx.lastTick) * portTICK_PERIOD_MS < ctx.debounceGap) {
-            continue;
-        }
-        ctx.lastTick = now;
+        int64_t now = esp_timer_get_time();
 
-        // Read current states
-        ctx.stat_0 = gpio_get_level(ctx.pin_0) ? !ctx.inverse_0 : ctx.inverse_0;
-        ctx.stat_1 = gpio_get_level(ctx.pin_1) ? !ctx.inverse_1 : ctx.inverse_1;
+        // Read raw levels and (re)start the debounce window on any move.
+        int raw_0 = gpio_get_level(ctx.pin_0) ? !ctx.inverse_0 : ctx.inverse_0;
+        int raw_1 = gpio_get_level(ctx.pin_1) ? !ctx.inverse_1 : ctx.inverse_1;
+        if (raw_0 != cand_0) { cand_0 = raw_0; since_0 = now; }
+        if (raw_1 != cand_1) { cand_1 = raw_1; since_1 = now; }
 
-        // Check for state changes
-        int changed_0 = (ctx.stat_0 != ctx.prevState_0);
-        int changed_1 = (ctx.stat_1 != ctx.prevState_1);
+        // Accept a candidate only once it has held for debounceGap ms.
+        int changed_0 = (cand_0 != ctx.prevState_0) && (now - since_0 >= gap_us);
+        int changed_1 = (cand_1 != ctx.prevState_1) && (now - since_1 >= gap_us);
+
+        ctx.stat_0 = changed_0 ? cand_0 : ctx.prevState_0;
+        ctx.stat_1 = changed_1 ? cand_1 : ctx.prevState_1;
 
         if (changed_0 || changed_1) {
             if (ctx.logic == INDEPENDENT_MODE) {
@@ -341,11 +347,7 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", ctx->refreshPeriod, slot_num);
 
     // Setup topic
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        char* custom_topic = get_option_string_val(slot_num, "topic", "/in_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
-        ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    } else {
+    {
         char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
         sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
@@ -390,30 +392,43 @@ static void in_3ch_task(void *arg) {
     in_3ch_context_t ctx = IN_3CH_CONTEXT_DEFAULT();
     
     configure_in_3ch(&ctx, slot_num);
-    
+
     uint8_t tmp;
-    ctx.lastTick = xTaskGetTickCount();
+
+    // Per-channel debounce: a new level must hold continuously for
+    // debounceGap ms before it is accepted as the channel state.
+    int cand_0 = ctx.prevState_0, cand_1 = ctx.prevState_1, cand_2 = ctx.prevState_2;
+    int64_t since_0 = 0, since_1 = 0, since_2 = 0;
+    int64_t gap_us = (int64_t)ctx.debounceGap * 1000;
 
     while (1) {
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, ctx.refreshPeriod / portTICK_PERIOD_MS)) {
-            vTaskDelay(ctx.debounceGap / portTICK_PERIOD_MS);
-        }
+        // While a candidate is still settling, poll at the debounce
+        // resolution; otherwise idle until the next edge or refreshPeriod.
+        int pending = (cand_0 != ctx.prevState_0) || (cand_1 != ctx.prevState_1) ||
+                      (cand_2 != ctx.prevState_2);
+        TickType_t wait = pending ? pdMS_TO_TICKS(ctx.debounceGap)
+                                  : pdMS_TO_TICKS(ctx.refreshPeriod);
+        if (wait < 1) wait = 1;
+        xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, wait);
 
-        TickType_t now = xTaskGetTickCount();
-        if ((now - ctx.lastTick) * portTICK_PERIOD_MS < ctx.debounceGap) {
-            continue;
-        }
-        ctx.lastTick = now;
+        int64_t now = esp_timer_get_time();
 
-        // Read current states
-        ctx.stat_0 = gpio_get_level(ctx.pin_0) ? !ctx.inverse_0 : ctx.inverse_0;
-        ctx.stat_1 = gpio_get_level(ctx.pin_1) ? !ctx.inverse_1 : ctx.inverse_1;
-        ctx.stat_2 = gpio_get_level(ctx.pin_2) ? !ctx.inverse_2 : ctx.inverse_2;
+        // Read raw levels and (re)start the debounce window on any move.
+        int raw_0 = gpio_get_level(ctx.pin_0) ? !ctx.inverse_0 : ctx.inverse_0;
+        int raw_1 = gpio_get_level(ctx.pin_1) ? !ctx.inverse_1 : ctx.inverse_1;
+        int raw_2 = gpio_get_level(ctx.pin_2) ? !ctx.inverse_2 : ctx.inverse_2;
+        if (raw_0 != cand_0) { cand_0 = raw_0; since_0 = now; }
+        if (raw_1 != cand_1) { cand_1 = raw_1; since_1 = now; }
+        if (raw_2 != cand_2) { cand_2 = raw_2; since_2 = now; }
 
-        // Check for state changes
-        int changed_0 = (ctx.stat_0 != ctx.prevState_0);
-        int changed_1 = (ctx.stat_1 != ctx.prevState_1);
-        int changed_2 = (ctx.stat_2 != ctx.prevState_2);
+        // Accept a candidate only once it has held for debounceGap ms.
+        int changed_0 = (cand_0 != ctx.prevState_0) && (now - since_0 >= gap_us);
+        int changed_1 = (cand_1 != ctx.prevState_1) && (now - since_1 >= gap_us);
+        int changed_2 = (cand_2 != ctx.prevState_2) && (now - since_2 >= gap_us);
+
+        ctx.stat_0 = changed_0 ? cand_0 : ctx.prevState_0;
+        ctx.stat_1 = changed_1 ? cand_1 : ctx.prevState_1;
+        ctx.stat_2 = changed_2 ? cand_2 : ctx.prevState_2;
 
         if (changed_0 || changed_1 || changed_2) {
             if (ctx.logic == INDEPENDENT_MODE) {

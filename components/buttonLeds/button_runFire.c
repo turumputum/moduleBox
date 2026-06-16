@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "me_slot_config.h"
 #include "stateConfig.h"
 #include "executor.h"
@@ -96,13 +97,7 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->button.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "hz", 40, 1, 100));
 
-    if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL)
     {
-        /* Топик для событий кнопки
-        */
-        char * custom_topic = get_option_string_val(slot_num, "buttonTopic", "/button_0");
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-    }else{
         char t_str[strlen(me_config.deviceName)+strlen("/button_0")+3];
         sprintf(t_str, "%s/button_%d",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
@@ -194,21 +189,12 @@ void configure_button_runFire(PMODULE_CONTEXT ctx, int slot_num)
         ESP_LOGE(TAG, "animMode: unrecognized value");
     }
 
-    if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
-        char* custom_topic=NULL;
-        /* Определяет топик для MQTT сообщений */
-        custom_topic = get_option_string_val(slot_num, "ledTopic", "/runFire_0");
-        me_state.action_topic_list[slot_num]=strdup(custom_topic);
-    }else{
+    {
         char t_str[strlen(me_config.deviceName)+strlen("/runFire_0")+3];
         sprintf(t_str, "%s/runFire_%d",me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num]=strdup(t_str);
     }
 
-    /* задаёт текущее состояние светодиода (вкл/выкл)
-    Числовое значение 0-1
-    */
-    stdcommand_register(&ctx->led.cmds, RUNFIRE_default, "action/ledEnable", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
@@ -382,9 +368,12 @@ void button_runFire_task(void *arg)
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
+    // Pixel buffers in PSRAM (RMT here is non-DMA, so PSRAM is safe).
     uint16_t pixel_buf_size = ctx->led.num_of_led * 3;
-    uint8_t *current_pixels = calloc(pixel_buf_size, sizeof(uint8_t));
-    uint8_t *target_pixels  = calloc(pixel_buf_size, sizeof(uint8_t));
+    uint8_t *current_pixels = heap_caps_calloc(1, pixel_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (current_pixels == NULL) current_pixels = calloc(pixel_buf_size, sizeof(uint8_t));
+    uint8_t *target_pixels  = heap_caps_calloc(1, pixel_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (target_pixels == NULL) target_pixels = calloc(pixel_buf_size, sizeof(uint8_t));
 
     rmt_led_heap_t rmt_heap = RMT_LED_HEAP_DEFAULT();
     rmt_heap.tx_chan_config.gpio_num = pin_out;
@@ -393,7 +382,6 @@ void button_runFire_task(void *arg)
     int prev_button_state = -1;
     int phase = 0;
     uint8_t prevState = 255; // force update on first cycle
-    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -405,12 +393,10 @@ void button_runFire_task(void *arg)
         switch (cmd) {
             case STDCMD_ENABLE:
                 if (params.count > 0) {
-                    active_state = params.p[0].i ? 1 : 0;
-                    ESP_LOGD(TAG, "[button_runFire_%d] enable:%d", slot_num, active_state);
+                    // enable controls the LED on/off, not the button
+                    ctx->led.state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_runFire_%d] ledEnable:%d", slot_num, ctx->led.state);
                 }
-                break;
-            case RUNFIRE_default:
-                ctx->led.state = params.p[0].i ? 1 : 0;
                 break;
             case RUNFIRE_toggleLedState:
                 ctx->led.state = !ctx->led.state;
@@ -422,16 +408,15 @@ void button_runFire_task(void *arg)
                 break;
         }
 
-        if (active_state) {
-            uint8_t msg;
-            int button_raw = gpio_get_level(pin_in);
-            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-                button_raw = gpio_get_level(pin_in);
-            }
-            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
+        // Button is always polled - enable controls only the LED
+        uint8_t msg;
+        int button_raw = gpio_get_level(pin_in);
+        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+            button_raw = gpio_get_level(pin_in);
         }
+        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_runFire(&ctx->led, current_pixels, target_pixels, &rmt_heap, slot_num, &phase, &prevState);
 

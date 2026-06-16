@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "me_slot_config.h"
 #include "stateConfig.h"
 #include "executor.h"
@@ -84,13 +85,7 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->button.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096));
 
-    if (strstr(me_config.slot_options[slot_num], "buttonTopic") != NULL)
     {
-        /* Топик для событий кнопки
-        */
-        char * custom_topic = get_option_string_val(slot_num, "buttonTopic", "/button_0");
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-    }else{
         char t_str[strlen(me_config.deviceName)+strlen("/button_0")+3];
         sprintf(t_str, "%s/button_%d",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
@@ -164,21 +159,12 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
         ESP_LOGE(TAG, "Wrong color value slot:%d", slot_num);
     }
 
-    if (strstr(me_config.slot_options[slot_num], "ledTopic") != NULL) {
-		char* custom_topic=NULL;
-        /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "ledTopic", "/ledBar_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-    }else{
+    {
 		char t_str[strlen(me_config.deviceName)+strlen("/ledBar_0")+3];
 		sprintf(t_str, "%s/ledBar_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 	}
    
-    /* задаёт текущее состояние светодиода (вкл/выкл)
-    Числовое значение 0-1
-    */
-    stdcommand_register(&ctx->led.cmds, LEDBAR_default, "action/ledEnable", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное
     */
@@ -325,12 +311,16 @@ void button_ledBar_task(void *arg)
 
     me_state.command_queue[slot_num] = xQueueCreate(15, sizeof(command_message_t));
 
-    uint8_t pixels[ctx->led.num_of_led * 3];
-    uint8_t current_bright_mass[ctx->led.num_of_led];
-    uint8_t target_bright_mass[ctx->led.num_of_led];
-    memset(pixels, 0, sizeof(pixels));
-    memset(current_bright_mass, 0, sizeof(current_bright_mass));
-    memset(target_bright_mass, 0, sizeof(target_bright_mass));
+    // Pixel + brightness buffers in PSRAM (RMT here is non-DMA, so PSRAM is
+    // safe) to keep the task stack small.
+    size_t pixels_size = ctx->led.num_of_led * 3;
+    size_t mass_size = ctx->led.num_of_led;
+    uint8_t *pixels = heap_caps_calloc(1, pixels_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (pixels == NULL) pixels = calloc(1, pixels_size);
+    uint8_t *current_bright_mass = heap_caps_calloc(1, mass_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (current_bright_mass == NULL) current_bright_mass = calloc(1, mass_size);
+    uint8_t *target_bright_mass = heap_caps_calloc(1, mass_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (target_bright_mass == NULL) target_bright_mass = calloc(1, mass_size);
 
     rmt_led_heap_t rmt_heap = RMT_LED_HEAP_DEFAULT();
     rmt_heap.tx_chan_config.gpio_num = pin_out;
@@ -340,7 +330,6 @@ void button_ledBar_task(void *arg)
     RgbColor currentRGB = {0, 0, 0};
     int targetPos = 0;
     uint8_t prevState = 255; // force recalc on first cycle
-    bool active_state = 1;
 
     waitForWorkPermit(slot_num);
     TickType_t lastWakeTime = xTaskGetTickCount();
@@ -350,12 +339,10 @@ void button_ledBar_task(void *arg)
         switch (stdcommand_receive(&ctx->led.cmds, &params, 0)) {
             case STDCMD_ENABLE:
                 if (params.count > 0) {
-                    active_state = params.p[0].i ? 1 : 0;
-                    ESP_LOGD(TAG, "[button_ledBar_%d] enable:%d", slot_num, active_state);
+                    // enable controls the LED on/off, not the button
+                    ctx->led.state = params.p[0].i ? 1 : 0;
+                    ESP_LOGD(TAG, "[button_ledBar_%d] ledEnable:%d", slot_num, ctx->led.state);
                 }
-                break;
-            case LEDBAR_default:
-                ctx->led.state = params.p[0].i;
                 break;
             case LEDBAR_toggleLedState:
                 ctx->led.state = !ctx->led.state;
@@ -372,16 +359,15 @@ void button_ledBar_task(void *arg)
                 break;
         }
 
-        if (active_state) {
-            uint8_t msg;
-            int button_raw = gpio_get_level(pin_in);
-            if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-                if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-                button_raw = gpio_get_level(pin_in);
-            }
-            int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
-            button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
+        // Button is always polled - enable controls only the LED
+        uint8_t msg;
+        int button_raw = gpio_get_level(pin_in);
+        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
+            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
+            button_raw = gpio_get_level(pin_in);
         }
+        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+        button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_bar(&ctx->led, pixels, current_bright_mass, target_bright_mass, &rmt_heap, slot_num, &currentRGB, &targetPos, &prevState);
 

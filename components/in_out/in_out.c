@@ -127,13 +127,7 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
     }
 
     // Setup input topic
-    if (strstr(me_config.slot_options[slot_num], "inTopic") != NULL) {
-        /* Пользовательская топик для входного сигнала
-        */
-        char* custom_topic = get_option_string_val(slot_num, "inTopic", "/in_0");
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
-        ESP_LOGD(TAG, "Custom trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    } else {
+    {
         char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
         sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
@@ -156,13 +150,7 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
     ESP_LOGD(TAG, "Set outDefaultState:%d for slot:%d", ctx->defaultState, slot_num);
     
     // Setup output topic
-    if (strstr(me_config.slot_options[slot_num], "outTopic") != NULL) {
-        /* Пользовательская топик для выходного сигнала
-        */
-        char* custom_topic = get_option_string_val(slot_num, "outTopic", "/out_0");
-        me_state.action_topic_list[slot_num] = strdup(custom_topic);
-        ESP_LOGD(TAG, "Custom action_topic:%s", me_state.action_topic_list[slot_num]);
-    } else {
+    {
         char t_str[strlen(me_config.deviceName) + strlen("/out_0") + 3];
         sprintf(t_str, "%s/out_%d", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
@@ -266,26 +254,20 @@ static void in_out_task(void *arg) {
     set_out_level(&ctx, ctx.out_state);  
 
     // Read initial INPUT state
-    uint32_t tick = xTaskGetTickCount();
     if (gpio_get_level(ctx.in_pin_num)) {
         ctx.state = ctx.inverse_in ? 0 : 1;
     } else {
         ctx.state = ctx.inverse_in ? 1 : 0;
     }
-    
+
     // Report initial input state
     stdreport_i(ctx.stateReport, ctx.state);
     ctx.prevState = ctx.state;
 
-    // Create debounce timer
-    esp_timer_handle_t debounce_gap_timer;
-    const esp_timer_create_args_t delay_timer_args = {
-        .callback = &gpio_isr_handler,
-        .arg = (void*)slot_num,
-        .name = "debounce_gap_timer"
-    };
-    esp_timer_create(&delay_timer_args, &debounce_gap_timer);
-
+    // Debounce: a new level must hold continuously for debounceGap ms
+    // before it is accepted as the new reported state.
+    int candidate = ctx.state;          // level currently being timed
+    int64_t candidate_since = 0;        // us timestamp when candidate first appeared
 
     esp_timer_handle_t impulse_timer;
     const esp_timer_create_args_t impulse_timer_args = {
@@ -307,35 +289,35 @@ static void in_out_task(void *arg) {
     for (;;) {
         uint8_t tmp;
 
-        // Check for INPUT events (with timeout to also handle OUTPUT commands)
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, pdMS_TO_TICKS(10)) == pdPASS) {
-            // Read current INPUT state
-            if (gpio_get_level(ctx.in_pin_num)) {
-                ctx.state = ctx.inverse_in ? 0 : 1;
-            } else {
-                ctx.state = ctx.inverse_in ? 1 : 0;
-            }
+        // Wake on an input edge, otherwise poll every 10 ms (also lets us
+        // re-check a pending debounce candidate and service OUTPUT commands).
+        xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, pdMS_TO_TICKS(10));
 
-            // Check debounce
-            if (ctx.debounceGap != 0) {
-                if ((xTaskGetTickCount() - tick) < ctx.debounceGap) {
-                    continue;
-                }
-            }
+        // Read current raw INPUT level
+        int raw;
+        if (gpio_get_level(ctx.in_pin_num)) {
+            raw = ctx.inverse_in ? 0 : 1;
+        } else {
+            raw = ctx.inverse_in ? 1 : 0;
+        }
 
-            // Check state change
-            if (ctx.state != ctx.prevState) {
-                ctx.prevState = ctx.state;
+        int64_t now = esp_timer_get_time();
 
-                // Send report only when enabled
-                if (active_state) {
-                    stdreport_i(ctx.stateReport, ctx.state);
-                }
+        // Restart the debounce window whenever the raw level moves.
+        if (raw != candidate) {
+            candidate = raw;
+            candidate_since = now;
+        }
 
-                tick = xTaskGetTickCount();
-                if (ctx.debounceGap != 0) {
-                    esp_timer_start_once(debounce_gap_timer, ctx.debounceGap * 1000);
-                }
+        // Accept the candidate only after it has held for debounceGap ms.
+        if (candidate != ctx.prevState &&
+            (now - candidate_since) >= (int64_t)ctx.debounceGap * 1000) {
+            ctx.state = candidate;
+            ctx.prevState = candidate;
+
+            // Send report only when enabled
+            if (active_state) {
+                stdreport_i(ctx.stateReport, ctx.state);
             }
         }
 

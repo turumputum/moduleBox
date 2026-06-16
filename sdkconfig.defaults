@@ -1,0 +1,22 @@
+# moduleBox build defaults.
+# Persisted here so an idf.py set-target / menuconfig regen of sdkconfig keeps
+# the internal-RAM (DRAM) tuning. Edit here AND in sdkconfig when changing.
+
+# --- Internal-RAM (DRAM) tuning ---------------------------------------------
+# Move Wi-Fi/LWIP dynamic buffers to PSRAM (biggest internal-RAM win).
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# Trim Wi-Fi buffer pools (control-plane traffic: MQTT/OSC/UDP, not bulk).
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
+
+# Smaller TCP windows + UDP mailbox (64 was anomalously high).
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
+CONFIG_LWIP_TCP_WND_DEFAULT=2880
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=16
+
+# Put the mDNS task stack + allocations in PSRAM (also stops the OOM abort
+# in start_mdns_task when internal RAM is tight).
+CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM=y
+CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
