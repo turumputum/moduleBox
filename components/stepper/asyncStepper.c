@@ -305,7 +305,15 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
 // перестают быть равными - на высокой частоте урезаем pulseWidth до period/2 и пишем warning.
 void stepper_setPeriod(stepper_t *stepper, uint32_t period){
     if(period < STEPPER_MIN_PERIOD) period = STEPPER_MIN_PERIOD;
-    if(period > UINT16_MAX)         period = UINT16_MAX;
+    // Пол по скорости: период не больше resolution/minSpeed (и не больше UINT16_MAX -
+    // аппаратный предел таймера). Так мотор никогда не ползёт медленнее minSpeed
+    // и короткие доезды не тянутся на ~15 шаг/с.
+    uint32_t maxPeriod = UINT16_MAX;
+    if(stepper->minSpeed > 0){
+        uint32_t minSpeedPeriod = stepper->resolution / stepper->minSpeed;
+        if(minSpeedPeriod < maxPeriod) maxPeriod = minSpeedPeriod;
+    }
+    if(period > maxPeriod) period = maxPeriod;
 
     uint32_t high = stepper->pulseWidth;
     uint32_t halfPeriod = period / 2;
@@ -378,7 +386,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
         }
     }else if(stepper->dir==DIR_CCW){
         while(watchPoint<INT16_MIN){
-            watchPoint+=INT16_MIN;
+            watchPoint-=INT16_MIN;
         }
     }
     // Точка останова цели не должна совпадать с граничной watch-точкой аккумуляции
@@ -404,6 +412,9 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     // Все множители приводим к int64 ДО умножения, иначе 2*accel считается в uint32
     // и переполняется при больших accel (до INT32_MAX).
     int64_t reachableSpeed = sqrt(((int64_t)2*stepper->accel*llabs(distance)+((int64_t)stepper->currentSpeed*(int64_t)stepper->currentSpeed))/2);
+
+    // Пол трапеции: целевая скорость короткого хода не ниже minSpeed.
+    if(reachableSpeed < stepper->minSpeed) reachableSpeed = stepper->minSpeed;
 
     if(reachableSpeed<stepper->maxSpeed){
         stepper->targetSpeed = reachableSpeed;

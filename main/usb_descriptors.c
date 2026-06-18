@@ -347,19 +347,16 @@ int _usb_log_vprintf(const char *fmt, va_list args)
       int length = vsnprintf(logBuff, sizeof(logBuff) - 1, fmt, list_copy);
       va_end(list_copy);
 
-        for (int i = 0; i < length;) {
-            int n = length - i;
-            int avail = (int) tud_cdc_write_available();
-            if (n > avail) n = avail;
-            if (n) {
-                int n2 = (int) tud_cdc_write(logBuff + i, (uint32_t)n);
-                tud_task();
-                tud_cdc_write_flush();
-                i += n2;
-            } else {
-                tud_task();
-                tud_cdc_write_flush();
-            }
+        if (length > 0) {
+            /* НЕЛЬЗЯ звать tud_task() отсюда: это реентрантный вход в событийный
+               цикл TinyUSB, который уже крутит usb_device_task. Повторный вход
+               рвёт состояние DWC2 (DIEPTSIZ/xfer-buffer) и роняет IN-ISR в
+               гигантский memcpy -> Interrupt WDT.
+               Просто кладём строку в TX-FIFO - запись по endpoint claim
+               сериализована и безопасна из любой задачи; слив делает
+               usb_device_task. Если строка длиннее свободного места FIFO,
+               лишнее молча отбрасывается - для отладочного лога приемлемо. */
+            tud_cdc_write(logBuff, (uint32_t)length);
         }
     }
 

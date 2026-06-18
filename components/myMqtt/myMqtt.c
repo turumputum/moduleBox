@@ -379,7 +379,7 @@ int mqtt_app_start(void)
     esp_mqtt_client_config_t mqtt_cfg = {
     	.credentials.client_id = me_config.deviceName,
 		.broker.address.uri = brokerUri,
-		.session.keepalive = 60,  // Увеличено с 15 — даёт больше запаса при нагрузке на CPU
+		.session.keepalive = me_config.mqttKeepAlive,  // По умолчанию 60 — даёт запас при нагрузке на CPU
 		.session.last_will.topic = willTopic,
 		.session.last_will.msg = "0",
 		// Таймаут сетевой операции: при half-open PINGREQ без PINGRESP в пределах
@@ -418,8 +418,8 @@ int mqtt_app_start(void)
 	mqtt_watchdog_start();
 	mqtt_liveness_start();
 
-	ESP_LOGI(TAG, "MQTT QOS=%d, WatchdogTimeout=%d sec, retain=false, TLS=%s, auth=%s",
-		me_config.mqttQOS, me_config.mqttWatchdogTimeout,
+	ESP_LOGI(TAG, "MQTT QOS=%d, WatchdogTimeout=%d sec, KeepAlive=%d sec, retain=false, TLS=%s, auth=%s",
+		me_config.mqttQOS, me_config.mqttWatchdogTimeout, me_config.mqttKeepAlive,
 		me_config.mqttTLS ? "on" : "off",
 		me_config.mqttLogin[0] ? "yes" : "no");
     ESP_LOGD(TAG, "MQTT init complite. Duration: %ld ms. Heap usage: %lu", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize());

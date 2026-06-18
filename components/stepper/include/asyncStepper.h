@@ -89,6 +89,7 @@ typedef struct {
   uint32_t resolution;
 
   int32_t maxSpeed;
+  int32_t minSpeed;      // пол скорости (старт/стоп трапеции), шаг/с
   int32_t currentSpeed;
   int32_t targetSpeed;
 
@@ -129,6 +130,7 @@ typedef struct {
   .pcnt_watchPoint = 0,\
   .resolution = 1000000,\
   .maxSpeed = 100,\
+  .minSpeed = 2,\
   .currentSpeed = 0,\
   .targetSpeed = 0,\
   .targetPos = 0,\

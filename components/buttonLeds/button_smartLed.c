@@ -75,24 +75,24 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->button.button_inverse = get_option_flag_val(slot_num, "buttonInverse");
 
-    /* Глубина фильтра от дребезга
+    /* Глубина фильтра от дребезга контактов в мс. По умолчанию 10, 1-4096
     */
-    ctx->button.debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "", 10, 1, 4096);
+    ctx->button.debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "ms", 10, 1, 4096);
 
-    /* Продолжительность длинного нажатия
-    - при значении 0 функция не активна
+    /* Продолжительность длинного нажатия. По умолчанию 0. 1-65535 мс.
     */
     ctx->button.longPressTime 	= get_option_int_val(slot_num, "longPressTime", "ms", 0, 0, 65535);
 
-    /* Длительность промежутка между нажатиями для регистрации двойного нажатия
+    /* Длительность промежутка между нажатиями для регистрации двойного нажатия. По умолчанию 0. 1-65535 мс.
     */
     ctx->button.doubleClickTime = get_option_int_val(slot_num, "doubleClickTime", "ms", 0, 0, 65535);
 
-    /* Флаг задаёт фильтрацию совытий при активных
+    /* Подавляет короткое событие press, когда сработало длинное или двойное нажатие
+       Выключен (0, по умолчанию) - короткие события шлются всегда
     */
     ctx->button.event_filter = get_option_flag_val(slot_num, "eventFilter");
 
-    /* Период обновления
+    /* Период обновления потока кнопки в мс, по умолчанию 25 (40 Гц)
     */
     ctx->button.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096));
 
@@ -102,53 +102,55 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
     }
 
-	/* Рапортует при изменении состояния кнопки
+    /* === EVENTS === */
+
+	/* Рапортует при изменении состояния кнопки. 0-1.
 	*/
 	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/press", 0, 1);
 
-	/* Рапортует при регистрации длинного нажатия
+	/* Рапортует при регистрации длинного нажатия. 0-1.
 	*/
 	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "state", "event/longPress", 0, 1);
 
-	/* Рапортует при регистрации двойного нажатия
+	/* Рапортует при регистрации двойного нажатия. 0-1.
 	*/
 	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "event/doubleClick", 0, 1);
 
     // --- Smart LED logic config ---
-    /* Количенство светодиодов
+    /* Количество светодиодов в ленте. По умолчанию 24. 1-1024.
     */
     ctx->led.num_of_led = get_option_int_val(slot_num, "numOfLed", "", 24, 1, 1024);
 
-    /* Флаг задает отправку буфера каждый цикл
+    /* Флаг принудительной отправки буфера каждый цикл
     */
     ctx->led.periodicUpdate = get_option_flag_val(slot_num, "periodicUpdate");
 
-    /* Флаг инвертирует значение яркости 
+    /* Флаг определяет инверсию светодиода
     */
     ctx->led.inverse = get_option_flag_val(slot_num, "ledInverse");
 
-    /* Состояние по умолчанию
+    /* Состояние при запуске. По умолчанию 0 (выключено).
     */
-    ctx->led.state = get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1) ^ ctx->led.inverse;
+    ctx->led.state = get_option_int_val(slot_num, "ledEnableOnStart", "", 0, 0, 1) ^ ctx->led.inverse;
       
-    /* Максимальное значение яркости
+    /* Максимальное свечение. По умолчанию 255. 0-255.
     */
     ctx->led.maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 255);
     if(ctx->led.maxBright>255)ctx->led.maxBright=255;
     if(ctx->led.maxBright<0)ctx->led.maxBright=0;
 
-    /* Минимальное значение яркости
+    /* Минимальное свечение. По умолчанию 0. 0-255.
     */
     ctx->led.minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 255);
     if(ctx->led.minBright<0)ctx->led.minBright=0;
     if(ctx->led.minBright>255)ctx->led.minBright=255;
 
-    /* Частота обновления раз в секунду
+    /* Период обновления состояния светодиода в мс, по умолчанию 30 Гц
     */
     ctx->led.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "hz", 1000/30, 1, 4096));
     
 
-    /* Скорость изменения яркости в миллисекундах
+    /* Время затухания свечения в мс, по умолчанию 1000 мс
     */
     ctx->led.fadeTime= get_option_int_val(slot_num, "fadeTime", "ms", 1000, 10, 10000);
 
@@ -157,56 +159,51 @@ void configure_button_smartLed(PMODULE_CONTEXT ctx, int slot_num)
     ESP_LOGD(TAG, "Calculated increment: %d for slot %d", ctx->led.increment, slot_num);
 
 	
-    /* Начальный цвет
-    - по умолчанию 0 0 255 (синий)
+    /* Начальный цвет в формате RGB. По умолчанию '0 0 255' (синий).
     */
     if (get_option_color_val(&ctx->led.targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
     {
         ESP_LOGE(TAG, "Wrong color value slot:%d", slot_num);
     }
 
-    /* Задаёт режим анимации 
-    */ 
-   //todo расписать
+    /* Задаёт режим анимации. По умолчанию 'default'. Значения - default, flash, rainbow.
+    */
     if ((ctx->led.ledMode = get_option_enum_val(slot_num, "ledMode", "default", "flash", "rainbow", NULL)) < 0)
     {
         ESP_LOGE(TAG, "ledMode: unricognized value");
     }
 
     {
-		char t_str[strlen(me_config.deviceName)+strlen("/smartLed_0")+3];
-		sprintf(t_str, "%s/smartLed_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/led_0")+3];
+		sprintf(t_str, "%s/led_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 	}
 
-    /* Команда меняет текущее состояние светодиода на противоположное
+    /* === COMMANDS === */
+
+    /* Включить (1) или выключить (0) модуль. */
+    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
+    /* Команда меняет текущее состояние светодиода на противоположное. Без параметров.
     */
     stdcommand_register(&ctx->led.cmds, SMARTLED_toggleLedState, "action/toggleLedState", PARAMT_none);
 
-    /* Команда задает цвет подсветки
-    пример moduleBox/smartLed_0/setRGB:255 0 0 - установить красный цвет
+    /* Команда задаёт цвет подсветки. Три параметра RGB '0 0 255'.
     */
     stdcommand_register(&ctx->led.cmds, SMARTLED_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
-    /* Установить новый режим анимации цветов
-
+    /* Установить режим анимации цветов. Значения - default, flash, rainbow.
     */
     //todo расписать
     stdcommand_register_enum(&ctx->led.cmds, SMARTLED_setMode, "action/setMode", "default", "flash", "rainbow");
 
-    /* Установить новое значение fadeTime, скорости анимации
+    /* Установить время переходного процесса при изменении яркомсти в мс. 10-10000.
     */
     stdcommand_register(&ctx->led.cmds, SMARTLED_setFadeTime, "action/setFadeTime", PARAMT_int);
 
-    /* === COMMANDS === */
+    
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
-    stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
-    /* === EVENTS === */
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    
 }
 
 static void setAllLed_color(uint8_t *pixel_array, RgbColor color, int16_t bright, uint16_t num_of_led){
@@ -328,14 +325,15 @@ void button_smartLed_task(void *arg)
                 break;
         }
 
-        // Button is always polled - enable controls only the LED
+        // Button is always polled - enable controls only the LED.
+        // Drain edge interrupts so the queue does not overflow; the
+        // non-blocking debounce filter below decides the accepted level.
         uint8_t msg;
+        while (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {}
+
         int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
-        }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+        int button_level = (ctx->button.button_inverse ? !button_raw : button_raw);
+        int button_state = button_logic_debounce(&ctx->button, button_level);
         button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_smart(&ctx->led, pixels, &rmt_heap, slot_num, &currentRGB, &currentBright, &targetBright);

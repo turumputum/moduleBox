@@ -120,6 +120,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->boardVersion = atoi(value);
 	} else if (MATCH("SYSTEM", "USB_debug")) {
 		pconfig->USB_debug = _yesno(value);
+	} else if (MATCH("SYSTEM", "crossLinkDebug")) {
+		pconfig->crossLink_debug = _yesno(value);
 	}  else if (MATCH("LAN", "LAN_enable")) {//-----------------------------------------------
 		pconfig->LAN_enable = _yesno(value);
 	} else if (MATCH("LAN", "ipAdress")) {
@@ -188,6 +190,8 @@ static int handler(void *user, const char *section, const char *name, const char
 		if(pconfig->mqttQOS > 2) pconfig->mqttQOS = 0;
 	} else if (MATCH("MQTT", "mqttWatchdogTimeout")) {
 		pconfig->mqttWatchdogTimeout = atoi(value);
+	} else if (MATCH("MQTT", "mqttKeepAlive")) {
+		pconfig->mqttKeepAlive = atoi(value);
 	} else if (MATCH("MQTT", "mqttTLS")) {
 		pconfig->mqttTLS = atoi(value);
 	} else if (MATCH("SCHEDULE", "ntpServer")) {//-----------------------------------------------
@@ -224,6 +228,7 @@ void load_Default_Config(void) {
 	me_config.statusPeriod = 0;
 	me_config.statusAllChannels = true;
 	me_config.USB_debug = 0;
+	me_config.crossLink_debug = 0;
 	me_config.boardVersion = 3;
 	
 	
@@ -259,6 +264,7 @@ void load_Default_Config(void) {
 	me_config.mqttPass = strdup("");
 	me_config.mqttQOS = 0;
 	me_config.mqttWatchdogTimeout = 0;
+	me_config.mqttKeepAlive = 60;
 	me_config.mqttTLS = 0;
 	
     me_config.udpServerAdress = strdup("");

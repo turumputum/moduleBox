@@ -60,8 +60,8 @@ typedef struct {
 	int8_t eth_connected;
 
 
-	int8_t udplink_socket;
-	int8_t osc_socket;
+	int udplink_socket;
+	int osc_socket;
 
 	int8_t free_i2c_num;
 	int8_t ledc_chennelCounter;
@@ -121,6 +121,7 @@ typedef struct {
 	int  statusAllChannels;
 	int  statusPeriod;
 	uint8_t USB_debug;
+	uint8_t crossLink_debug;
 
 	uint8_t FTP_enable;
 	uint8_t FTP_anon;
@@ -143,6 +144,7 @@ typedef struct {
 	char *mqttPass;
 	uint8_t mqttQOS;
 	uint16_t mqttWatchdogTimeout;
+	uint16_t mqttKeepAlive;
 	uint8_t mqttTLS;
 
 	uint8_t boardVersion;

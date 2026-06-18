@@ -54,6 +54,7 @@ typedef struct __tag_STEPPERCONFIG{
 	int 				    dir;
 	uint32_t 				accel;
 	uint32_t 				maxSpeed;
+	int32_t 				minSpeed;
 	uint16_t                refreshPeriod;
 	int					    homingDir;
     int                     homingSensorState;
@@ -66,6 +67,7 @@ typedef struct __tag_STEPPERCONFIG{
     int32_t                 minVal;
 	int 					speedReportFlag;
 	int 					posReportFlag;
+	int 					stateReportFlag;
     int 					circularCounterFlag;
     int                     goHomeOnStart;
     int                     active_state;
@@ -74,6 +76,7 @@ typedef struct __tag_STEPPERCONFIG{
 
 	int 					posReport;
 	int						speedReport;
+	int						stateReport;
 	int 					homeReport;
 } STEPPERCONFIG, * PSTEPPERCONFIG; 
 
@@ -146,6 +149,13 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
         ESP_LOGD(TAG, "[stepper_%d] speedReport enable", slot_num);
     }
 
+    /* Флаг включает рапорты состояния мотора - run или stop
+	*/
+	c->stateReportFlag = get_option_flag_val(slot_num, "stateReport");
+	if(c->stateReportFlag){
+        ESP_LOGD(TAG, "[stepper_%d] stateReport enable", slot_num);
+    }
+
 
     c->state=NOT_HOMED;
     c->homingDir = 0;
@@ -178,7 +188,13 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     - шагов в секунду
 	*/
 	c->maxSpeed =  get_option_int_val(slot_num, "maxSpeed", "step/sek", 100, 1, INT32_MAX);
-    ESP_LOGD(TAG, "[stepper_%d] maxSpeed:%ld", slot_num, c->maxSpeed); 
+    ESP_LOGD(TAG, "[stepper_%d] maxSpeed:%ld", slot_num, c->maxSpeed);
+
+    // Минимальная скорость (старт/стоп трапеции) вычисляется автоматически:
+    // тысячная от maxSpeed, но не меньше 2 шаг/с. Опции нет.
+    c->minSpeed = c->maxSpeed / 1000;
+    if (c->minSpeed < 2) c->minSpeed = 2;
+    ESP_LOGD(TAG, "[stepper_%d] minSpeed(auto):%ld step/sek", slot_num, c->minSpeed);
     
     /* Частота обновления
     - раз в секунду
@@ -199,12 +215,18 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	c->homingTimeout =  get_option_int_val(slot_num, "homingTimeout", "sek", 30, 0, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingTimeout:%ld", slot_num, c->homingTimeout);
 
-    /* Длительность импульса step
-    - микросекунды
-	- если частота слишком высока для равных уровней HIGH-LOW - урезается до половины периода с варнингом в лог
-	*/
-	c->pulseWidth =  get_option_int_val(slot_num, "pulseWidth", "us", 5, 1, 10);
-    ESP_LOGD(TAG, "[stepper_%d] pulseWidth:%d", slot_num, c->pulseWidth);
+    // Длительность HIGH импульса step вычисляется автоматически (опции больше нет):
+    // базово 10 мкс, но если на maxSpeed минимальный период step мал, ограничиваем
+    // HIGH половиной этого периода (50% duty). На лету в stepper_setPeriod HIGH
+    // дополнительно зажимается под текущую частоту.
+    {
+        uint32_t minPeriod = 1000000UL / (c->maxSpeed > 0 ? c->maxSpeed : 1); // мкс, resolution 1МГц
+        uint32_t autoPulse = minPeriod / 2;
+        if (autoPulse > 10) autoPulse = 10;
+        if (autoPulse < 1)  autoPulse = 1;
+        c->pulseWidth = autoPulse;
+    }
+    ESP_LOGD(TAG, "[stepper_%d] pulseWidth(auto):%d us (maxSpeed:%ld)", slot_num, c->pulseWidth, c->maxSpeed);
 
     /* Максимальное значение положения
     - шагов
@@ -219,13 +241,7 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     ESP_LOGD(TAG, "[stepper_%d] minVal:%ld", slot_num, c->minVal);
 
     // не стандартный топик
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/stepper_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/stepper_0")+3];
 		sprintf(t_str, "%s/stepper_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
@@ -242,6 +258,10 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     - шаг/сек
 	*/
 	c->speedReport = stdreport_register(RPTT_string, slot_num, "step/sek", "event/speed");
+
+    /* Рапортует состояние мотора - run или stop
+	*/
+	c->stateReport = stdreport_register(RPTT_string, slot_num, "", "event/state");
 
     /* Рапортует текущий режим базирования
 	*/
@@ -318,6 +338,7 @@ void stepper_task(void *arg){
     
     stepper.accel = c->accel;
     stepper.maxSpeed = c->maxSpeed;
+    stepper.minSpeed = c->minSpeed;
 
 	esp_err_t step_err = stepper_init(&stepper, stepper.stepPin, stepper.dirPin, c->pulseWidth);
 	if (step_err != ESP_OK) {
@@ -332,6 +353,7 @@ void stepper_task(void *arg){
     
     int32_t prevPos=0;
     int32_t prevSpeed=0;
+    int prevState=-1;
 
     int homingProcedureState = HOMING_WAITING;
     TickType_t homingStartTick = 0;
@@ -546,6 +568,13 @@ void stepper_task(void *arg){
                 //report(str,slot_num);
                 //ESP_LOGD(TAG, "Stepper_%d curentSpeed:%s", slot_num, str);
                 prevSpeed=stepper.currentSpeed;
+            }
+        }
+
+        if(c->stateReportFlag){
+            if(prevState!=stepper.state){
+                stdreport_s(c->stateReport, stepper.state==RUN ? "run" : "stop");
+                prevState=stepper.state;
             }
         }
 

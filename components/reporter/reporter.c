@@ -42,7 +42,9 @@ QueueHandle_t mailbox;
 extern configuration me_config;
 extern stateStruct me_state;
 
-void crosslinker_(char* 	str, 
+void forward_report(char *msg, int slot_num);
+
+void crosslinker_(char* 	str,
 				  char * 	rules)
 {
 	char crosslinks[strlen(rules) + 1];
@@ -220,6 +222,13 @@ void crosslinker_(char* 	str,
 				
 				
 				exec:
+				/* CrossLink debug: публикуем исполняемую строку линкера в
+				   <deviceName>/crossLink/execute - удобно смотреть работу кросслинкера */
+				if(me_config.crossLink_debug){
+					char dbg[strlen(me_config.deviceName) + strlen(output_action) + 24];
+					sprintf(dbg, "%s/crossLink/execute:%s", me_config.deviceName, output_action);
+					forward_report(dbg, -1);
+				}
 				execute(output_action);
 				//ESP_LOGD(TAG, "output_action:%s", output_action);
 			}else{

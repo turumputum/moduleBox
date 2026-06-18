@@ -78,23 +78,24 @@ void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->button.button_inverse = get_option_flag_val(slot_num, "buttonInverse");
 
-    /* Глубина фильтра от дребезга
+    /* Глубина фильтра от дребезга контактов в мс. По умолчанию 10, 1-4096
     */
-    ctx->button.debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "", 10, 1, 4096);
+    ctx->button.debounce_gap = get_option_int_val(slot_num, "buttonDebounceGap", "ms", 10, 1, 4096);
 
-    /* Продолжительность длинного нажатия
+    /* Продолжительность длинного нажатия. По умолчанию 0, функция не активна
     */
     ctx->button.longPressTime 	= get_option_int_val(slot_num, "longPressTime", "ms", 0, 0, 65535);
 
-    /* Длительность промежутка между нажатиями для регистрации двойного нажатия
+    /* Длительность промежутка между нажатиями для регистрации двойного нажатия. По умолчанию 0, функция не активна
     */
     ctx->button.doubleClickTime = get_option_int_val(slot_num, "doubleClickTime", "ms", 0, 0, 65535);
 
-    /* Флаг задаёт фильтрацию совытий при активных
+    /* Подавляет короткое событие press, когда сработало длинное или двойное нажатие
+       Выключен (0, по умолчанию) - короткие события шлются всегда
     */
     ctx->button.event_filter = get_option_flag_val(slot_num, "eventFilter");
 
-    /* Период обновления
+    /* Период обновления потока кнопки в мс, по умолчанию 25 (40 Гц)
     */
     ctx->button.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096));
 
@@ -104,83 +105,77 @@ void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
     }
 
-	/* Рапортует при изменении состояния кнопки
+	/* Рапортует при изменении состояния кнопки. 0-1.
 	*/
 	ctx->button.stateReport = stdreport_register(RPTT_int, slot_num, "unit", "event/press", 0, 1);
 
-	/* Рапортует при регистрации длинного нажатия
+	/* Рапортует при регистрации длинного нажатия. 0-1.
 	*/
 	ctx->button.longReport = stdreport_register(RPTT_int, slot_num, "unit", "event/longPress", 0, 1);
 
-	/* Рапортует при регистрации двойного нажатия
+	/* Рапортует при регистрации двойного нажатия. 0-1.
 	*/
 	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "unit", "event/doubleClick", 0, 1);
 
     // --- Swiper LED logic config ---
-    /* Количенство светодиодов
+    /* Количество светодиодов в кольце. По умолчанию 16. 1-1024.
     */
     ctx->led.num_of_led = get_option_int_val(slot_num, "numOfLed", "", 16, 1, 1024);
 
-    /* Максимальное значение яркости
+    /* Максимальное свечение. По умолчанию 255. 0-255.
     */
     ctx->led.maxBright = (float)get_option_int_val(slot_num, "maxBright", "", 255, 0, 255)/255;
 
-    /* Минимальное значение яркости
+    /* Минимальное свечение. По умолчанию 0. 0-255.
     */
     ctx->led.minBright = (float)get_option_int_val(slot_num, "minBright", "", 0, 0, 255)/255;
 
-    /* Период обновления 
+    /* Период обновления состояния светодиода в мс, по умолчанию 25 Гц
     */
     ctx->led.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 25, 1, 1024));
 
-    /* Начальный цвет
+    /* Начальный цвет в формате R G B. По умолчанию 0 0 255 (синий).
     */
     if (get_option_color_val(&ctx->led.targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
     {
         ESP_LOGE(TAG, "Wrong color value slot:%d", slot_num);
     }
 
-    /* Состояние по умолчанию
+    /* Состояние при запуске. По умолчанию 0 (выключено).
     */
     ctx->led.inverse = 0;
     ctx->led.state = (get_option_int_val(slot_num, "ledDefaultState", "", 0, 0, 1) != 0 ? 1 : 0) ^ ctx->led.inverse;
 
-    /* Смещение эффекта
+    /* Смещение светового эффекта. По умолчанию 0.
     */
     ctx->led.offset = get_option_int_val(slot_num, "offset", "", 0, 0, ctx->led.num_of_led);
 
     {
-		char t_str[strlen(me_config.deviceName)+strlen("/swiperLed_0")+3];
-		sprintf(t_str, "%s/swiperLed_%d",me_config.deviceName, slot_num);
+		char t_str[strlen(me_config.deviceName)+strlen("/led_0")+3];
+		sprintf(t_str, "%s/led_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 	}
 
 
 
-    /* Команда меняет текущее состояние светодиода на противоположное
+    /* Команда меняет текущее состояние светодиода на противоположное. Без параметров.
     */
     stdcommand_register(&ctx->led.cmds, SWIPERLED_toggleLedState, "action/toggleLedState", PARAMT_none);
 
-    /* Установить новый целевой цвет
-    Цвет задаётся десятичными значениями R G B через пробел
+    /* Команда задаёт цвет подсветки. Три параметра R G B 0-255.
     */
    stdcommand_register(&ctx->led.cmds, SWIPERLED_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
 
-    /*Команда запускает световой эффект в видде свайпа
-    Доступные значения: up, down, left, right
+    /* Команда запускает световой эффект свайпа. Значения - up, down, left, right.
     */
     stdcommand_register_enum(&ctx->led.cmds, SWIPERLED_swipe, "action/swipe", "up", "down", "left", "right");
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить (1) или выключить (0) модуль. */
     stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
-    /* === EVENTS === */
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
 static void setMinBright(swiper_handle_t *swiperLed) {
@@ -356,14 +351,15 @@ void button_swiperLed_task(void *arg)
                 break;
         }
 
-        // Button is always polled - enable controls only the LED
+        // Button is always polled - enable controls only the LED.
+        // Drain edge interrupts so the queue does not overflow; the
+        // non-blocking debounce filter below decides the accepted level.
         uint8_t msg;
+        while (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {}
+
         int button_raw = gpio_get_level(pin_in);
-        if (xQueueReceive(me_state.interrupt_queue[slot_num], &msg, 0) == pdPASS) {
-            if (ctx->button.debounce_gap > 0) vTaskDelay(ctx->button.debounce_gap);
-            button_raw = gpio_get_level(pin_in);
-        }
-        int button_state = (ctx->button.button_inverse ? !button_raw : button_raw);
+        int button_level = (ctx->button.button_inverse ? !button_raw : button_raw);
+        int button_state = button_logic_debounce(&ctx->button, button_level);
         button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
         update_led_swiper(&ctx->led, &swiper, &rmt_heap, slot_num, &prevState);
