@@ -82,12 +82,7 @@ void tenzo_button_task(void *arg){
 		ESP_LOGD(TAG, "Set boolean output for slot:%d", slot_num);
 	}
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/tenzoButton_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
+    {
 		char t_str[strlen(me_config.deviceName)+strlen("/tenzoButton_0")+3];
 		sprintf(t_str, "%s/tenzoButton_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);

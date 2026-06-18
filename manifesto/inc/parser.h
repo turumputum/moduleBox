@@ -71,7 +71,7 @@ class Module
 {
 public:
                         Module ()
-                        { slotFrom = 0; slotTo = 5; }
+                        { slotFrom = 0; slotTo = 5; actionTopic[0] = 0; triggerTopic[0] = 0; }
 
         int             line;
         char            name                    [ 64 ];
@@ -82,7 +82,10 @@ public:
         int             slotTo;
 
         char *          descRaw;
-}; 
+
+        char            actionTopic             [ 64 ];
+        char            triggerTopic            [ 64 ];
+};
 
 class Option
 {
@@ -243,6 +246,11 @@ private:
         void            resetCommands           (bool           first);
 
         int             findNextModule          ();
+
+        void            extractTopics           ();
+
+        void            extractTopicBase        (char *         dest,
+                                                 const char *   listName);
 
         char *          findCorellatedCurlyBrace(char *         begin);
 

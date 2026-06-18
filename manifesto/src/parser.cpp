@@ -285,9 +285,23 @@ bool Parser::generateManifestoForModule(bool first)
     bool            result      = true;
     char            tmp     [ 1024 ];
 
-    snprintf(tmp, sizeof(tmp), "%s\t{\n\t\t\"mode\": \"%s\",\n\t\t\"slots\": \"%d-%d\",\n\t\t\"description\": \"%s\",\n", first ? "\n" : ",\n", 
-        mod.name, mod.slotFrom, mod.slotTo,
-        mod.descRaw);
+    snprintf(tmp, sizeof(tmp), "%s\t{\n\t\t\"mode\": \"%s\",\n\t\t\"slots\": \"%d-%d\",\n", first ? "\n" : ",\n",
+        mod.name, mod.slotFrom, mod.slotTo);
+    manifesto.append(tmp);
+
+    if (mod.triggerTopic[0])
+    {
+        snprintf(tmp, sizeof(tmp), "\t\t\"trigger\": \"%s\",\n", mod.triggerTopic);
+        manifesto.append(tmp);
+    }
+
+    if (mod.actionTopic[0])
+    {
+        snprintf(tmp, sizeof(tmp), "\t\t\"action\": \"%s\",\n", mod.actionTopic);
+        manifesto.append(tmp);
+    }
+
+    snprintf(tmp, sizeof(tmp), "\t\t\"description\": \"%s\",\n", mod.descRaw);
     manifesto.append(tmp);
 
     if (  generateManifestoOfOptions()  && 
@@ -300,6 +314,74 @@ bool Parser::generateManifestoForModule(bool first)
     }
 
     return result;
+}
+void Parser::extractTopics()
+{
+    // mod.begin .. (null-terminated at the module's closing brace) is the body
+    // of the configure_<name> function. Read the module's real default topic
+    // base out of the sprintf(..."%s/<base>_%d"...) that feeds each
+    // *_topic_list[slot_num] assignment. Keys are emitted only when present.
+    mod.actionTopic[0]  = 0;
+    mod.triggerTopic[0] = 0;
+
+    extractTopicBase(mod.actionTopic,  "action_topic_list");
+    extractTopicBase(mod.triggerTopic, "trigger_topic_list");
+}
+void Parser::extractTopicBase(char *         dest,
+                              const char *   listName)
+{
+    char        needle [ 64 ];
+    char *      p;
+    char *      last    = nil;
+    size_t      nlen;
+
+    dest[0] = 0;
+
+    snprintf(needle, sizeof(needle), "%s[slot_num]", listName);
+    nlen = strlen(needle);
+
+    // Use the LAST assignment - in the masquerade if/else only the else
+    // (default) branch carries the "%s/<base>_%d" sprintf we want.
+    p = mod.begin;
+    while ((p = strstr(p, needle)) != nil)
+    {
+        last = p;
+        p += nlen;
+    }
+
+    if (!last)
+        return;     // module does not fill this table -> omit the key
+
+    // Walk backward (no further than mod.begin) to the sprintf format string.
+    char *      fmt = nil;
+    for (char * q = last; q >= mod.begin; q--)
+    {
+        if (q[0] == '%' && q[1] == 's' && q[2] == '/')
+        {
+            fmt = q;
+            break;
+        }
+    }
+
+    if (!fmt)
+        return;
+
+    char *      baseBegin = fmt + 3;            // skip "%s/"
+    char *      sfx       = strstr(baseBegin, "_%d");
+
+    if (!sfx || sfx >= last)
+        return;     // not a "%s/<base>_%d" template feeding this assignment
+
+    int         len = (int)(sfx - baseBegin);
+
+    if (len <= 0 || len >= 50)
+        return;
+
+    char        base [ 64 ];
+    memcpy(base, baseBegin, len);
+    base[len] = 0;
+
+    snprintf(dest, 64, "deviceName/%s_<n>", base);
 }
 char * Parser::findCorellatedCurlyBrace(char *         begin)
 {
@@ -429,6 +511,8 @@ int Parser::findNextModule()
                         funcSearchEnd   = mod.begin;
                         *end            = 0;
                         modSearchEnd    = ++end;
+
+                        extractTopics();
 
                         result = 1;
                     }

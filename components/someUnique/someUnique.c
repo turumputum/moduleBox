@@ -177,12 +177,7 @@ void academKick_task(void* arg) {
     uint8_t data[BUF_SIZE];
     memset(data, 0, BUF_SIZE);
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/kick_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/kick_0")+3];
 		sprintf(t_str, "%s/kick_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
@@ -266,13 +261,7 @@ void volnaKolya_task(void* arg) {
 
 
     //---
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/volna_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "stepper_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/volna_0")+3];
 		sprintf(t_str, "%s/volna_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
@@ -406,12 +395,7 @@ void furbyEye_task(void* arg) {
     #define BUF_SIZE 1024
     //char data[BUF_SIZE];
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/eye_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/eye_0")+3];
 		sprintf(t_str, "%s/eye_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
@@ -610,12 +594,7 @@ void st7789_task(void* arg) {
     st7789_init();
 	// 
    
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/eye_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "actionTopic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/display_0")+3];
 		sprintf(t_str, "%s/display_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);

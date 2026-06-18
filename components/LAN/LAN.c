@@ -212,23 +212,27 @@ void start_mdns_task(){
 		uint32_t startTick = xTaskGetTickCount();
 		uint32_t heapBefore = xPortGetFreeHeapSize();
 
-	 	ESP_ERROR_CHECK( mdns_init() );
+		// Non-fatal: if mDNS can't start (e.g. low internal RAM for its task),
+		// keep the device running without mDNS instead of aborting.
+		esp_err_t err = mdns_init();
+		if (err != ESP_OK) {
+			ESP_LOGE(TAG, "mdns_init failed: %s - mDNS disabled", esp_err_to_name(err));
+			return;
+		}
 
+		mdns_hostname_set(me_config.deviceName);
+		mdns_instance_name_set(me_config.deviceName);
 
-		ESP_ERROR_CHECK( mdns_hostname_set(me_config.deviceName));
-		ESP_ERROR_CHECK( mdns_instance_name_set(me_config.deviceName));
-
-		//ESP_ERROR_CHECK( mdns_query_a(me_config.deviceName, 2000,  &addr));
-
-
-		//mdns_query_ptr()
 		//initialize service
 		char * stamp = "FTP server on moduleBox '%s'";
 		char tmp[strlen(me_config.deviceName)+strlen(stamp)+5];
 		sprintf(tmp,stamp,me_config.deviceName);
-		ESP_ERROR_CHECK( mdns_service_add(tmp, "_ftp", "_tcp", 21, 0, 0) );
+		err = mdns_service_add(tmp, "_ftp", "_tcp", 21, 0, 0);
+		if (err != ESP_OK) {
+			ESP_LOGW(TAG, "mdns_service_add failed: %s", esp_err_to_name(err));
+		}
 		ESP_LOGD(TAG, "mDNS task started. Duration: %ld ms. Heap usage: %lu free heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-		
+
 	}
 }
 

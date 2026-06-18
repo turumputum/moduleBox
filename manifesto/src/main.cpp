@@ -17,6 +17,13 @@
 #include <parser.h>
 #include <sys/stat.h>
 
+#if defined(_MSC_VER)
+// MSVC has no POSIX 1-arg mkdir - map it to _mkdir from <direct.h>.
+// Guarded by _MSC_VER so the MinGW/Linux builds are unaffected.
+#include <direct.h>
+#define mkdir(path) _mkdir(path)
+#endif
+
 // ---------------------------------------------------------------------------
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------

@@ -674,9 +674,6 @@ void waitForWorkPermit_(int slot, const char * moduleName)
 	} while (!((bits & EVERYONE) || (bits & THISONE)));
 
 	ESP_LOGD(TAG, "slot %d [%s] started working", slot, moduleName);
-
-	/* Конституция §6: при старте каждый модуль публикует event/enable 1 (retained) */
-	stdreport_enable(slot, 1);
 }
 int workIsPermitted_(int slot, const char * moduleName)
 {

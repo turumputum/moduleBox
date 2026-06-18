@@ -161,6 +161,12 @@ static void parseUdpCrossLinks()
 					*on = 0;
 					on += 1;
 
+					if (linksCount >= (int)(sizeof(links) / sizeof(links[0])))
+					{
+						ESP_LOGW(TAG, "Too many UDP crosslinks, max %d, rest ignored", (int)(sizeof(links) / sizeof(links[0])));
+						break;
+					}
+
 					links[linksCount].name 		= begin;
 					links[linksCount].rule 		= on;
 
@@ -189,9 +195,10 @@ void udplink_task()
 {
 	int len;
 
-	if (me_config.udpMyPort)
+	// UDP is enabled if we either listen (myPort/crosslink) or send (serverAdress)
+	if (me_config.udpMyPort || *me_config.udpServerAdress || *me_config.udp_crosslink)
 	{
-		// Trying to extract port number from the server definition
+		// Trying to extract port number from the server definition (form ip:port)
 		if (*me_config.udpServerAdress)
 		{
 			char * delim = strchr(me_config.udpServerAdress, ':');
@@ -203,17 +210,27 @@ void udplink_task()
 			}
 		}
 
-		// Check if the string looks like an ip address
-		if (!(*me_config.udpServerAdress && strz_is_ip(me_config.udpServerAdress, 4)))
+		// Validate the outgoing server address - must be a dotted IPv4 address
+		if (*me_config.udpServerAdress)
 		{
-			ESP_LOGW(TAG, "UDP server IP address is not specified, working without outgoing messages");
-
-			*me_config.udpServerAdress = 0;
+			if (!strz_is_ip(me_config.udpServerAdress, 4))
+			{
+				ESP_LOGW(TAG, "UDP serverAdress '%s' is not a valid IPv4 address, outgoing UDP disabled", me_config.udpServerAdress);
+				*me_config.udpServerAdress = 0;
+			}
+			else if (!me_config.udpServerPort)
+			{
+				ESP_LOGW(TAG, "Server UDP port not specified, using default %d", DEFAULT_UDP_PORT);
+				me_config.udpServerPort = DEFAULT_UDP_PORT;
+			}
 		}
-		else if (!me_config.udpServerPort)
+
+		// Default local listen port - the same socket is used for send and receive,
+		// so we always need a bound port even when the user only wants to send.
+		if (!me_config.udpMyPort)
 		{
-			ESP_LOGW(TAG, "Server UDP port not specified, using default %d", DEFAULT_UDP_PORT);
-			me_config.udpServerPort = DEFAULT_UDP_PORT;
+			ESP_LOGW(TAG, "Local UDP port not specified, using default %d", DEFAULT_UDP_PORT);
+			me_config.udpMyPort = DEFAULT_UDP_PORT;
 		}
 
 		if (*me_config.udp_crosslink)
@@ -237,21 +254,42 @@ void udplink_task()
 			dest_addr.sin_port = htons(me_config.udpMyPort);
 
 			int err = bind(me_state.udplink_socket, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-			if (err < 0) {
-				ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
-			}
 
-			ESP_LOGD(TAG, "UDP listening on port:%d", me_config.udpMyPort);
-			
+			// The socket is usable for outgoing messages regardless of bind result.
 			me_state.UDP_init_res = ESP_OK;
-			
-			while(1)
+
+			if (err < 0)
 			{
-				if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
+				// bind failed - most likely the port is already in use (EADDRINUSE).
+				// Incoming UDP will not work, but outgoing still can via the same socket.
+				// Do NOT enter the recvfrom loop: on an unbound socket recvfrom can
+				// return immediately and spin the task at 100% CPU.
+				ESP_LOGE(TAG, "UDP socket unable to bind port %d: errno %d", me_config.udpMyPort, errno);
+				mblog(E, "UDP bind failed on port %d (errno %d), incoming UDP disabled", me_config.udpMyPort, errno);
+			}
+			else
+			{
+				ESP_LOGD(TAG, "UDP listening on port:%d", me_config.udpMyPort);
+
+				while(1)
 				{
-					*(buff + len) = 0;
-					//printf("got: '%s'\n", buff);
-					execute_links(buff);
+					if ((len = recvfrom(me_state.udplink_socket, buff, buff_size - 1, 0,(struct sockaddr *)&source_addr, &socklen)) > 0)
+					{
+						*(buff + len) = 0;
+						//printf("got: '%s'\n", buff);
+
+						// Keep an untouched copy - execute_links() mutates buff in place
+						char raw[buff_size];
+						memcpy(raw, buff, len + 1);
+						_cut_crlfs(raw);
+
+						// Try crosslink routing first (remote device events). If no
+						// crosslink rule matched, treat the message as a direct command.
+						if (!execute_links(buff))
+						{
+							execute(_skip_spaces(raw));
+						}
+					}
 				}
 			}
 		}
@@ -262,7 +300,7 @@ void udplink_task()
 	}
 	else
 	{
-		ESP_LOGW(TAG, "Local UDP port is not specified, so UDP is not enabled");
+		ESP_LOGW(TAG, "UDP not configured (no myPort/serverAdress/crosslink), UDP is not enabled");
 	}
 
 	vTaskDelay(pdMS_TO_TICKS(200));

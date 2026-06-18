@@ -532,12 +532,7 @@ void GIM_motor_task(void *arg) {
     int8_t state = get_option_int_val(slot_num, "defaultState", "", 0, 0, 1);
     ESP_LOGD(TAG, "Set def_state:%d for slot:%d", state, slot_num);
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/GIM_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/GIM_0")+3];
 		sprintf(t_str, "%s/GIM_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);

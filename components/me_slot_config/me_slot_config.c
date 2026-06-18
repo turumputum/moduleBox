@@ -25,7 +25,6 @@
 #include "myMqtt.h"
 #include "sensor_2ch.h"
 #include "tenzo_button.h"
-#include "flywheel.h"
 #include "virtualSlots.h"
 #include "myHID.h"
 #include "swiper.h"
@@ -459,10 +458,13 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 
 	if (result != ESP_OK)
 	{
-		ESP_LOGW(TAG, "Color options not found, lets parse default:%s", default_value);
-		parseRGB(output, default_value);
+		// Option absent (or malformed) is normal - fall back to the default.
+		// Only a default that itself fails to parse is a real error.
+		ESP_LOGD(TAG, "Color option not set, using default:%s", default_value);
+		if (parseRGB(output, default_value) != -1)
+			result = ESP_OK;
 	}
-	
+
 	return result;
 }
 

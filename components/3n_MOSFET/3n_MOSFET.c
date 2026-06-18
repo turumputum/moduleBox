@@ -56,6 +56,15 @@ typedef enum
     MYCMD_setFadeTime
 } MYCMD;
 
+// Локальные индексы режимов - порядок ДОЛЖЕН совпадать со списком ledMode
+// (get_option_enum_val и enumResult возвращают позицию в списке)
+enum
+{
+    PWM_MODE_DEFAULT = 0,   // постоянное свечение целевым цветом
+    PWM_MODE_FLASH,         // мигание между min и max яркостью
+    PWM_MODE_RAINBOW        // циклический перебор оттенков (HSV)
+};
+
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
 // -----|-------------------|-------------------------------------------------
@@ -101,8 +110,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 
     /* === OPTIONS === */
 
-    /* Если флаг поднят - модуль стартует в выключенном состоянии,
-       до прихода action/enable 1 (Конституция §6).
+    /* Если флаг поднят - модуль стартует в выключенном состоянии, до прихода action/enable:1.
     */
     c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
     ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", c->active_state, slot_num);
@@ -143,12 +151,12 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     c->fadeTime = get_option_int_val(slot_num, "fadeTime", "ms", 100, 10, 10000);
     ESP_LOGD(TAG, "Set fadeTime:%d for slot:%d", c->fadeTime, slot_num);
 
-    /* Пересчитываем increment на основе fadeTime */
+    //* Пересчитываем increment на основе fadeTime
     c->increment = 255 * c->refreshPeriod / c->fadeTime;
     if (c->increment < 1) c->increment = 1;
     ESP_LOGD(TAG, "Calculated increment:%d for slot:%d", c->increment, slot_num);
     	
-    /* Начальный цвет
+    /* Начальный цвет. Задаётся десятичными значениями R G B через пробел. 0 0 255 - синий по умолчанию.
     */
     if (get_option_color_val(&c->targetRGB, slot_num, "RGBcolor", "0 0 255") != ESP_OK)
     {
@@ -157,69 +165,61 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     else
         ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", c->targetRGB.r, c->targetRGB.g, c->targetRGB.b, slot_num);
 
-    /* defaultState убран - используйте disableOnStart для управления
-       начальным включением модуля (Конституция §6). */
-
-    /* Задаёт режим анимации */
-    if ((c->ledMode = get_option_enum_val(slot_num, "ledMode", "default", "flash", "glitch", "swiper", "rainbow", "run", NULL)) < 0)
+    /* Задаёт режим анимации: default - постоянное свечение целевым цветом. flash   - мигание между min и max яркостью. rainbow - циклический перебор оттенков HSV
+    */
+    if ((c->ledMode = get_option_enum_val(slot_num, "ledMode", "default", "flash", "rainbow", NULL)) < 0)
     {
         ESP_LOGE(TAG, "ledMode: unricognized value");
-        c->ledMode = MODE_DEFAULT;
+        c->ledMode = PWM_MODE_DEFAULT;
     }
 
-	if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-        /* Определяет топик для MQTT сообщений */
-    	custom_topic = get_option_string_val(slot_num, "topic", "/pwmLeds_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
-		char t_str[strlen(me_config.deviceName)+strlen("/pwmLeds_0")+3];
-		sprintf(t_str, "%s/pwmLeds_%d",me_config.deviceName, slot_num);
-		me_state.action_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
-	}
+	/* Топик по умолчанию: <deviceName>/pwmLeds_<slot_num>.
+	   Суффиксы /action/ и /event/ добавляются при приёме команд и публикации событий.
+	   Заполняем обе таблицы - без trigger_topic_list репортер не публикует события. */
+	char t_str[strlen(me_config.deviceName)+strlen("/pwmLeds_0")+3];
+	sprintf(t_str, "%s/pwmLeds_%d",me_config.deviceName, slot_num);
+	me_state.action_topic_list[slot_num]=strdup(t_str);
+	me_state.trigger_topic_list[slot_num]=strdup(t_str);
+	ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6).
-       По умолчанию 1; флаг disableOnStart инвертирует на старте. */
+    /* Включить-выключить модуль. Значение 0-1. По умолчанию 1. Флаг disableOnStart выключает модуль при старте. */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
-    /* Установить новый целевой цвет
-       Цвет задаётся десятичными значениями R G B через пробел
+    /* Установить новый целевой цвет. Цвет задаётся десятичными значениями R G B через пробел. Пример, 255 0 0 - красный.
     */
     stdcommand_register(&c->cmds, MYCMD_setRGB, "action/setRGB", PARAMT_int, PARAMT_int, PARAMT_int);
 
-    /* Установить новый режим анимации цветов
+    /* Установить новый режим анимации цветов. default - постоянное свечение целевым цветом. flash   - мигание между min и max яркостью. rainbow - циклический перебор оттенков HSV 
     */
-    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "action/setMode", "default", "flash", "glitch", "swiper", "rainbow", "run");
+    stdcommand_register_enum(&c->cmds, MYCMD_setMode, "action/setMode", "default", "flash", "rainbow");
 
-    /* Установить новое значение приращения
+    /* Установить новое значение приращения. Влияет на скорость анимации и фэйдов. Значение 1-255.
     */
     stdcommand_register(&c->cmds, MYCMD_setIncrement, "action/setIncrement", PARAMT_int);
 
-    /* Установить максимальное значение яркости для всех каналов
+    /* Установить максимальное значение яркости для всех каналов. Значение 1-255.
     */
     stdcommand_register(&c->cmds, MYCMD_setMaxBright, "action/setMaxBright", PARAMT_int);
 
-    /* Установить значение яркости для ch_0
+    /* Установить значение яркости для ch_0. Значение 0-255.
     */
     stdcommand_register(&c->cmds, MYCMD_setBright_ch_0, "action/ch_0/setBright", PARAMT_int);
 
-    /* Установить значение яркости для ch_1
+    /* Установить значение яркости для ch_1. Значение 0-255.
     */
     stdcommand_register(&c->cmds, MYCMD_setBright_ch_1, "action/ch_1/setBright", PARAMT_int);
 
-    /* Установить значение яркости для ch_2
+    /* Установить значение яркости для ch_2. Значение 0-255.
     */
     stdcommand_register(&c->cmds, MYCMD_setBright_ch_2, "action/ch_2/setBright", PARAMT_int);
 
-    /* Установить минимальное значение яркости
+    /* Установить минимальное значение яркости. Значение 0-254.
     */
     stdcommand_register(&c->cmds, MYCMD_setMinBright, "action/setMinBright", PARAMT_int);
 
-    /* Установить время затухания свечения
+    /* Установить время затухания свечения. Значение 100-10000 мС.
     */
     stdcommand_register(&c->cmds, MYCMD_setFadeTime, "action/setFadeTime", PARAMT_int);
 
@@ -371,12 +371,12 @@ void pwmLeds_task(void *arg){
             checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
             set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB,currentBright);
         }else{
-            if (c.ledMode==MODE_DEFAULT){
+            if (c.ledMode==PWM_MODE_DEFAULT){
                 targetBright = abs(255*c.inverse-c.max_bright); 
                 checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB ,currentBright);
                 //ESP_LOGD(TAG, "pwmRGB currentBright:%f targetBright:%f", currentBright, targetBright); 
-            }else if(c.ledMode==MODE_FLASH){
+            }else if(c.ledMode==PWM_MODE_FLASH){
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d", currentBright, targetBright); 
                 if(currentBright==c.min_bright){
                     targetBright=abs(255*c.inverse-c.max_bright);
@@ -387,7 +387,7 @@ void pwmLeds_task(void *arg){
                 }
                 checkColorAndBright(&currentRGB, &c.targetRGB, &currentBright, &targetBright, c.increment);
                 set_pwm_channels(ledc_ch_R, ledc_ch_G,ledc_ch_B, currentRGB, currentBright);
-            }else if(c.ledMode==MODE_RAINBOW){
+            }else if(c.ledMode==PWM_MODE_RAINBOW){
                 targetBright = c.max_bright;
                 HsvColor hsv=RgbToHsv(c.targetRGB);
                 //ESP_LOGD(TAG, "Flash currentBright:%d targetBright:%d H:%d S:%d V:%d",currentBright, targetBright, hsv.h, hsv.s, hsv.v);

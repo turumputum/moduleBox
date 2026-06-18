@@ -88,8 +88,6 @@ typedef struct __tag_ADC1_CHANNEL
 	uint16_t 				dead_band;
 	uint16_t 				periodic;
 
-	char *					custom_topic;
-	int 					flag_custom_topic;
 	int 					divider;
 
 	int 					currentReport;
@@ -319,13 +317,6 @@ void configure_adc1(PADC1_CHANNEL	ch, int slot_num)
 	ch->periodic = get_option_int_val(slot_num, "periodic", "", 0, 0, 4095);
 	ESP_LOGD(TAG, "S%d: Set periodic:%d", slot_num, ch->periodic);
 
-	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
-		/* Определяет топик для MQTT сообщений */
-		ch->custom_topic = get_option_string_val(slot_num,"topic", "/adc_0");
-		ESP_LOGD(TAG, "S%d: Custom topic:%s", slot_num, ch->custom_topic);
-		ch->flag_custom_topic=1;
-	}
-
 	/* Задаёт режим делителя */
 	if ((ch->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0)
 	{
@@ -422,12 +413,10 @@ void adc1_task(void *arg)
 			break;
 	}
 
-    if(ch->flag_custom_topic==0){
+    {
 		char *str = calloc(strlen(me_config.deviceName)+strlen("/analog_")+4, sizeof(char));
 		sprintf(str, "%s/analog_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=str;
-	}else{
-		me_state.trigger_topic_list[slot_num]=strdup(ch->custom_topic);
 	}
 
 	uint8_t oversumple = 150;

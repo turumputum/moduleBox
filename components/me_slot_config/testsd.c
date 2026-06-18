@@ -83,10 +83,7 @@ typedef struct __tag_TESTSD_CONFIG
 	int 					cardDetected;
 	uint8_t 				ledPin;
 
-	char *					custom_topic;
-	int 					flag_custom_topic;
-
-} TESTSD_CONFIG, * PTESTSD_CONFIG; 
+} TESTSD_CONFIG, * PTESTSD_CONFIG;
 
 typedef struct __tag_SDCARDPINSET
 {
@@ -341,21 +338,11 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
     */
     stdcommand_register(&c->cmds, rtpCMD_stop, "stop", PARAMT_none);
 
-	if (strstr(me_config.slot_options[slot_num], "topic")!=NULL){
-		/* Определяет топик для MQTT сообщений */
-		c->custom_topic = get_option_string_val(slot_num,"topic", "/testsd_0");
-		ESP_LOGD(TAG, "Custom topic:%s", c->custom_topic);
-		c->flag_custom_topic=1;
-	}
-
-    if(c->flag_custom_topic==0){
+    {
 		char *str = calloc(strlen(me_config.deviceName)+strlen("/testsd_")+4, sizeof(char));
 		sprintf(str, "%s/testsd_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=str;
 		me_state.trigger_topic_list[slot_num]=str;
-	}else{
-		me_state.action_topic_list[slot_num]=c->custom_topic;
-		me_state.trigger_topic_list[slot_num]=c->custom_topic;
 	}
 
     /* === COMMANDS === */

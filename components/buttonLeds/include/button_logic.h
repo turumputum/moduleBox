@@ -28,6 +28,13 @@ typedef struct __tag_BUTTONCONFIG
 	int 					button_inverse;
 	int 					debounce_gap;
 	int 					event_filter;
+
+	/* Состояние неблокирующего антидребезга (hold-continuously).
+	   debounce_gap трактуется как миллисекунды - как во входных модулях. */
+	int 					debounce_cand;
+	int 					debounce_stable;
+	int64_t 				debounce_since_us;
+	bool 					debounce_inited;
 	int 					stateReport;
 	int 					longReport;
 	int 					doubleReport;
@@ -62,5 +69,10 @@ typedef struct __tag_MODULE_CONTEXT
 
 void setup_button_hw(int slot_num, PMODULE_CONTEXT ctx);
 void button_logic_update(PBUTTONCONFIG c, int button_state, int slot_num, int *prev_state);
+
+/* Неблокирующий антидребезг: новый уровень принимается, только если он
+   продержался непрерывно debounce_gap мс. Возвращает текущий стабильный
+   уровень кнопки. Состояние хранится в самой структуре c. */
+int button_logic_debounce(PBUTTONCONFIG c, int raw_state);
 
 #endif // BUTTON_LOGIC_H

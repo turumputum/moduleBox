@@ -142,13 +142,7 @@ void configure_hlk2410(distanceSens_t *distanceSens, uint8_t slot_num)
         distanceSens->inverse = 1;
     }
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        char* custom_topic=NULL;
-        /* Определяет топик для MQTT сообщений */
-        custom_topic = get_option_string_val(slot_num, "topic", "/distanceSens_0");
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-        ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
+    {
         char t_str[strlen(me_config.deviceName)+strlen("/distanceSens_0")+3];
         sprintf(t_str, "%s/distanceSens_%d",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);

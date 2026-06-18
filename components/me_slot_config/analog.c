@@ -41,9 +41,6 @@ typedef struct {
     uint16_t    periodic;
     int         divider;
 
-    char *      custom_topic;
-    int         flag_custom_topic;
-
     int         currentReport;
     int         ratioReport;
     int         rawReport;
@@ -63,8 +60,6 @@ typedef struct {
     .dead_band          = 10,       \
     .periodic           = 0,        \
     .divider            = 0,        \
-    .custom_topic       = NULL,     \
-    .flag_custom_topic  = 0,        \
     .currentReport      = -1,       \
     .ratioReport        = -1,       \
     .rawReport          = -1,       \
@@ -113,13 +108,6 @@ void configure_analog(analog_context_t *ctx, int slot_num)
     /* Задаёт периодичночть отсчётов в миллисекундах */
     ctx->periodic = get_option_int_val(slot_num, "periodic", "", 0, 0, 4095);
     ESP_LOGD(TAG, "S%d: periodic:%d", slot_num, ctx->periodic);
-
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        /* Определяет топик для MQTT сообщений */
-        ctx->custom_topic = get_option_string_val(slot_num, "topic", "/analog_0");
-        ESP_LOGD(TAG, "S%d: custom topic:%s", slot_num, ctx->custom_topic);
-        ctx->flag_custom_topic = 1;
-    }
 
     /* Задаёт режим делителя */
     if ((ctx->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0) {
@@ -237,12 +225,10 @@ void analog_task(void *arg)
     }
 
     // Topic setup
-    if (ctx.flag_custom_topic == 0) {
+    {
         char *str = calloc(strlen(me_config.deviceName) + strlen("/analog_") + 4, sizeof(char));
         sprintf(str, "%s/analog_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = str;
-    } else {
-        me_state.trigger_topic_list[slot_num] = strdup(ctx.custom_topic);
     }
 
     uint8_t oversample = 150;

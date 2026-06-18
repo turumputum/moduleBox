@@ -9,8 +9,7 @@ idf_component_register(SRCS
 						"executor.c"
                         "stdreport.c"
                         "stdcommand.c"
-						"flywheel.c"
-                       
+
 						${MODULE_FILES}
 
                         "tenzo_button.c"

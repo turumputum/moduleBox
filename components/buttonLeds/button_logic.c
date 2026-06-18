@@ -1,5 +1,6 @@
 #include "button_logic.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "stateConfig.h"
 #include "me_slot_config.h"
@@ -103,6 +104,41 @@ static void _buttonStateChanged(BUTTONCONFIG *	c,
 		default:
 			break;
 	}
+}
+
+int button_logic_debounce(PBUTTONCONFIG c, int raw_state)
+{
+    /* debounce_gap <= 0 - фильтр отключён, пропускаем уровень как есть. */
+    if (c->debounce_gap <= 0) {
+        c->debounce_cand   = raw_state;
+        c->debounce_stable = raw_state;
+        return raw_state;
+    }
+
+    int64_t now = esp_timer_get_time();
+
+    /* Первый вызов: фиксируем стартовый уровень без задержки. */
+    if (!c->debounce_inited) {
+        c->debounce_inited   = true;
+        c->debounce_cand     = raw_state;
+        c->debounce_stable   = raw_state;
+        c->debounce_since_us = now;
+        return raw_state;
+    }
+
+    /* Любое движение уровня перезапускает окно ожидания. */
+    if (raw_state != c->debounce_cand) {
+        c->debounce_cand     = raw_state;
+        c->debounce_since_us = now;
+    }
+
+    /* Принимаем кандидата, только если он продержался непрерывно весь gap. */
+    if (c->debounce_cand != c->debounce_stable &&
+        (now - c->debounce_since_us) >= (int64_t)c->debounce_gap * 1000) {
+        c->debounce_stable = c->debounce_cand;
+    }
+
+    return c->debounce_stable;
 }
 
 void button_logic_update(PBUTTONCONFIG c, int button_state, int slot_num, int *prev_state)

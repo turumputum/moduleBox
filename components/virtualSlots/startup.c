@@ -45,13 +45,7 @@ void configure_startup(PSTARTUP_CONFIG ch, int slot_num)
     /* Пользовательский топик для отправки сообщения о запуске
        По умолчанию используется стандартный топик deviceName/startup_slotNum
     */
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        char* custom_topic = NULL;
-        custom_topic = get_option_string_val(slot_num, "topic", "/startup_0");
-        me_state.action_topic_list[slot_num] = strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num] = strdup(custom_topic);
-        ESP_LOGD(TAG, "customTopic:%s", me_state.action_topic_list[slot_num]);
-    } else {
+    {
         char t_str[strlen(me_config.deviceName) + strlen("/startup_0") + 3];
         sprintf(t_str, "%s/startup_%d", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);

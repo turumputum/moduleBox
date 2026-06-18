@@ -57,12 +57,7 @@ void pn532Uart_task(void* arg) {
     uint8_t tx_pin = SLOTS_PIN_MAP[slot_num][0];
     uint8_t rx_pin = SLOTS_PIN_MAP[slot_num][1];
 
-    if (strstr(me_config.slot_options[slot_num], "rfid_topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "rfid_topic", "/rfid_0");
-		me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "rfid_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/rfid_0")+3];
 		sprintf(t_str, "%s/rfid_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);

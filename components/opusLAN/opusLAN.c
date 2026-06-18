@@ -336,23 +336,13 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
 	c->latency_ms = get_option_int_val(slot_num, "latencyMs", "num", 50, 40, 500);
     ESP_LOGD(TAG, "[opusLAN_%d] latencyMs:%d", slot_num, c->latency_ms);
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        /* Топик
-        */
-        char * custom_topic = get_option_string_val(slot_num, "topic", "/audioStream_0");
-        me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-        ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
+    {
 		char t_str[strlen(me_config.deviceName)+strlen("/audioStream_0")+3];
 		sprintf(t_str, "%s/audioStream_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
-
-    /* event/enable (retained) — публикуется инфраструктурой
-       stdreport_enable() автоматически (Конституция §6, [[constitution-migration]]). */
 
     /* Рапортует при изменении громкости
 	*/
@@ -430,6 +420,8 @@ void opusLAN_task(void *arg){
 
     stdreport_i(c->volumeReport, c->volume);
     { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
+    /* Публикуем начальное состояние enable (retained) */
+    stdreport_enable(slot_num, c->state);
 
     int64_t last_blink_time = 0;
     int led_state = 0;
@@ -490,8 +482,8 @@ void opusLAN_task(void *arg){
                 break;
 
             case STDCMD_ENABLE:
-                /* event/enable retained — публикует stdcommand_receive() автоматически.
-                   Здесь только локальное действие: pause/resume пайплайна. */
+                /* event/enable retained публикуем явно ниже (stdreport_enable).
+                   Здесь же локальное действие: pause/resume пайплайна. */
                 if (params.count > 0) {
                     int new_state = params.p[0].i ? ENABLE : DISABLE;
                     if (new_state == ENABLE && c->state != ENABLE) {
@@ -500,6 +492,7 @@ void opusLAN_task(void *arg){
                         audio_pipeline_pause(c->pipeline);
                     }
                     c->state = new_state;
+                    stdreport_enable(slot_num, c->state);
                     ESP_LOGD(TAG, "[opusLAN_%d] enable:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
                 }
                 break;

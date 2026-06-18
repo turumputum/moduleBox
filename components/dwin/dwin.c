@@ -94,13 +94,7 @@ void dwinUart_task(void* arg) {
     uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0);
     ESP_LOGD(TAG, "UART initialized for slot: %d uart_num:%d rx_pin:%d tx_pin:%d", slot_num, uart_num, rx_pin, tx_pin);
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "topic", "/dwin_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/dwin_0")+3];
 		sprintf(t_str, "%s/dwin_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
@@ -199,12 +193,7 @@ void testUart_task(void* arg) {
     uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0);
     ESP_LOGD(TAG, "UART initialized for slot: %d uart_num:%d rx_pin:%d tx_pin:%d", slot_num, uart_num, rx_pin, tx_pin);
 
-    if (strstr(me_config.slot_options[slot_num], "testUart_topic") != NULL) {
-		char* custom_topic=NULL;
-    	custom_topic = get_option_string_val(slot_num, "testUart_topic", "/testUart_0");
-		me_state.action_topic_list[slot_num]=strdup(custom_topic);
-		ESP_LOGD(TAG, "action_topic:%s", me_state.action_topic_list[slot_num]);
-    }else{
+	{
 		char t_str[strlen(me_config.deviceName)+strlen("/testUart_0")+3];
 		sprintf(t_str, "%s/testUart_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);

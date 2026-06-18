@@ -321,23 +321,13 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 40, 20, 200);
     ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
 
-    if (strstr(me_config.slot_options[slot_num], "topic") != NULL) {
-        /* Топик
-        */
-        char * custom_topic = get_option_string_val(slot_num, "topic", "/audioStream_0");
-        me_state.action_topic_list[slot_num]=strdup(custom_topic);
-        me_state.trigger_topic_list[slot_num]=strdup(custom_topic);
-        ESP_LOGD(TAG, "trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }else{
+    {
 		char t_str[strlen(me_config.deviceName)+strlen("/audioStream_0")+3];
 		sprintf(t_str, "%s/audioStream_%d",me_config.deviceName, slot_num);
 		me_state.action_topic_list[slot_num]=strdup(t_str);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
-
-    /* event/enable (retained) — публикуется инфраструктурой
-       stdreport_enable() автоматически (Конституция §6, [[constitution-migration]]). */
 
     /* Рапортует при изменении громкости
 	*/
@@ -440,6 +430,8 @@ void audioLAN_task(void *arg){
 
     stdreport_i(c->volumeReport, c->volume);
     { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
+    /* Публикуем начальное состояние enable (retained) */
+    stdreport_enable(slot_num, c->state);
 
     //TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -497,8 +489,8 @@ void audioLAN_task(void *arg){
                 break;
 
             case STDCMD_ENABLE:
-                /* event/enable retained — публикует stdcommand_receive() автоматически.
-                   Здесь только локальное действие: pause/resume пайплайна.
+                /* event/enable retained публикуем явно ниже (stdreport_enable).
+                   Здесь же локальное действие: pause/resume пайплайна.
 
                    DISABLE -> ENABLE: используем pipelineStop+pipelineStart вместо
                    audio_pipeline_resume. Resume после долгой паузы (особенно
@@ -517,6 +509,7 @@ void audioLAN_task(void *arg){
                         audio_pipeline_pause(c->pipeline);
                     }
                     c->state = new_state;
+                    stdreport_enable(slot_num, c->state);
                     ESP_LOGD(TAG, "[audioLAN_%d] enable:%d. Free heap:%d", slot_num, c->state, xPortGetFreeHeapSize());
                 }
                 break;
