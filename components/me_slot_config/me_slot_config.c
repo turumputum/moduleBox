@@ -16,7 +16,6 @@
 #include "wavPlayer.h"
 #include "3n_MOSFET.h"
 #include "encoders.h"
-#include "tachometer.h"
 #include "analog.h"
 #include "esp_heap_caps.h"
 #include "stepper.h"

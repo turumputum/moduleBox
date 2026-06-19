@@ -140,11 +140,6 @@ void mqtt_pub(const char *topic, const char *string){
     //ESP_LOGD(TAG, "sent publish successful, msg_id=%d", msg_id);
 }
 
-void mqtt_pub_retain(const char *topic, const char *string){
-    int msg_id = esp_mqtt_client_publish(client, topic, string, 0, me_config.mqttQOS, 1);
-    //ESP_LOGD(TAG, "sent retained publish msg_id=%d topic=%s", msg_id, topic);
-}
-
 void mqtt_diag_snapshot(mqtt_diag_t *out){
     if (!out) return;
     *out = s_mqtt_diag;

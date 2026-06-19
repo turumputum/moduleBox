@@ -1,7 +1,8 @@
-file(GLOB_RECURSE MODULE_FILES 
+file(GLOB_RECURSE MODULE_FILES
     "in_out.c"
     "outputs.c"
     "inputs.c"
+    "tachometer.c"
 )
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
@@ -12,5 +13,5 @@ idf_component_register(SRCS
                         ${GENERATED_FILES}
                         ${MODULE_FILES}
                     INCLUDE_DIRS "include" ${CMAKE_CURRENT_BINARY_DIR}
-                    REQUIRES "me_slot_config" "reporter" "stateConfig")
+                    REQUIRES "me_slot_config" "reporter" "stateConfig" "driver")
 

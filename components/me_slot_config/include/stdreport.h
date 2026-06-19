@@ -73,9 +73,9 @@ void                stdreport_s                 (int                reportRegId,
                                                  char*              value);
 
 /**
- * @brief Публикует event/enable с retain=true (Конституция §5-6).
- *        Вызывать сразу после waitForWorkPermit (val=1) и при засыпании (val=0).
- *        trigger_topic_list[slot_num] должен быть уже установлен.
+ * @brief Публикует event/enable обычным сообщением (Конституция §6, retain не используется).
+ *        Вызывать после waitForWorkPermit и при смене состояния, если модулю нужно
+ *        сообщать миру свой статус. trigger_topic_list[slot_num] должен быть установлен.
  *
  * @param slot_num  Номер слота
  * @param value     1 — активен, 0 — спит

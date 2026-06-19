@@ -14,7 +14,7 @@ idf_component_register(SRCS
 
                         "tenzo_button.c"
                         "me_slot_config.c"
-                        "tachometer.c"
+                       
 
 						${GENERATED_FILES}
 

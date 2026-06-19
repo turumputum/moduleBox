@@ -1,1 +1,0 @@
-void start_tachometer_task(int num_of_slot);

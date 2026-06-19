@@ -207,13 +207,9 @@ void stdreport_enable(int slot_num, int value)
     if (slot_num < 0 || slot_num >= NUM_OF_SLOTS) return;
     if (!me_state.trigger_topic_list[slot_num]) return;
 
-    /* trigger_topic_list содержит базу "<deviceName>/<module>_<slot>".
-       Суффикс /event/ добавляется здесь — единая точка сборки топика. */
-    char topic[128];
-    snprintf(topic, sizeof(topic), "%s/event/enable", me_state.trigger_topic_list[slot_num]);
-
-    char payload[4];
-    snprintf(payload, sizeof(payload), "%d", value);
-
-    report_retain(topic, payload);
+    /* Обычная публикация события (retain в системе не используется).
+       report() сам префиксует базу слота, когда строка начинается с '/'. */
+    char msg[24];
+    snprintf(msg, sizeof(msg), "/event/enable:%d", value);
+    report(msg, slot_num);
 }

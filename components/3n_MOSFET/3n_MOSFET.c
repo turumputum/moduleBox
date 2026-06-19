@@ -101,7 +101,7 @@ void set_pwm_channels(ledc_channel_config_t ch_r, ledc_channel_config_t ch_g, le
 	ledc_update_duty(LEDC_MODE, ch_b.channel);
 }
 /*
-    Модуль управляет RGB-лентой
+    Модуль 3-и ШИМ канала. Частота 5 kHz.
     slots: 0-5
 */
 void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
@@ -110,17 +110,10 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 
     /* === OPTIONS === */
 
-    /* Если флаг поднят - модуль стартует в выключенном состоянии, до прихода action/enable:1.
+    /* Если флаг поднят - модуль стартует в выключенном состоянии, до прихода action/enable 1
     */
     c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
     ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", c->active_state, slot_num);
-
-    /* Величина приращения значения свечения
-    */
-    c->increment = get_option_int_val(slot_num, "increment", "", 255, 1, 4096);
-    if(c->increment>255)c->increment=255;
-    if(c->increment<1)c->increment=1;
-    ESP_LOGD(TAG, "Set increment:%d for slot:%d", c->increment, slot_num);
 
     /* Инверсия значений
     */
@@ -136,14 +129,14 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 
     /* Минимальная яркость
     */
-    c->min_bright = get_option_int_val(slot_num, "minBright", "", 0, 1, 4096);
+    c->min_bright = get_option_int_val(slot_num, "minBright", "", 0, 0, 4096);
     if(c->min_bright>255)c->min_bright=255;
     if(c->min_bright<0)c->min_bright=0;
     ESP_LOGD(TAG, "Set min_bright:%d for slot:%d",c->min_bright, slot_num);
 
     /* Период обновления
     */
-    c->refreshPeriod = 1000/get_option_int_val(slot_num, "refreshRate", "", 40, 1, 4096);
+    c->refreshPeriod = 1000/get_option_int_val(slot_num, "refreshRate", "", 40, 1, 100);
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d",c->refreshPeriod, slot_num);
     
     /* Время затухания свечения в миллисекундах
@@ -225,7 +218,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен (1) или спит (0) */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -302,6 +295,9 @@ void pwmLeds_task(void *arg){
 
     waitForWorkPermit(slot_num);
 
+    /* Стартовый retained-рапорт состояния модуля (Конституция §6) */
+    stdreport_enable(slot_num, c.active_state);
+
     while (1) {
 
         switch (stdcommand_receive(&c.cmds, &params, 0))
@@ -311,9 +307,13 @@ void pwmLeds_task(void *arg){
 
             case STDCMD_ENABLE:
                 if (params.count > 0) {
-                    c.active_state = params.p[0].i ? 1 : 0;
-                    ESP_LOGD(TAG, "enable:%d slot:%d", c.active_state, slot_num);
-                    /* event/enable публикуется автоматически stdcommand_receive */
+                    int newState = params.p[0].i ? 1 : 0;
+                    if (newState != c.active_state) {
+                        c.active_state = newState;
+                        ESP_LOGD(TAG, "enable:%d slot:%d", c.active_state, slot_num);
+                        /* event/enable публикуем явно - авто-рассылки нет */
+                        stdreport_enable(slot_num, c.active_state);
+                    }
                 }
                 break;
 
