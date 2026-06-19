@@ -54,15 +54,11 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
     // --- Distance sensor config ---
 
     stdcommand_init(&distanceSens->cmds, slot_num);
-    /* Если флаг поднят - модуль стартует в выключенном состоянии,
-       до прихода action/enable 1 (Конституция §6).
-    */
+    /* Флаг - стартовать в выключенном состоянии до прихода action/enable 1 */
     distanceSens->active_state = !get_option_flag_val(slot_num, "disableOnStart");
     ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", distanceSens->active_state, slot_num);
 
-    /* Мертвая зона - минимальное изменение значения для отправки рапорта
-    Числовое значение 1-4096, по умолчанию 10
-    */
+    /* Мертвая зона - минимальное изменение значения для отправки рапорта, По умолчанию 10 */
     if (strstr(me_config.slot_options[slot_num], "deadBand") != NULL) {
         distanceSens->deadBand = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4096);
         if (distanceSens->deadBand <= 0) {
@@ -73,36 +69,25 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
         }
     }
 
-    /* Флаг включает вывод значений в формате float (от 0 до 1)
-    Без параметров
-    */
+    /* Флаг - вывод значений в формате float от 0 до 1 */
     if (strstr(me_config.slot_options[slot_num], "floatOutput") != NULL) {
         distanceSens->flag_float_output = 1;
         ESP_LOGD(TAG, "Set float output. Slot:%d", slot_num);
     }
 
-    /* Максимальное значение диапазона измерений
-    Числовое значение 1-4500мм, по умолчанию 4500
-    */
+    /* Максимальное значение диапазона измерений в мм, По умолчанию 4500 */
     distanceSens->maxVal = get_option_int_val(slot_num, "maxVal", "", 4500, 1, 4500);
     ESP_LOGD(TAG, "Set max_val:%d. Slot:%d", distanceSens->maxVal, slot_num);
 
-    /* Минимальное значение диапазона измерений
-    Числовое значение 0-4500мм, по умолчанию 0
-    */
+    /* Минимальное значение диапазона измерений в мм, По умолчанию 0 */
     distanceSens->minVal = get_option_int_val(slot_num, "minVal", "", 0, 0, 4500);
     ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);
 
-    /* Задержка между отправкой рапортов (антидребезг)
-    Числовое значение 1-4096мс, по умолчанию 10
-    */
+    /* Задержка между отправкой рапортов в мс - антидребезг, По умолчанию 10 */
     distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
     ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);
 
-    /* Порог для бинарного выхода (вкл/выкл)
-    При значении 0 работает как аналоговый датчик
-    Числовое значение 0-4500, по умолчанию 0
-    */
+    /* Порог для бинарного выхода - при значении 0 датчик аналоговый, По умолчанию 0 */
     if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
         distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 4500);
         if (distanceSens->threshold <= 0) {
@@ -113,9 +98,7 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
         }
     }
 
-    /* Время cooldown после срабатывания порога (мс)
-    Числовое значение 0-60000мс, по умолчанию 0
-    */
+    /* Время cooldown после срабатывания порога в мс, По умолчанию 0 */
     if (strstr(me_config.slot_options[slot_num], "cooldownTime") != NULL) {
         distanceSens->cooldownTime = pdMS_TO_TICKS(get_option_int_val(slot_num, "cooldownTime", "", 0, 0, 60000));
         if (distanceSens->cooldownTime > 0) {
@@ -123,18 +106,13 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
         }
     }
 
-    /* Коэффициент фильтра сглаживания (от 0 до 1)
-    При значении 1 фильтр отключен
-    Числовое значение с плавающей точкой, по умолчанию 1
-    */
+    /* Коэффициент фильтра сглаживания от 0 до 1 - при значении 1 фильтр отключен, По умолчанию 1 */
     if (strstr(me_config.slot_options[slot_num], "filterK") != NULL) {
         distanceSens->k = get_option_float_val(slot_num, "filterK", 1);
         ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", distanceSens->k, slot_num);
     }
 
-    /* Флаг инверсии выходного значения
-    Без параметров
-    */
+    /* Флаг - инверсия выходного значения */
     if (strstr(me_config.slot_options[slot_num], "inverse") != NULL) {
         distanceSens->inverse = 1;
     }
@@ -143,6 +121,7 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
         char t_str[strlen(me_config.deviceName)+strlen("/distanceSens_0")+3];
         sprintf(t_str, "%s/distanceSens_%d",me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num]=strdup(t_str);
+        me_state.action_topic_list[slot_num]=strdup(t_str);
         ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
@@ -178,24 +157,21 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 
     // --- Report registration ---
     
-    /* Рапортует текущее значение расстояния в мм
-    */
+    /* Текущее значение расстояния в мм */
     distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "event/distance", 0, distanceSens->maxVal);
-    /* Рапортует текущее значение расстояния в формате float (от 0 до 1)
-    */
+    /* Текущее значение расстояния в формате float от 0 до 1 */
     distanceSens->distanceFloatReport = stdreport_register(RPTT_ratio, slot_num, "ratio", "event/ratio", 0.0f, 1.0f);
-    /* Рапортует состояние порогового датчика 0/1
-    */
+    /* Состояние порогового датчика 0/1 */
     distanceSens->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль */
     stdcommand_register(&distanceSens->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0 */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -243,6 +219,7 @@ void sr04m_task(void* arg) {
     STDCOMMAND_PARAMS params = {0};
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, distanceSens.active_state);
 
     while (1) {
         // --- Обработка команд (включая action/enable) ---
@@ -251,7 +228,7 @@ void sr04m_task(void* arg) {
             if (params.count > 0) {
                 distanceSens.active_state = params.p[0].i ? 1 : 0;
                 ESP_LOGD(TAG, "enable:%d slot:%d", distanceSens.active_state, slot_num);
-                /* event/enable публикуется автоматически stdcommand_receive */
+                stdreport_enable(slot_num, distanceSens.active_state);
             }
         }
 
