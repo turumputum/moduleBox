@@ -48,16 +48,13 @@ static void parse_slot_list(const char *src, int *slots, int *count, int max) {
     }
 }
 
-/*
-    Модуль матрицы кнопок
-    сканирует прямоугольную матрицу: outSlots задаёт колонки выводов, inSlots - строки чтения
-    при нажатии репортит символ из mapping по индексу row*cols + col
+/* Матрица кнопок - сканирует сетку выходов outSlots на входы inSlots
+   и репортит символ нажатой клетки из таблицы mapping
 */
 void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
     
     if (strstr(me_config.slot_options[slot_num], "outSlots:") != NULL) {
-        /* Список номеров слотов задействованных как выходы матрицы (через пробел)
-        по умолчанию используется текущий слот
+        /* Слоты-выходы матрицы через пробел, По умолчанию текущий слот
         */
         char *raw = get_option_string_val(slot_num, "outSlots", "0");
         parse_slot_list(raw, ctx->outSlots, &ctx->outSlotsCount, BUTTON_MATRIX_MAX_SLOTS);
@@ -77,8 +74,7 @@ void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
 
 
     if (strstr(me_config.slot_options[slot_num], "inSlots:") != NULL) {
-        /* Список номеров слотов задействованных как входы матрицы (через пробел)
-        по умолчанию используется слот следующий за текущим
+        /* Слоты-входы матрицы через пробел, По умолчанию следующий слот
         */
         char *raw = get_option_string_val(slot_num, "inSlots", "1");
         parse_slot_list(raw, ctx->inSlots, &ctx->inSlotsCount, BUTTON_MATRIX_MAX_SLOTS);
@@ -100,10 +96,8 @@ void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
     ctx->charMapSize = ctx->outSlotsCount * 3 * ctx->inSlotsCount * 3;
     ctx->charMap     = calloc(ctx->charMapSize + 1, sizeof(char));
     if (strstr(me_config.slot_options[slot_num], "mapping:") != NULL) {
-        /* Строка соответствий клеток матрицы и символов
-        длина строки должна совпадать с outSlotsCount * inSlotsCount * 9,
-        без пробелов, например '123456789'
-        при отсутствии опции клетки автоматически нумеруются: a-z затем A-Z
+        /* Символы клеток строкой без пробелов '123456789', длина outSlots*inSlots*9
+        По умолчанию клетки нумеруются a-z затем A-Z
         */
         char *raw = get_option_string_val(slot_num, "mapping", "123456789");
         int len = strlen(raw);
@@ -127,8 +121,7 @@ void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
         ESP_LOGD(TAG, "Standart buttonMatrix topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
-    /* Рапортует строкой символ соответствующий нажатой клетке матрицы
-       символ берётся из mapping по индексу row*cols + col
+    /* Символ нажатой клетки матрицы из таблицы mapping
     */
     ctx->charReport = stdreport_register(RPTT_string, slot_num, "", "event/key");
 }
