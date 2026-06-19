@@ -265,35 +265,25 @@ esp_err_t opusPipelineStart(POPUSCONFIG c) {
 	return ESP_OK;
 }
 
-/* 
-    Модуль звук через сеть с кодеком Opus
-    Задержка порядка 80мс-100мс в зависимости от сети
-    slots: 0-0
+/* Звук по сети с кодеком Opus - RTP поток в I2S, unicast или multicast. Задержка порядка 100мс.
+slots: 0-0
 */
 void configure_opusLAN(POPUSCONFIG c, int slot_num)
 {
     
     stdcommand_init(&c->cmds, slot_num);
-    /* задает состояние модуля по умолчанию вкл/выкл
-    по умолчанию 1 - включен
-    */
-    /* Если флаг поднят - модуль стартует в выключенном состоянии,
-       до прихода action/enable 1 (Конституция §6).
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
     */
     c->defaultState = !get_option_flag_val(slot_num, "disableOnStart");
     c->state = c->defaultState;
     ESP_LOGD(TAG, "Initial state:%d for slot:%d", c->state, slot_num);
 
-    /* Громкость
-    - 0-100 по умолчанию 100
+    /* Громкость 0-100, По умолчанию 100
 	*/
 	c->volume =  get_option_int_val(slot_num, "volume", "percent", 100, 0, 100);
     ESP_LOGD(TAG, "[opusLAN_%d] volume:%d", slot_num, c->volume);
 
-    /* Multicast адрес
-    - если указан, модуль работает в режиме multicast
-    - если не указан, модуль слушает unicast на порту
-    - формат: IPv4 адрес для multicast группы
+    /* Multicast адрес IPv4 - если задан режим multicast иначе unicast, По умолчанию unicast
 	*/
     if (strstr(me_config.slot_options[slot_num], "multicastAddress") != NULL) {
         char * mcast_addr = get_option_string_val(slot_num, "multicastAddress", "239.0.7.0");
@@ -306,32 +296,26 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
         ESP_LOGI(TAG, "[opusLAN_%d] unicast mode", slot_num);
     }
 
-    /* порт
-    - по умолчанию 7777
+    /* Порт приёма потока, По умолчанию 7777
 	*/
 	c->port =  get_option_int_val(slot_num, "port", "num", 7777, 0, UINT16_MAX);
     ESP_LOGD(TAG, "[opusLAN_%d] port:%d", slot_num, c->port);
 
-    /* Sample rate
-    - по умолчанию 48000
+    /* Частота дискретизации Гц, По умолчанию 48000
 	*/
 	c->sample_rate = get_option_int_val(slot_num, "sampleRate", "num", 48000, 8000, 96000);
     ESP_LOGD(TAG, "[opusLAN_%d] sampleRate:%d", slot_num, c->sample_rate);
 
-    /* Bits per sample
-    - по умолчанию 16
-	*/
-    c->bits_per_sample = 16; /* Opus decoder always outputs 16-bit PCM, not configurable */
+    /* Opus всегда выдаёт 16 бит PCM - не настраивается */
+    c->bits_per_sample = 16;
     ESP_LOGD(TAG, "[opusLAN_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
 
-    /* Размер буфера (jitter buffer) в миллисекундах
-    - по умолчанию 500мс
+    /* Размер jitter-буфера мс, По умолчанию 50
 	*/
 	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 50, 50, 5000);
     ESP_LOGD(TAG, "[opusLAN_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
 
-    /* Target latency / sync delay in ms
-    - default 240ms (synchronised across all devices with same latencyMs)
+    /* Целевая задержка синхронизации мс - одинаковая на всех приёмниках, По умолчанию 50
     */
 	c->latency_ms = get_option_int_val(slot_num, "latencyMs", "num", 50, 40, 500);
     ESP_LOGD(TAG, "[opusLAN_%d] latencyMs:%d", slot_num, c->latency_ms);
@@ -343,37 +327,35 @@ void configure_opusLAN(POPUSCONFIG c, int slot_num)
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
+    
+    /* === EVENTS === */
 
-    /* Рапортует при изменении громкости
+    /* Активен 1 или спит 0
+    */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    /* Текущая громкость
 	*/
 	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "event/volume");
 
-    /* Рапортует текущий адрес потока */
+    /* Текущий адрес потока
+    */
     c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "event/address");
-
-    /* action/enable - авто-регистрируется в stdcommand_init (Конституция §6).
-       Обрабатывается в case STDCMD_ENABLE. */
-
-    /* Команда устанавливает значение громкости
-    0-100
-    */
-    stdcommand_register(&c->cmds, opusCMD_setVolume, "action/setVolume", PARAMT_int);
-
-    /* Команда переключает multicast адрес на лету
-    - строка IPv4 адреса для multicast группы
-    - 0 — переключиться на unicast
-    */
-    stdcommand_register(&c->cmds, opusCMD_setMulticastAddress, "action/setMulticastAddress", PARAMT_string);
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Установить громкость 0-100
+    */
+    stdcommand_register(&c->cmds, opusCMD_setVolume, "action/setVolume", PARAMT_int);
+
+    /* Сменить multicast адрес на лету - IPv4 или 0 для unicast
+    */
+    stdcommand_register(&c->cmds, opusCMD_setMulticastAddress, "action/setMulticastAddress", PARAMT_string);
+
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
-    /* === EVENTS === */
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    
 }
 
 void opusLAN_task(void *arg){
@@ -420,7 +402,7 @@ void opusLAN_task(void *arg){
 
     stdreport_i(c->volumeReport, c->volume);
     { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
-    /* Публикуем начальное состояние enable (retained) */
+    /* Публикуем начальное состояние enable */
     stdreport_enable(slot_num, c->state);
 
     int64_t last_blink_time = 0;
@@ -482,7 +464,7 @@ void opusLAN_task(void *arg){
                 break;
 
             case STDCMD_ENABLE:
-                /* event/enable retained публикуем явно ниже (stdreport_enable).
+                /* event/enable публикуем явно ниже (stdreport_enable).
                    Здесь же локальное действие: pause/resume пайплайна. */
                 if (params.count > 0) {
                     int new_state = params.p[0].i ? ENABLE : DISABLE;

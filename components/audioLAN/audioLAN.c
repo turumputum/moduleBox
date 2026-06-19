@@ -257,34 +257,26 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
 	return ESP_OK;
 }
 
-/* Модуль звук через сеть.
-- Поддерживает как unicast, так и multicast режимы (настраивается через конфиг)
-- Читает аудио данные из RTP потока и выводит на I2S
-- Поддерживает горячее переключение multicast адреса на лету через команду setMulticastAddress
-- задержка порядка 70мс
+/* Звук по сети - RTP поток без сжатия в I2S, unicast или multicast. Задержка порядка 70мс.
 slots: 0-0
 */
 void configure_audioLAN(PRTPCONFIG c, int slot_num)
 {
     
     stdcommand_init(&c->cmds, slot_num);
-    /* Если флаг поднят - модуль стартует в выключенном состоянии,
-       до прихода action/enable 1 (Конституция §6).
+    
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
     */
     c->defaultState = !get_option_flag_val(slot_num, "disableOnStart");
     c->state = c->defaultState;
     ESP_LOGD(TAG, "Initial state:%d for slot:%d", c->state, slot_num);
 
-    /* Громкость
-    - 0-100 по умолчанию 100
+    /* Громкость 0-100, По умолчанию 100
 	*/
 	c->volume =  get_option_int_val(slot_num, "volume", "percent", 100, 0, 100);
     ESP_LOGD(TAG, "[LANplayer_%d] volume:%d", slot_num, c->volume);
 
-    /* Multicast адрес
-    - если указан, модуль работает в режиме multicast
-    - если не указан, модуль слушает unicast на порту
-    - формат: IPv4 адрес, например \"239.0.7.1\"
+    /* Multicast адрес IPv4 - если задан режим multicast иначе unicast, По умолчанию unicast
 	*/
     if (strstr(me_config.slot_options[slot_num], "multicastAddress") != NULL) {
         char * mcast_addr = get_option_string_val(slot_num, "multicastAddress", "239.0.7.0");
@@ -297,26 +289,22 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
         ESP_LOGI(TAG, "[LANplayer_%d] unicast mode", slot_num);
     }
 
-    /* порт
-    - по умолчанию 7777
+    /* Порт приёма потока, По умолчанию 7777
 	*/
 	c->port =  get_option_int_val(slot_num, "port", "num", 7777, 0, UINT16_MAX);
     ESP_LOGD(TAG, "[LANplayer_%d] port:%d", slot_num, c->port);
 
-    /* Sample rate
-    - по умолчанию 48000
+    /* Частота дискретизации Гц, По умолчанию 48000
 	*/
 	c->sample_rate = get_option_int_val(slot_num, "sampleRate", "num", 48000, 8000, 96000);
     ESP_LOGD(TAG, "[LANplayer_%d] sampleRate:%d", slot_num, c->sample_rate);
 
-    /* Bits per sample
-    - по умолчанию 16
+    /* Бит на отсчёт, По умолчанию 16
 	*/
 	c->bits_per_sample = get_option_int_val(slot_num, "bitsPerSample", "num", 16, 8, 32);
     ESP_LOGD(TAG, "[LANplayer_%d] bitsPerSample:%d", slot_num, c->bits_per_sample);
 
-    /* Размер jitter-буфера в миллисекундах
-    - по умолчанию 40 мс
+    /* Размер jitter-буфера мс, По умолчанию 40
 	*/
 	c->jbuf_ms = get_option_int_val(slot_num, "bufSize", "num", 40, 20, 200);
     ESP_LOGD(TAG, "[LANplayer_%d] bufSize:%d ms", slot_num, c->jbuf_ms);
@@ -329,37 +317,35 @@ void configure_audioLAN(PRTPCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 
-    /* Рапортует при изменении громкости
+    /* === EVENTS === */
+
+    /* Активен 1 или спит 0
+    */
+    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    
+    /* Текущая громкость
 	*/
 	c->volumeReport = stdreport_register(RPTT_int, slot_num, "percent", "event/volume");
 
-    /* Рапортует текущий адрес стрима (multicast/unicast)
+    /* Текущий адрес потока
 	*/
 	c->addressReport = stdreport_register(RPTT_string, slot_num, "string", "event/address");
 
-    /* action/enable - авто-регистрируется в stdcommand_init (Конституция §6).
-       Обрабатывается в case STDCMD_ENABLE. */
+    /* === COMMANDS === */
 
-    /* Команда устанавливает значение громкости
-    0-100
+    /* Установить громкость 0-100
     */
     stdcommand_register(&c->cmds, rtpCMD_setVolume, "action/setVolume", PARAMT_int);
 
-    /* Команда переключает multicast адрес на лету
-    - строка IPv4 адреса для multicast, например \"239.0.7.1\"
-    - \"0\" — переключиться на unicast
+    /* Сменить multicast адрес на лету - IPv4 или 0 для unicast
     */
     stdcommand_register(&c->cmds, rtpCMD_setMulticastAddress, "action/setMulticastAddress", PARAMT_string);
 
-    /* === COMMANDS === */
-
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
-    /* === EVENTS === */
-
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    
 }
 
 void audioLAN_task(void *arg){
@@ -430,7 +416,7 @@ void audioLAN_task(void *arg){
 
     stdreport_i(c->volumeReport, c->volume);
     { char _ab[48]; snprintf(_ab, sizeof(_ab), "%s:%d", c->useMulticast ? c->multicastAddress : _get_device_ip(), c->port); stdreport_s(c->addressReport, _ab); }
-    /* Публикуем начальное состояние enable (retained) */
+    /* Публикуем начальное состояние enable */
     stdreport_enable(slot_num, c->state);
 
     //TickType_t lastWakeTime = xTaskGetTickCount();
@@ -489,7 +475,7 @@ void audioLAN_task(void *arg){
                 break;
 
             case STDCMD_ENABLE:
-                /* event/enable retained публикуем явно ниже (stdreport_enable).
+                /* event/enable публикуем явно ниже (stdreport_enable).
                    Здесь же локальное действие: pause/resume пайплайна.
 
                    DISABLE -> ENABLE: используем pipelineStop+pipelineStart вместо
