@@ -17,6 +17,9 @@ typedef struct {
     char    *charMap;
     int      charMapSize;
 
+    int      debounceCount;
+    int      refreshPeriod;
+
     int      charReport;
 } buttonMatrix_t;
 
@@ -25,6 +28,8 @@ typedef struct {
     .inSlotsCount  = 0,\
     .charMap       = NULL,\
     .charMapSize   = 0,\
+    .debounceCount = 3,\
+    .refreshPeriod = 10,\
     .charReport    = -1,\
 }
 
