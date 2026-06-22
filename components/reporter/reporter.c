@@ -298,15 +298,38 @@ void send_report(reporter_message_t * msg)
 		char *rest;
 		char *tok = strtok_r(msg_copy, ":", &rest);
 		
+		/* Автоопределение типа OSC-значения по payload:
+		   целое -> 'i', дробное -> 'f', всё остальное (строки, напр buttonMatrix) -> 's'.
+		   Пустой payload остаётся 'i' (atoi -> 0) ради совместимости. */
+		char osc_type = 'i';
+		if(rest != NULL && rest[0] != 0){
+			const char *p = rest;
+			int digits = 0, dots = 0, other = 0;
+			if(*p == '+' || *p == '-') p++;
+			for(; *p; p++){
+				if(*p >= '0' && *p <= '9') digits++;
+				else if(*p == '.') dots++;
+				else other++;
+			}
+			if(other == 0 && digits > 0 && dots <= 1){
+				osc_type = (dots == 1) ? 'f' : 'i';
+			}else{
+				osc_type = 's';
+			}
+		}
+
 		int len=0;
-		if(strstr(rest, ".")!=NULL){
+		if(osc_type == 'f'){
 			float tmp = atof(rest);
 			len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "f", tmp);
-			ESP_LOGD(TAG, "OSC f string%s float:%f", tmpString, tmp );
+			ESP_LOGD(TAG, "OSC f %s float:%f", tmpString, tmp);
+		}else if(osc_type == 's'){
+			len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "s", rest);
+			ESP_LOGD(TAG, "OSC s %s str:%s", tmpString, rest);
 		}else{
 			int tmp = atoi(rest);
 			len = tosc_writeMessage(tmpString, strlen(msg_copy)+20, tok, "i", tmp);
-			ESP_LOGD(TAG, "OSC i string%s  tmp:%d", tmpString , tmp);
+			ESP_LOGD(TAG, "OSC i %s tmp:%d", tmpString, tmp);
 		}
 		
 
