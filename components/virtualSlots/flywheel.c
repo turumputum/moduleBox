@@ -83,8 +83,7 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
     ch->minVal = get_option_int_val(slot_num, "minVal", "", 0, 0, 10000);
     ESP_LOGD(TAG, "Set min_counter:%ld for slot:%d", ch->minVal, slot_num);
 
-    /* Не стандартный топик для flywheel
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/flywheel_0") + 3];
         sprintf(t_str, "%s/flywheel_%d", me_config.deviceName, slot_num);
@@ -109,12 +108,14 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -131,11 +132,14 @@ void flywheel_task(void *arg){
     float _flywheelCount = 0;
     uint8_t flywheel_state = 0;
     uint8_t _flywheel_state = 0;
-    bool active_state = 1;
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    bool active_state = !get_option_flag_val(slot_num, "disableOnStart");
 
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, active_state);
 
     for(;;) {
         flywheelCount -= c.decrement;
@@ -171,6 +175,7 @@ void flywheel_task(void *arg){
             case STDCMD_ENABLE:
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
+                    stdreport_enable(slot_num, active_state);
                     ESP_LOGD(TAG, "[flywheel_%d] enable:%d", slot_num, active_state);
                 }
                 break;

@@ -84,7 +84,7 @@ void configure_hlk2410(distanceSens_t *distanceSens, uint8_t slot_num)
         ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);
     }
 
-    /* Задержка между отправкой рапортов в мс - антидребезг, По умолчанию 10 */
+    /* Антидребезг порога в мс - новое состояние держится это время до рапорта, По умолчанию 10 */
     if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
         distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);

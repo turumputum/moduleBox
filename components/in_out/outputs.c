@@ -46,6 +46,7 @@ typedef struct {
     int defaultStateMass[3];
     int stateMass[3];
     int numOfCh;
+    int active_state;
 } out_context_t;
 
 
@@ -100,23 +101,24 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
 
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
-    /* Настраивает инверсию выходного сигнала для канала 0
-    0-1 по умолчанию 0
+
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    ctx->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+
+    /* Инверсия выхода канала 0, По умолчанию 0
     */
     ctx->inverseMass[0] = get_option_int_val(slot_num, "inverse_0", "bool",0, 0, 1);
-    
-    /* Настраивает инверсию выходного сигнала для канала 1
-    0-1 по умолчанию 0
+
+    /* Инверсия выхода канала 1, По умолчанию 0
     */
     ctx->inverseMass[1] = get_option_int_val(slot_num, "inverse_1","bool",0, 0, 1);
 
-    /* Настраивает значение по умолчанию для канало 0
-    0-1 поумолчанию 0
+    /* Состояние канала 0 при старте 0-1, По умолчанию 0
     */
     ctx->defaultStateMass[0] = get_option_int_val(slot_num, "defState_0", "bool", 0, 0, 1);
-    
-    /* Настраивает значение по умолчанию для канало 1
-    0-1 поумолчанию 0
+
+    /* Состояние канала 1 при старте 0-1, По умолчанию 0
     */
     ctx->defaultStateMass[1] = get_option_int_val(slot_num, "defState_1", "bool", 0, 0, 1);
 
@@ -129,37 +131,39 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
     }
 
     // Register commands
-    /* Команда для установки состояния выходного сигнала, значение 0-1
+    /* Установить выход канала 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "action/ch_0", PARAMT_int);
-    /* Команда для установки состояния выходного сигнала, значение 0-1
+    /* Установить выход канала 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "action/ch_1", PARAMT_int);
 
-    /* Команда для переключения состояния выходного сигнала, значение игнорируется
+    /* Переключить выход канала
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "action/ch_0/toggle", PARAMT_none);
 
-    /* Команда для переключения состояния выходного сигнала, значение игнорируется
+    /* Переключить выход канала
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "action/ch_1/toggle", PARAMT_none);
 
-    /* Команда для импульсного включения, значение длительность импульса в мс
+    /* Импульс на выходе канала - длительность в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "action/ch_0/impulse", PARAMT_int);
 
-    /* Команда для импульсного включения, значение длительность импульса в мс
+    /* Импульс на выходе канала - длительность в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "action/ch_1/impulse", PARAMT_int);
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -213,7 +217,8 @@ static void out_2ch_task(void *arg) {
 
     waitForWorkPermit(slot_num);
     STDCOMMAND_PARAMS params = {0};
-    bool active_state = 1;
+    bool active_state = ctx.active_state;
+    stdreport_enable(slot_num, active_state);
 
     while (1) {
         // Check for OUTPUT commands (non-blocking)
@@ -229,6 +234,7 @@ static void out_2ch_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "[out_2ch_%d] enable:%d", slot_num, active_state);
+                    stdreport_enable(slot_num, active_state);
                     if (!active_state) {
                         /* На выключении сбрасываем выходы в default-состояние */
                         for (int i = 0; i < ctx.numOfCh; i++) {
@@ -298,32 +304,39 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    ctx->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
-    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
+
+    /* Инверсия выхода канала 0, По умолчанию 0
     */
     ctx->inverseMass[0] = get_option_int_val(slot_num, "inverse_0", "bool", 0, 0, 1);
     
-    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
+    /* Инверсия выхода, По умолчанию 0
     */
     ctx->inverseMass[1] = get_option_int_val(slot_num, "inverse_1", "bool", 0, 0, 1);
 
-    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
+    /* Инверсия выхода, По умолчанию 0
     */
     ctx->inverseMass[2] = get_option_int_val(slot_num, "inverse_2", "bool", 0, 0, 1);
 
-    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
+    /* Состояние при старте 0-1, По умолчанию 0
     */
     ctx->defaultStateMass[0] = get_option_int_val(slot_num, "defState_0", "bool", 0, 0, 1);
     
-    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
+    /* Состояние при старте 0-1, По умолчанию 0
     */
     ctx->defaultStateMass[1] = get_option_int_val(slot_num, "defState_1", "bool", 0, 0, 1);
 
-    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
+    /* Состояние при старте 0-1, По умолчанию 0
     */
     ctx->defaultStateMass[2] = get_option_int_val(slot_num, "defState_2", "bool", 0, 0, 1);
 
@@ -336,39 +349,39 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
     }
 
     // Register commands
-    /* Команда для установки состояния выходного сигнала, значение 0-1
+    /* Установить выход канала 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_default, "action/ch_0", PARAMT_int);
     
-    /* Команда для установки состояния выходного сигнала, значение 0-1
+    /* Установить выход канала 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_default, "action/ch_1", PARAMT_int);
     
-    /* Команда для установки состояния выходного сигнала, значение 0-1
+    /* Установить выход канала 0-1
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_default, "action/ch_2", PARAMT_int);
 
-    /* Команда для переключения состояния выходного сигнала, значение игнорируется
+    /* Переключить выход канала
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_toggle, "action/ch_0/toggle", PARAMT_none);
 
-    /* Команда для переключения состояния выходного сигнала, значение игнорируется
+    /* Переключить выход канала
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_toggle, "action/ch_1/toggle", PARAMT_none);
 
-    /* Команда для переключения состояния выходного сигнала, значение игнорируется
+    /* Переключить выход канала
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_toggle, "action/ch_2/toggle", PARAMT_none);
 
-    /* Команда для импульсного включения, значение длительность импульса в мс
+    /* Импульс на выходе канала - длительность в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_0_impulse, "action/ch_0/impulse", PARAMT_int);
 
-    /* Команда для импульсного включения, значение длительность импульса в мс
+    /* Импульс на выходе канала - длительность в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_1_impulse, "action/ch_1/impulse", PARAMT_int);
 
-    /* Команда для импульсного включения, значение длительность импульса в мс
+    /* Импульс на выходе канала - длительность в мс
     */
     stdcommand_register(&ctx->cmds, OUT_CMD_ch_2_impulse, "action/ch_2/impulse", PARAMT_int);
 }
@@ -425,7 +438,8 @@ static void out_3ch_task(void *arg) {
     esp_timer_create(&impulse_timer_2_args, &impulse_timer_2);
 
     waitForWorkPermit(slot_num);
-    bool active_state = 1;
+    bool active_state = ctx.active_state;
+    stdreport_enable(slot_num, active_state);
 
     while (1) {
         // Check for OUTPUT commands
@@ -441,6 +455,7 @@ static void out_3ch_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "[out_3ch_%d] enable:%d", slot_num, active_state);
+                    stdreport_enable(slot_num, active_state);
                     if (!active_state) {
                         for (int i = 0; i < ctx.numOfCh; i++) {
                             _set_out_level(&ctx, ctx.defaultStateMass[i], i);
@@ -518,6 +533,7 @@ typedef struct {
     int inverse;
     int defaultState;
     int state;
+    int active_state;
 } relay_context_t;
 
 typedef enum {
@@ -541,16 +557,23 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
 
-    /* Включить (1) или выключить (0) модуль. По умолчанию 1. */
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    ctx->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
-    /* Настраивает инверсию выходного сигнала. Значение 0-1 по умолчанию 0
+
+    /* Инверсия выхода, По умолчанию 0
     */
     ctx->inverse = get_option_int_val(slot_num, "inverse", "bool", 0, 0, 1);
 
-    /* Настраивает значение по умолчанию. Значение 0-1 по умолчанию 0
+    /* Состояние при старте 0-1, По умолчанию 0
     */
     ctx->defaultState = get_option_int_val(slot_num, "defState", "bool", 0, 0, 1);
 
@@ -563,15 +586,15 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
     }
 
     // Register commands
-    /* Команда для установки состояния реле, значение 0-1
+    /* Установить реле 0-1
     */
     stdcommand_register(&ctx->cmds, RELAY_CMD_set, "action/setVal", PARAMT_int);
 
-    /* Команда для переключения состояния реле, значение игнорируется
+    /* Переключить реле
     */
     stdcommand_register(&ctx->cmds, RELAY_CMD_toggle, "action/toggle", PARAMT_none);
 
-    /* Команда для импульсного включения реле (длительность в мс)
+    /* Импульс реле - длительность в мс
     */
     stdcommand_register(&ctx->cmds, RELAY_CMD_impulse, "action/impulse", PARAMT_int);
 }
@@ -607,7 +630,8 @@ static void relay_task(void *arg) {
     esp_timer_create(&impulse_timer_args, &impulse_timer);
 
     waitForWorkPermit(slot_num);
-    bool active_state = 1;
+    bool active_state = ctx.active_state;
+    stdreport_enable(slot_num, active_state);
 
     while (1) {
         STDCOMMAND_PARAMS params = {0};
@@ -622,6 +646,7 @@ static void relay_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "[relay_%d] enable:%d", slot_num, active_state);
+                    stdreport_enable(slot_num, active_state);
                     if (!active_state) {
                         ctx.state = ctx.defaultState;
                         gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);

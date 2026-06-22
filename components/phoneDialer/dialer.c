@@ -47,38 +47,32 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
 */
 void configure_dialer(PDIALER_CONFIG ch, int slot_num)
 {
-    /* Время ожидания окончания набора в миллисекундах
-       По умолчанию 3000 мс
+    /* Время ожидания конца набора в мс, По умолчанию 3000
     */
     ch->waitingTime = get_option_int_val(slot_num, "waitingTime", "ms", 3000, 1, 60000);
     ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", ch->waitingTime, slot_num);
 
-    /* Максимальная длина набираемого номера
-       По умолчанию 7 символов
+    /* Максимальная длина номера, По умолчанию 7
     */
     ch->numberMaxLenght = get_option_int_val(slot_num, "numberMaxLenght", "", 7, 1, 32);
     ESP_LOGD(TAG, "Set numberMaxLenght:%d for slot:%d", ch->numberMaxLenght, slot_num);
 
     /* Инверсия сигнала разрешения набора
-       0-1 по умолчанию 0
     */
     ch->enaInverse = get_option_flag_val(slot_num, "enaInverse");
     ESP_LOGD(TAG, "Set enaInverse:%d for slot:%d", ch->enaInverse, slot_num);
 
     /* Инверсия импульсного сигнала
-       0-1 по умолчанию 0
     */
     ch->pulseInverse = get_option_flag_val(slot_num, "pulseInverse");
     ESP_LOGD(TAG, "Set pulseInverse:%d for slot:%d", ch->pulseInverse, slot_num);
 
-    /* Время антидребезга импульсного сигнала в миллисекундах
-       По умолчанию 20 мс
+    /* Антидребезг импульса в мс, По умолчанию 20
     */
     ch->debounceGap = get_option_int_val(slot_num, "debounceGap", "ms", 20, 1, 1000);
     ESP_LOGD(TAG, "Set debounceGap:%d for slot:%d", ch->debounceGap, slot_num);
 
-    /* Не стандартный топик для номеронабирателя
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/dialer_0") + 3];
         sprintf(t_str, "%s/dialer_%d", me_config.deviceName, slot_num);
@@ -88,28 +82,30 @@ void configure_dialer(PDIALER_CONFIG ch, int slot_num)
     }
 
     stdcommand_init(&ch->cmds, slot_num);
-    /* Если флаг поднят - модуль стартует в выключенном состоянии,
-       до прихода action/enable 1 (Конституция §6).
+
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию включен
     */
     ch->active_state = !get_option_flag_val(slot_num, "disableOnStart");
     ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", ch->active_state, slot_num);
 
-    /* Сброс текущего набираемого номера
+    /* Сброс текущего набора.
     */
     stdcommand_register(&ch->cmds, DIALERCMD_reset, "action/reset", PARAMT_none);
 
-    /* Отчёт набранного номера
+    /* Набранный номер, в формате строки.
     */
     ch->numberReport = stdreport_register(RPTT_string, slot_num, "", "event/val");
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -146,6 +142,7 @@ void dialer_task(void* arg) {
         .pull_up_en = 0,
     };
     gpio_config(&in_conf);
+    gpio_install_isr_service(0);
     gpio_isr_handler_add(pulse_pin, gpio_isr_handler, (void*)(intptr_t)slot_num);
 
     uint8_t counter = 0;
@@ -157,6 +154,7 @@ void dialer_task(void* arg) {
     uint8_t state_flag = 0;
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, c.active_state);
 
     while(1){
         // Обработка команд
@@ -175,7 +173,7 @@ void dialer_task(void* arg) {
                         state_flag = 0;
                         counter = 0;
                     }
-                    /* event/enable публикуется автоматически stdcommand_receive */
+                    stdreport_enable(slot_num, c.active_state);
                 }
                 break;
             case DIALERCMD_reset:

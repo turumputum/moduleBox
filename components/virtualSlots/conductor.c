@@ -75,8 +75,7 @@ void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
     ch->timeout = get_option_int_val(slot_num, "timeout", "ms", 0, 0, INT32_MAX);
     ESP_LOGD(TAG, "Set timeout:%lu ms for slot:%d", ch->timeout, slot_num);
 
-    /* Не стандартный топик для conductor
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/conductor_0") + 3];
         sprintf(t_str, "%s/conductor_%d", me_config.deviceName, slot_num);
@@ -117,7 +116,8 @@ void configure_conductor(PCONDUCTOR_CONFIG ch, int slot_num)
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -136,9 +136,12 @@ void conductor_task(void *arg) {
     int32_t targetPosition = 0;
     int8_t isMoving = 0;
     int64_t lastCommandTime = 0;
-    bool active_state = 1;
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    bool active_state = !get_option_flag_val(slot_num, "disableOnStart");
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, active_state);
 
     while (1) {
         // Проверка таймаута
@@ -162,6 +165,7 @@ void conductor_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "[conductor_%d] enable:%d", slot_num, active_state);
+                    stdreport_enable(slot_num, active_state);
                 }
                 break;
 

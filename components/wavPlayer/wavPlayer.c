@@ -75,7 +75,6 @@ typedef struct __tag_WAVPLAYERCONFIG
     STDCOMMANDS             cmds;
 
 	int						ETreport;
-	int						stateReport;
 
 	wav_handle_t 			handler;
 } WAVPLAYERCONFIG, * PWAVPLAYERCONFIG; 
@@ -110,16 +109,15 @@ static void audioSetIndicator(uint8_t slot_num, uint32_t level);
 static void setVolume_num(wav_handle_t h, uint8_t vol);
 static void audioStop(wav_handle_t h);
 
-/*
-    Звуковой модуль для несжатых WAV-файлов
-    slots: 0
+/* wav проигрыватель
+   slots: 0
 */
 void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 {
     stdcommand_init(&c->cmds, slot_num);
-    /* Уровень громкости
+    /* Громкость 0-100, По умолчанию 70
     */
-	c->volume = get_option_int_val(slot_num, "volume", "", 70, 1, 4096);
+	c->volume = get_option_int_val(slot_num, "volume", "", 70, 0, 100);
 	if(c->volume>100){c->volume=100;}
 	if(c->volume<0){c->volume=0;}
 	ESP_LOGD(TAG, "Set volume:%d", c->volume);
@@ -177,11 +175,7 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 	c->play_to_end = get_option_flag_val(slot_num, "playToEnd");
 	ESP_LOGD(TAG, "Set play_to_end:%d", c->play_to_end);
 
-	/* Состояние модуля по умолчанию (0 - выключен, 1 - включен)
-	По умолчанию включен
-	*/
-	/* Если флаг поднят - модуль стартует в выключенном состоянии,
-	   до прихода action/enable 1 (Конституция §6).
+	/* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
 	*/
 	c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
 	ESP_LOGD(TAG, "Initial active_state:%d", c->active_state);
@@ -195,46 +189,36 @@ void configure_wavPlayer(PWAVPLAYERCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
-	/* Рапортует номер трека при завершении
+	/* Номер трека по завершении воспроизведения
 	*/
 	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "event/endOfTrack");
 
-	/* Рапортует состояние модуля (0 - выключен, 1 - включен)
-	*/
-	c->stateReport = stdreport_register(RPTT_int, slot_num, "", "event/state");
-
-
-    /* Проиграть трек
-       Опционально - номер трека
+    /* Проиграть трек - опционально номер трека
     */
     stdcommand_register(&c->cmds, MYCMD_play, "action/play", PARAMT_string);
 
-    /* Остановить проигрывание
-
+    /* Остановить воспроизведение
     */
     stdcommand_register(&c->cmds, MYCMD_stop, "action/stop", PARAMT_none);
 
     /* Переключить трек
-
     */
    	stdcommand_register(&c->cmds, MYCMD_shift, "action/shift", PARAMT_string);
 
-    /* Установить громкость
-
+    /* Установить громкость 0-100
     */
 	stdcommand_register(&c->cmds, MYCMD_setVolume, "action/setVolume", PARAMT_int);
 
-    /* action/enable - авто-регистрируется в stdcommand_init (Конституция §6).
-       Обрабатывается в case STDCMD_ENABLE. */
-
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -280,7 +264,9 @@ void wavplayer_task(void *arg) {
 	//listen audio event
 
 	waitForWorkPermit(slot_num);
+	stdreport_enable(slot_num, c->active_state);
 
+	uint8_t was_playing = 0;
 	while(1)
 	{
 		int cmd = stdcommand_receive(&c->cmds, &params, pdMS_TO_TICKS(1));
@@ -345,7 +331,7 @@ void wavplayer_task(void *arg) {
 						att_vol = c->volume;
 						ESP_LOGD(TAG, "Attenuation start, period: %d ms", c->attenuation);
 					}else{
-						audioStop(c->handler);
+						audioStop(c->handler); was_playing = 0;
 						audioSetIndicator(slot_num, 0);
 					}
 				}
@@ -392,10 +378,10 @@ void wavplayer_task(void *arg) {
 						ESP_LOGD(TAG, "enable:%d", c->active_state);
 						if(c->active_state == 0){
 							// При выключении - останавливаем воспроизведение
-							audioStop(c->handler);
+							audioStop(c->handler); was_playing = 0;
 							audioSetIndicator(slot_num, 0);
 						}
-						// stdreport_i(c->stateReport, c->active_state);
+						stdreport_enable(slot_num, c->active_state);
 					}
 				}
 				break;
@@ -411,7 +397,7 @@ void wavplayer_task(void *arg) {
 			}
 			setVolume_num(c->handler, att_vol);
 			if(att_vol == 0){
-				audioStop(c->handler);
+				audioStop(c->handler); was_playing = 0;
 				audioSetIndicator(slot_num, 0);
 				att_vol = c->volume;
 				att_flag = 0;
@@ -420,6 +406,17 @@ void wavplayer_task(void *arg) {
 		}
 
 		wav_handle_turn(c->handler);
+
+		// endOfTrack: переход playing -> stopped без явной остановки (естественный конец)
+		if (wav_handle_is_playing(c->handler)) {
+			was_playing = 1;
+		} else if (was_playing) {
+			char etStr[12];
+			sprintf(etStr, "%d", me_state.currentTrack);
+			stdreport_s(c->ETreport, etStr);
+			was_playing = 0;
+			ESP_LOGD(TAG, "endOfTrack track:%d slot:%d", me_state.currentTrack, slot_num);
+		}
 	}
 }
 

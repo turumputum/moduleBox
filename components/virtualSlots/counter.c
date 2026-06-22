@@ -71,8 +71,7 @@ void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
     ch->circularCounter = get_option_flag_val(slot_num, "circularCounter");
     ESP_LOGD(TAG, "Set circularCounter :%d for slot:%d", ch->circularCounter, slot_num);
 
-    /* Не стандартный топик для счетчика
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/counter_0") + 3];
         sprintf(t_str, "%s/counter_%d", me_config.deviceName, slot_num);
@@ -93,12 +92,14 @@ void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -113,9 +114,12 @@ void counter_task(void *arg) {
 
     int32_t state = 0;
     int32_t prevState = INT32_MIN;
-    bool active_state = 1;
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    bool active_state = !get_option_flag_val(slot_num, "disableOnStart");
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, active_state);
 
     while(1){
         if(c.threshold > 0){
@@ -146,6 +150,7 @@ void counter_task(void *arg) {
             case STDCMD_ENABLE:
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
+                    stdreport_enable(slot_num, active_state);
                     ESP_LOGD(TAG, "[counter_%d] enable:%d", slot_num, active_state);
                 }
                 break;

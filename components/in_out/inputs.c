@@ -158,19 +158,19 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     ctx->inverse_1 = get_option_flag_val(slot_num, "inverse_1");
     ESP_LOGD(TAG, "Set inverse_1:%d for slot:%d", ctx->inverse_1, slot_num);
 
-    /* Время защиты от дребезга в миллисекундах
+    /* Антидребезг в мс, По умолчанию 10
     */
     ctx->debounceGap = get_option_int_val(slot_num, "inDebounceGap", "ms", 10, 1, 4096);
     ESP_LOGD(TAG, "Set inDebounceGap:%d for slot:%d", ctx->debounceGap, slot_num);
 
-    /* Режим логики: independent (независимые каналы), or (логическое ИЛИ), and (логическое И)
+    /* Логика каналов - independent or and
     */
     ctx->logic = get_option_enum_val(slot_num, "logic", "independent", "or", "and", NULL);
     ESP_LOGD(TAG, "Set logic:%s for slot:%d", 
              ctx->logic == OR_LOGIC_MODE ? "OR" : (ctx->logic == AND_LOGIC_MODE ? "AND" : "INDEPENDENT"), 
              slot_num);
 
-    /* Период опроса входов в миллисекундах
+    /* Период опроса в мс, По умолчанию 100
     */
     ctx->refreshPeriod = get_option_int_val(slot_num, "refreshPeriod", "ms", 100, 10, 60000);
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", ctx->refreshPeriod, slot_num);
@@ -184,15 +184,15 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
     }
 
 
-    /* Отчет о состоянии канала 0 (0 или 1)
+    /* Состояние канала 0, 0-1
     */
     ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "event/ch_0", 0, 1);
 
-    /* Отчет о состоянии канала 1 (0 или 1)
+    /* Состояние канала 1, 0-1
     */
     ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "event/ch_1", 0, 1);
 
-    /* Отчет о комбинированном состоянии обоих каналов (результат логической операции OR/AND)
+    /* Комбинированное состояние каналов OR-AND
     */
     ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "event/val");
 
@@ -329,19 +329,19 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
     ctx->inverse_2 = get_option_flag_val(slot_num, "inverse_2");
     ESP_LOGD(TAG, "Set inverse_2:%d for slot:%d", ctx->inverse_2, slot_num);
 
-    /* Время защиты от дребезга в миллисекундах
+    /* Антидребезг в мс, По умолчанию 10
     */
     ctx->debounceGap = get_option_int_val(slot_num, "inDebounceGap", "ms", 10, 1, 4096);
     ESP_LOGD(TAG, "Set inDebounceGap:%d for slot:%d", ctx->debounceGap, slot_num);
 
-    /* Режим логики: independent (независимые каналы), or (логическое ИЛИ), and (логическое И)
+    /* Логика каналов - independent or and
     */
     ctx->logic = get_option_enum_val(slot_num, "logic", "independent", "or", "and", NULL);
     ESP_LOGD(TAG, "Set logic:%s for slot:%d", 
              ctx->logic == OR_LOGIC_MODE ? "OR" : (ctx->logic == AND_LOGIC_MODE ? "AND" : "INDEPENDENT"), 
              slot_num);
 
-    /* Период опроса входов в миллисекундах
+    /* Период опроса в мс, По умолчанию 100
     */
     ctx->refreshPeriod = get_option_int_val(slot_num, "refreshPeriod", "ms", 100, 10, 60000);
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", ctx->refreshPeriod, slot_num);
@@ -354,19 +354,19 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
         ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
     }
 
-    /* Отчет о состоянии канала 0 (0 или 1)
+    /* Состояние канала 0, 0-1
     */
     ctx->stateReport_0 = stdreport_register(RPTT_int, slot_num, "", "event/ch_0", 0, 1);
 
-    /* Отчет о состоянии канала 1 (0 или 1)
+    /* Состояние канала 1, 0-1
     */
     ctx->stateReport_1 = stdreport_register(RPTT_int, slot_num, "", "event/ch_1", 0, 1);
 
-    /* Отчет о состоянии канала 2 (0 или 1)
+    /* Состояние канала 2, 0-1
     */
     ctx->stateReport_2 = stdreport_register(RPTT_int, slot_num, "", "event/ch_2", 0, 1);
 
-    /* Отчет о комбинированном состоянии всех каналов (результат логической операции OR/AND)
+    /* Комбинированное состояние каналов OR-AND
     */
     ctx->stateReport_combined = stdreport_register(RPTT_int, slot_num, "", "event/val");
 

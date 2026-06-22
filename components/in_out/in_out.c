@@ -56,7 +56,8 @@ typedef struct {
     int stateReport;
     int state;
     int prevState;
-    
+    int active_state;
+
     // Output fields
     STDCOMMANDS cmds;
     int out_pin_num;
@@ -82,6 +83,7 @@ typedef enum
     .stateReport = 0, \
     .state = 0, \
     .prevState = 0, \
+    .active_state = 1, \
     .inverse_out = 0, \
     .defaultState = 0, \
     .delay = 0, \
@@ -110,18 +112,24 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
 
     // Initialize stdcommand
     stdcommand_init(&ctx->cmds, slot_num);
+
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    ctx->active_state = !get_option_flag_val(slot_num, "disableOnStart");
+    ESP_LOGD(TAG, "Initial active_state:%d for slot:%d", ctx->active_state, slot_num);
+
     // ========== INPUT CONFIGURATION ==========
-    
-    /* Флаг определяет инверсию входного сигнала
+
+    /* Инверсия входа
     */
     ctx->inverse_in = get_option_flag_val(slot_num, "inInverse");
     if (ctx->inverse_in) {
         ESP_LOGD(TAG, "Set inInverse for slot:%d", slot_num);
     }   
 
-    /* Глубина фильтра от дребезга контактов
+    /* Антидребезг входа в мс, По умолчанию 10
     */
-    ctx->debounceGap = get_option_int_val(slot_num, "inDebounceGap", "", 10, 1, 4096);
+    ctx->debounceGap = get_option_int_val(slot_num, "inDebounceGap", "ms", 10, 1, 4096);
     if (ctx->debounceGap!= 10) {
         ESP_LOGD(TAG, "Set inDebounceGap:%d for slot:%d", ctx->debounceGap, slot_num);
     }
@@ -136,15 +144,14 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
 
     // ========== OUTPUT CONFIGURATION ==========
 
-    /* Флаг определяет инверсию выходного сигнала
+    /* Инверсия выхода
     */
     ctx->inverse_out = get_option_flag_val(slot_num, "outInverse");
     if (ctx->inverse_out) {
         ESP_LOGD(TAG, "Set outInverse for slot:%d", slot_num);
     }
 
-    /* Определяет состояние выхода при старте устройства
-    0 - LOW, 1 - HIGH, по умолчанию 0
+    /* Состояние выхода при старте 0-1, По умолчанию 0
     */
     ctx->defaultState = get_option_int_val(slot_num, "outDefaultState", "", 0, 0, 1);
     ESP_LOGD(TAG, "Set outDefaultState:%d for slot:%d", ctx->defaultState, slot_num);
@@ -161,7 +168,7 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
     // RAPORTS
     // =============================================================================
 
-    /* Рапортует при изменении состояния входного сигнала
+    /* Состояние входа 0-1
 	*/
     ctx->stateReport = stdreport_register(RPTT_int, slot_num, "state", "event/val", 0, 1);
 
@@ -171,26 +178,28 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
     // =============================================================================
 
 
-    /* Команда для установки состояния выходного сигнала
+    /* Установить выход 0-1
 	*/
     stdcommand_register(&ctx->cmds, OUT_CMD_default, "action/setVal", PARAMT_int);
 
-    /* Команда для переключения состояния выходного сигнала
+    /* Переключить выход
 	*/
     stdcommand_register(&ctx->cmds, OUT_CMD_toggle, "action/toggle", PARAMT_none);
 
-    /* Команда формирование импульса, длинна импульса задается занчением в миллисекундах
+    /* Импульс на выходе - длительность в мс
 	*/
-    stdcommand_register(&ctx->cmds, OUT_CMD_impulse, "action/impulse", PARAMT_none);
+    stdcommand_register(&ctx->cmds, OUT_CMD_impulse, "action/impulse", PARAMT_int);
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ctx->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -260,8 +269,10 @@ static void in_out_task(void *arg) {
         ctx.state = ctx.inverse_in ? 1 : 0;
     }
 
-    // Report initial input state
-    stdreport_i(ctx.stateReport, ctx.state);
+    // Report initial input state (only if module active)
+    if (ctx.active_state) {
+        stdreport_i(ctx.stateReport, ctx.state);
+    }
     ctx.prevState = ctx.state;
 
     // Debounce: a new level must hold continuously for debounceGap ms
@@ -282,7 +293,8 @@ static void in_out_task(void *arg) {
 
     waitForWorkPermit(slot_num);
 
-    bool active_state = 1;
+    bool active_state = ctx.active_state;
+    stdreport_enable(slot_num, active_state);
     STDCOMMAND_PARAMS params = {0};
 
     // Main loop - handle both input and output
@@ -332,6 +344,7 @@ static void in_out_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "enable:%d slot:%d", active_state, slot_num);
+                    stdreport_enable(slot_num, active_state);
                     if (!active_state) {
                         // reset output to default state on disable
                         ctx.out_state = ctx.defaultState;
@@ -358,6 +371,7 @@ static void in_out_task(void *arg) {
                 ctx.out_state = !ctx.out_state;
                 set_out_level(&ctx, ctx.out_state);
                 ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (length) * 1000));
+                break;
 
             default:
                 break;

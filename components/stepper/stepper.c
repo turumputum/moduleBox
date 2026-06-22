@@ -101,9 +101,8 @@ static int64_t stepper_wrapmod(int64_t a, int64_t m){
 }
 
 /*
-    Модуль управления шаговым двигателем сигналами step/dir
-    Использует PCNT периферию (ESP32-S3 имеет всего 4 PCNT unit'а суммарно
-    на encoderInc + tachometer + stepper).
+    Управление шаговым двигателем сигналами step-dir через PCNT
+    PCNT периферии всего 4 на encoderInc + tachometer + stepper
     slots: 0-5
 */
 void configure_stepper(PSTEPPERCONFIG c, int slot_num){
@@ -115,41 +114,40 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     ESP_LOGD(TAG, "[stepper_%d] Initial active_state:%d", slot_num, c->active_state);
 
     c->dir = CW;
-    /* Флаг инвертирует направление работы двигателя
+    /* Инверсия направления вращения
 	*/
 	c->dir = get_option_flag_val(slot_num, "dirInverse") ? CCW : CW;
 	ESP_LOGD(TAG, "[stepper_%d] dir:%s", slot_num, (c->dir == CW)? "CW" : "CCW");
 
-    /* Флаг включает рапорты по положению
+    /* Включить рапорты положения
 	*/
 	c->posReportFlag = get_option_flag_val(slot_num, "posReport");
 	if(c->posReportFlag){
         ESP_LOGD(TAG, "[stepper_%d] posReport enable", slot_num);
     }
 
-    /* Флаг включает режим кругового счетчика
+    /* Режим кругового счётчика
 	*/
 	c->circularCounterFlag = get_option_flag_val(slot_num, "circularCounter");
 	if(c->circularCounterFlag){
         ESP_LOGD(TAG, "[stepper_%d] circularCounter enable", slot_num);
     }
 
-    /* Флаг базирует двигатель сразу после включения
-        иначе, слот ждет команды goHome из вне
+    /* Базировать сразу при старте - иначе ждать команду goHome
 	*/
 	c->goHomeOnStart = get_option_flag_val(slot_num, "goHomeOnStart");
 	if(c->goHomeOnStart){
         ESP_LOGD(TAG, "[stepper_%d] goHomeOnStart enable", slot_num);
     }
 
-    /* Флаг включает рапорты по скорости
+    /* Включить рапорты скорости
 	*/
 	c->speedReportFlag = get_option_flag_val(slot_num, "speedReport");
 	if(c->speedReportFlag){
         ESP_LOGD(TAG, "[stepper_%d] speedReport enable", slot_num);
     }
 
-    /* Флаг включает рапорты состояния мотора - run или stop
+    /* Включить рапорты состояния - run или stop
 	*/
 	c->stateReportFlag = get_option_flag_val(slot_num, "stateReport");
 	if(c->stateReportFlag){
@@ -159,8 +157,7 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
     c->state=NOT_HOMED;
     c->homingDir = 0;
-    /* задает направление поска домашней позиции
-        - по умочанию равен 0, поиск домашне позиции отключен
+    /* Направление базирования CW-CCW - по умолчанию поиск дома выключен
     */
     if ((c->homingDir = get_option_enum_val(slot_num, "homingDir","", "CW", "CCW", NULL)) < 0){
         
@@ -178,14 +175,12 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
 
 
-    /* Ускорение и замедление
-    - шагов в секунду в квадрате
+    /* Ускорение и замедление в шаг-сек2, По умолчанию 100
 	*/
 	c->accel =  get_option_int_val(slot_num, "accel", "step/sek^2", 100, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] accel:%ld", slot_num, c->accel);
 
-    /* Максимальная скорость 
-    - шагов в секунду
+    /* Максимальная скорость в шаг-сек, По умолчанию 100
 	*/
 	c->maxSpeed =  get_option_int_val(slot_num, "maxSpeed", "step/sek", 100, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] maxSpeed:%ld", slot_num, c->maxSpeed);
@@ -196,21 +191,17 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     if (c->minSpeed < 2) c->minSpeed = 2;
     ESP_LOGD(TAG, "[stepper_%d] minSpeed(auto):%ld step/sek", slot_num, c->minSpeed);
     
-    /* Частота обновления
-    - раз в секунду
+    /* Частота обновления в Гц, По умолчанию 20, максимум 100
 	*/
 	c->refreshPeriod =  1000/get_option_int_val(slot_num, "refreshRate", "fps", 20, 1, 100);
     ESP_LOGD(TAG, "[stepper_%d] refreshPeriod:%d", slot_num, c->refreshPeriod);
 
-    /* Скорость базирование
-    - шагов в секунду
-	- по умолчанию maxSpeed/4
+    /* Скорость базирования в шаг-сек, По умолчанию maxSpeed-4
 	*/
 	c->homingSpeed =  get_option_int_val(slot_num, "homingSpeed", "step/sek", c->maxSpeed / 4, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingSpeed:%ld", slot_num, c->homingSpeed);
 
-    /* Таймаут базирования в секундах
-    - 0 отключает таймаут
+    /* Таймаут базирования в секундах - 0 выключает, По умолчанию 30
 	*/
 	c->homingTimeout =  get_option_int_val(slot_num, "homingTimeout", "sek", 30, 0, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingTimeout:%ld", slot_num, c->homingTimeout);
@@ -228,19 +219,17 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     }
     ESP_LOGD(TAG, "[stepper_%d] pulseWidth(auto):%d us (maxSpeed:%ld)", slot_num, c->pulseWidth, c->maxSpeed);
 
-    /* Максимальное значение положения
-    - шагов
+    /* Максимальное положение в шагах
 	*/
 	c->maxVal =  get_option_int_val(slot_num, "maxVal", "step", INT32_MAX, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] maxVal:%ld", slot_num, c->maxVal);
 
-    /* Минимальное значение положения
-    - шагов
+    /* Минимальное положение в шагах
 	*/
 	c->minVal =  get_option_int_val(slot_num, "minVal", "step", INT32_MIN, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] minVal:%ld", slot_num, c->minVal);
 
-    // не стандартный топик
+    // Standard topic
 	{
 		char t_str[strlen(me_config.deviceName)+strlen("/stepper_0")+3];
 		sprintf(t_str, "%s/stepper_%d",me_config.deviceName, slot_num);
@@ -249,70 +238,70 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 		ESP_LOGD(TAG, "Standart stepper_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
-    /* Рапортует текущее положение
-    - шаг
+    /* Текущее положение в шагах
 	*/
 	c->posReport = stdreport_register(RPTT_string, slot_num, "step", "event/pos");
 
-    /* Рапортует текущую скорость
-    - шаг/сек
+    /* Текущая скорость в шаг-сек
 	*/
 	c->speedReport = stdreport_register(RPTT_string, slot_num, "step/sek", "event/speed");
 
-    /* Рапортует состояние мотора - run или stop
+    /* Состояние мотора - run или stop
 	*/
 	c->stateReport = stdreport_register(RPTT_string, slot_num, "", "event/state");
 
-    /* Рапортует текущий режим базирования
+    /* Состояние базирования
 	*/
 	c->homeReport = stdreport_register(RPTT_string, slot_num, "", "event/homingState");
 
-    /* Команда запускает процесс базирования
+    /* Запустить базирование
     */
     stdcommand_register(&c->cmds, stepCMD_goHome, "action/goHome", PARAMT_none);
 
-    /* Команда включает, режим управления по положению и устанавливает целевое значение в абсолютном режиме
+    /* Перейти в абсолютную позицию - режим по положению
     */
     stdcommand_register(&c->cmds, stepCMD_moveToAbs, "action/moveToAbs", PARAMT_int);
 
-    /* Команда включает, режим управления по положению и устанавливает целевое значение в виде приращения
+    /* Сместиться на приращение - режим по положению
     */
     stdcommand_register(&c->cmds, stepCMD_moveToInc, "action/moveToInc", PARAMT_int);
 
-    /* Команда включает, режим управления по скорости и устанавливает максимальную скорость движения мотора
+    /* Вращать с заданной скоростью - режим по скорости
     */
     stdcommand_register(&c->cmds, stepCMD_runSpeed, "action/runSpeed", PARAMT_int);
 
-    /* Команда устанавливает максимальную скорость движения мотора
+    /* Установить максимальную скорость
     */
     stdcommand_register(&c->cmds, stepCMD_setMaxSpeed, "action/setMaxSpeed", PARAMT_int);
 
-    /* Команда устанавливает максимальное ускорение мотора
+    /* Установить ускорение
     */
     stdcommand_register(&c->cmds, stepCMD_setAccel, "action/setAccel", PARAMT_int);
 
-    /* Команда экстренной остановки
+    /* Экстренная остановка
     */
     stdcommand_register(&c->cmds, stepCMD_stop, "action/stop", PARAMT_none);
 
-    /* Команда остановки с учетом пути торможения
+    /* Остановка с торможением
     */
     stdcommand_register(&c->cmds, stepCMD_break, "action/break", PARAMT_none);
 
     c->homingSensorState=-1;
-    /* Команда установки значения датчика нулевого положения
+    /* Состояние датчика нуля 0-1
     */
     stdcommand_register(&c->cmds, stepCMD_setHomingSensor, "action/setHomingSensor", PARAMT_int);
 
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -359,6 +348,7 @@ void stepper_task(void *arg){
     TickType_t homingStartTick = 0;
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, c->active_state);
 
     if(c->homingDir==0){
         stdreport_s(c->homeReport, "disable");
@@ -396,7 +386,7 @@ void stepper_task(void *arg){
                     if (new_state != c->active_state) {
                         c->active_state = new_state;
                         ESP_LOGD(TAG, "[stepper_%d] enable:%d", slot_num, c->active_state);
-                        /* event/enable публикуется автоматически stdcommand_receive */
+                        stdreport_enable(slot_num, c->active_state);
                         if (!c->active_state) {
                             /* Экстренная остановка при выключении (Конституция §6) */
                             stepper_stop(&stepper);

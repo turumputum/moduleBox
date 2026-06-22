@@ -114,95 +114,73 @@ static int angle_in_range(lidars_t *lidar, uint16_t angle) {
 // -------------------------------- FUNCTIONS --------------------------------
 // -----------------|---------------------------(|------------------|---------
 
-/* 
-    Модуль лидара RPLIDAR S1 через UART
-    Измеряет расстояние до ближайшего обьекта в заданном секторе углов
-    Дальность до 40м, разрешение 360 градусов
-    pin[0]=TX, pin[1]=RX, pin[2]=LED
+/*
+    Лидар RPLIDAR S1 по UART - дистанция до ближайшего объекта в секторе углов
+    Дальность до 40 м, разрешение 360 градусов
+    pin[0]=TX pin[1]=RX pin[2]=LED
     slots: 0-5
 */
 static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
 {
     // --- Command system init ---
     stdcommand_init(&lidar->cmds, slot_num);
-    /* Минимальное значение дистанции в мм
-    Значения меньше этого порога игнорируются
-    Числовое значение 0-40000, по умолчанию 0
+    /* Минимальная дистанция в мм - меньшее игнорируется, По умолчанию 0
     */
     lidar->distMinVal = get_option_int_val(slot_num, "distMinVal", "mm", 0, 0, 40000);
     ESP_LOGD(TAG, "distMinVal:%d slot:%d", lidar->distMinVal, slot_num);
 
-    /* Максимальное значение дистанции в мм
-    Значения больше этого порога игнорируются
-    Числовое значение 0-40000, по умолчанию 40000
+    /* Максимальная дистанция в мм - большее игнорируется, По умолчанию 40000
     */
     lidar->distMaxVal = get_option_int_val(slot_num, "distMaxVal", "mm", 40000, 0, 40000);
     ESP_LOGD(TAG, "distMaxVal:%d slot:%d", lidar->distMaxVal, slot_num);
 
-    /* Минимальный угол рабочего сектора в градусах
-    Измерения вне сектора angleMinVal-angleMaxVal игнорируются
-    Числовое значение 0-360, по умолчанию 0
+    /* Минимальный угол сектора в градусах, По умолчанию 0
     */
     lidar->angleMinVal = get_option_int_val(slot_num, "angleMinVal", "deg", 0, 0, 360);
     ESP_LOGD(TAG, "angleMinVal:%d slot:%d", lidar->angleMinVal, slot_num);
 
-    /* Максимальный угол рабочего сектора в градусах
-    Измерения вне сектора angleMinVal-angleMaxVal игнорируются
-    Числовое значение 0-360, по умолчанию 360
+    /* Максимальный угол сектора в градусах, По умолчанию 360
     */
     lidar->angleMaxVal = get_option_int_val(slot_num, "angleMaxVal", "deg", 360, 0, 360);
     ESP_LOGD(TAG, "angleMaxVal:%d slot:%d", lidar->angleMaxVal, slot_num);
 
-    /* Смещение нулевого угла в градусах
-    Прибавляется к измеренному углу (с переносом через 360)
-    Числовое значение 0-360, по умолчанию 0
+    /* Смещение нулевого угла в градусах, По умолчанию 0
     */
     lidar->angleOffset = get_option_int_val(slot_num, "angleOffset", "deg", 0, 0, 360);
     ESP_LOGD(TAG, "angleOffset:%d slot:%d", lidar->angleOffset, slot_num);
 
-    /* Порог дистанции для дискретного режима в мм
-    При значении больше 0 модуль работает в бинарном режиме (0/1)
-    Числовое значение 0-40000, по умолчанию 0
+    /* Порог дистанции в мм для бинарного режима, больше 0 включает режим, По умолчанию 0
     */
     lidar->distThreshold = get_option_int_val(slot_num, "distThreshold", "mm", 0, 0, 40000);
     ESP_LOGD(TAG, "distThreshold:%d slot:%d", lidar->distThreshold, slot_num);
 
-    /* Инвертирует выход порогового режима
-    Без параметров
+    /* Инверсия порогового выхода
     */
     lidar->thresholdInverse = get_option_flag_val(slot_num, "thresholdInverse");
 
-    /* Гистерезис порога в мм
-    Предотвращает дребезг при значениях вблизи порога
-    Числовое значение 0-10000, по умолчанию 0
+    /* Гистерезис порога в мм - против дребезга у порога, По умолчанию 0
     */
     lidar->thresholdHysteresis = get_option_int_val(slot_num, "thresholdHysteresis", "mm", 0, 0, 10000);
     ESP_LOGD(TAG, "thresholdHysteresis:%d slot:%d", lidar->thresholdHysteresis, slot_num);
 
-    /* Коэффициент фильтра сглаживания (от 0 до 1)
-    При значении 1 фильтр отключен
-    Числовое значение с плавающей точкой, по умолчанию 1
+    /* Коэффициент сглаживания 0-1, при 1 фильтр выключен, По умолчанию 1
     */
     lidar->filterK = get_option_float_val(slot_num, "filterK", 1.0f);
     ESP_LOGD(TAG, "filterK:%f slot:%d", lidar->filterK, slot_num);
 
-    /* Флаг включает режим рапортирования только дистанции без угла
-    Без параметров
+    /* Флаг - рапортовать только дистанцию без угла
     */
     lidar->flag_distance_only = get_option_flag_val(slot_num, "distanceReport");
 
-    /* Мертвая зона - минимальное изменение дистанции для отправки рапорта
-    Числовое значение 0-4096, по умолчанию 0
+    /* Мертвая зона - мин изменение дистанции в мм для рапорта, По умолчанию 0
     */
     lidar->deadBand = get_option_int_val(slot_num, "deadBand", "mm", 0, 0, 4096);
 
-    /* Задержка между отправкой рапортов (антидребезг)
-    Числовое значение 0-60000 мс, по умолчанию 0
+    /* Антидребезг рапортов в мс, По умолчанию 0
     */
     lidar->debounceGap = pdMS_TO_TICKS(get_option_int_val(slot_num, "debounceGap", "ms", 0, 0, 60000));
 
-    /* Если флаг поднят - модуль стартует в выключенном состоянии,
-       до прихода action/enable 1 (Конституция §6).
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
     */
     lidar->scanEnabled = !get_option_flag_val(slot_num, "disableOnStart");
     lidar->defaultState = lidar->scanEnabled;
@@ -222,30 +200,32 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
 
     // --- Report registration ---
 
-    /* Рапортует расстояние до ближайшего обьекта в мм
+    /* Расстояние до ближайшего объекта в мм
     */
     lidar->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "event/distance", 0, lidar->distMaxVal);
 
-    /* Рапортует угол ближайшего обьекта в градусах
+    /* Угол ближайшего объекта в градусах
     */
     lidar->angleReport = stdreport_register(RPTT_int, slot_num, "deg", "event/angle", 0, 360);
 
-    /* Рапортует состояние порогового режима 0/1
+    /* Состояние порога 0-1
     */
     lidar->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 
-    /* Рапортует текст ошибки при сбое подключения к лидару
+    /* Текст ошибки подключения к лидару
     */
     lidar->errorReport = stdreport_register(RPTT_string, slot_num, "string", "event/error");
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&lidar->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -323,6 +303,7 @@ void rplidarS1_task(void* arg) {
 
     // --- Wait for work permit ---
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, lidar.scanEnabled);
 
     // --- Start scan (only if defaultState=1) ---
     if (lidar.scanEnabled) {
@@ -365,6 +346,7 @@ void rplidarS1_task(void* arg) {
                     uart_flush(uart_num);
                     ESP_LOGD(TAG, "slot:%d Scan disabled", slot_num);
                 }
+                stdreport_enable(slot_num, lidar.scanEnabled);
             }
         }
 

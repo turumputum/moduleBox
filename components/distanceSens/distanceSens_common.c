@@ -58,71 +58,71 @@ void distanceSens_report(distanceSens_t *distanceSens, uint8_t slot_num) {
         distanceSens->currentPos=distanceSens->minVal;
     }
     
-    if(xTaskGetTickCount()- distanceSens->lastTick > distanceSens->debounceGap){
-        if (distanceSens->threshold > 0) {
-            uint8_t newState = (distanceSens->currentPos > distanceSens->threshold) ? distanceSens->inverse : !distanceSens->inverse;
-            
-            // Проверяем, находимся ли мы в режиме cooldown
-            if (distanceSens->inCooldown) {
-                // Если во время cooldown снова переходим из 0 в 1, перезапускаем таймер
-                if (newState == 1 && distanceSens->prevState == 0) {
-                    distanceSens->cooldownStartTick = xTaskGetTickCount();
-                    distanceSens->state = newState;
-                    distanceSens->prevPos = distanceSens->currentPos;
-                    ESP_LOGD(TAG, "Cooldown restarted for slot:%d (0->1 during cooldown)", slot_num);
-                    return;
-                }
-                
-                // Проверяем, истек ли период cooldown
-                if (xTaskGetTickCount() - distanceSens->cooldownStartTick >= distanceSens->cooldownTime) {
-                    // Cooldown завершен
-                    distanceSens->inCooldown = 0;
-                    ESP_LOGD(TAG, "Cooldown finished for slot:%d", slot_num);
-                } else {
-                    // Еще в cooldown - не отправляем рапорты
-                    distanceSens->state = newState;
-                    distanceSens->prevPos = distanceSens->currentPos;
-                    return;
-                }
-            }
-            
-            // Не в cooldown - проверяем изменение состояния
-            if (newState != distanceSens->prevState) {
-                stdreport_i(distanceSens->stateReport, newState);
+    if (distanceSens->threshold > 0) {
+        // threshold-режим: антидребезг как в кнопках - новое состояние 0/1
+        // должно непрерывно продержаться debounceGap прежде чем будет принято
+        uint8_t raw = (distanceSens->currentPos > distanceSens->threshold) ? distanceSens->inverse : !distanceSens->inverse;
+        TickType_t now = xTaskGetTickCount();
 
-                ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, 254 * newState);
-                ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+        if (raw != distanceSens->cand_state) {
+            distanceSens->cand_state = raw;
+            distanceSens->cand_since = now;
+        }
+        uint8_t stable = (now - distanceSens->cand_since) >= distanceSens->debounceGap;
 
-                distanceSens->prevState = newState;
-                distanceSens->lastTick = xTaskGetTickCount();
-                
-                // Если перешли в активное состояние (1) и настроен cooldownTime, запускаем cooldown
-                if (newState == 1 && distanceSens->cooldownTime > 0) {
-                    distanceSens->inCooldown = 1;
-                    distanceSens->cooldownStartTick = xTaskGetTickCount();
-                    ESP_LOGD(TAG, "Cooldown started for slot:%d, duration:%ld ms", slot_num, pdTICKS_TO_MS(distanceSens->cooldownTime));
-                }
-            }
-            distanceSens->state = newState;
-        }else{
-            if(abs(distanceSens->currentPos-distanceSens->prevPos)> distanceSens->deadBand){
-                float f_res =  (float)distanceSens->currentPos / (distanceSens->maxVal - distanceSens->minVal);
-                if(f_res > 1) f_res = 1;
-                if(f_res < 0) f_res = 0;
-                
-                if (distanceSens->flag_float_output == 1) {     
-                    stdreport_f(distanceSens->distanceFloatReport, f_res);
-                }else{
-                    stdreport_i(distanceSens->distanceReport, distanceSens->currentPos);
-                }
-
-                distanceSens->lastTick = xTaskGetTickCount();
-                uint8_t dutyVal = gamma_8[(int)(255-254*f_res)];
-                ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, dutyVal);
-                ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+        // cooldown: пока активен - рапорты подавляем, но устойчивый 0->1 перезапускает таймер
+        if (distanceSens->inCooldown) {
+            if (stable && distanceSens->cand_state == 1 && distanceSens->prevState == 0) {
+                distanceSens->cooldownStartTick = now;
+                distanceSens->prevState = 1;
                 distanceSens->prevPos = distanceSens->currentPos;
+                ESP_LOGD(TAG, "Cooldown restarted for slot:%d (0->1 during cooldown)", slot_num);
+                return;
+            }
+            if (now - distanceSens->cooldownStartTick >= distanceSens->cooldownTime) {
+                distanceSens->inCooldown = 0;
+                ESP_LOGD(TAG, "Cooldown finished for slot:%d", slot_num);
+            } else {
+                distanceSens->prevPos = distanceSens->currentPos;
+                return;
             }
         }
-        
+
+        // Принимаем состояние только когда оно устойчиво держится debounceGap
+        if (stable && distanceSens->cand_state != distanceSens->prevState) {
+            uint8_t newState = distanceSens->cand_state;
+            stdreport_i(distanceSens->stateReport, newState);
+
+            ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, 254 * newState);
+            ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+
+            distanceSens->prevState = newState;
+
+            // Если перешли в активное состояние (1) и настроен cooldownTime, запускаем cooldown
+            if (newState == 1 && distanceSens->cooldownTime > 0) {
+                distanceSens->inCooldown = 1;
+                distanceSens->cooldownStartTick = now;
+                ESP_LOGD(TAG, "Cooldown started for slot:%d, duration:%ld ms", slot_num, pdTICKS_TO_MS(distanceSens->cooldownTime));
+            }
+        }
+        distanceSens->state = distanceSens->cand_state;
+    } else {
+        // аналоговый режим: только deadBand, без троттлинга
+        if (abs(distanceSens->currentPos - distanceSens->prevPos) > distanceSens->deadBand) {
+            float f_res = (float)distanceSens->currentPos / (distanceSens->maxVal - distanceSens->minVal);
+            if (f_res > 1) f_res = 1;
+            if (f_res < 0) f_res = 0;
+
+            if (distanceSens->flag_float_output == 1) {
+                stdreport_f(distanceSens->distanceFloatReport, f_res);
+            } else {
+                stdreport_i(distanceSens->distanceReport, distanceSens->currentPos);
+            }
+
+            uint8_t dutyVal = gamma_8[(int)(255 - 254 * f_res)];
+            ledc_set_duty(LEDC_MODE, distanceSens->ledc_chan.channel, dutyVal);
+            ledc_update_duty(LEDC_MODE, distanceSens->ledc_chan.channel);
+            distanceSens->prevPos = distanceSens->currentPos;
+        }
     }
 }

@@ -1,22 +1,8 @@
-file(GLOB_RECURSE MODULE_FILES "adc1.c" "analog.c" "encoders.c" "testsd.c") 
-
-if(NOT CMAKE_BUILD_EARLY_EXPANSION)
-include(${CMAKE_HOME_DIRECTORY}/CMakeManifest.txt)
-endif()
-
-
 idf_component_register(SRCS
 						"executor.c"
                         "stdreport.c"
                         "stdcommand.c"
-
-						${MODULE_FILES}
-
-                        "tenzo_button.c"
                         "me_slot_config.c"
-                       
-
-						${GENERATED_FILES}
 
                     INCLUDE_DIRS "include" ${CMAKE_CURRENT_BINARY_DIR}
                     REQUIRES 
@@ -34,6 +20,7 @@ idf_component_register(SRCS
                         someUnique
                         buttonMatrix
                         distanceSens
+                        encoders
                         lidars
                         accel 
                         servoDev 
@@ -43,6 +30,7 @@ idf_component_register(SRCS
                         3n_MOSFET 
                         esp_peripherals
                         phoneDialer
+                        adc
 )
 
 

@@ -54,7 +54,7 @@ void configure_masquerade(PMASQUERADE_CONFIG ch, int slot_num)
     }
 
     /* Выходной замаскированный топик (база-маска).
-       По умолчанию deviceName/msq_x
+       По умолчанию deviceName/masq_x
     */
     if (strstr(me_config.slot_options[slot_num], "mask") != NULL) {
         char* custom_out_topic = NULL;
@@ -63,7 +63,7 @@ void configure_masquerade(PMASQUERADE_CONFIG ch, int slot_num)
         ESP_LOGD(TAG, "Custom outTopic:%s", me_state.trigger_topic_list[slot_num]);
     } else {
         char t_str[strlen(me_config.deviceName) + strlen("/masq_0") + 3];
-        sprintf(t_str, "%s/msq_%d", me_config.deviceName, slot_num);
+        sprintf(t_str, "%s/masq_%d", me_config.deviceName, slot_num);
         me_state.trigger_topic_list[slot_num] = strdup(t_str);
         ESP_LOGD(TAG, "Standart outTopic:%s", me_state.trigger_topic_list[slot_num]);
     }
@@ -84,7 +84,8 @@ void configure_masquerade(PMASQUERADE_CONFIG ch, int slot_num)
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 

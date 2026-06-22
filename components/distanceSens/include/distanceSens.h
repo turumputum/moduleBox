@@ -27,6 +27,8 @@ typedef struct {
 
     TickType_t lastTick;
     TickType_t debounceGap;
+    uint8_t cand_state;            // threshold debounce: уровень, который сейчас выдерживается
+    TickType_t cand_since;         // tick появления кандидата
     TickType_t cooldownTime;
     TickType_t cooldownStartTick;
     uint8_t inCooldown;
@@ -55,6 +57,8 @@ typedef struct {
     .flag_float_output=0,\
     .lastTick=0,\
     .debounceGap=0,\
+    .cand_state=0,\
+    .cand_since=0,\
     .cooldownTime=0,\
     .cooldownStartTick=0,\
     .inCooldown=0,\

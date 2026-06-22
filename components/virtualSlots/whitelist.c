@@ -31,6 +31,7 @@ extern stateStruct me_state;
 
 typedef enum{
     WHITELISTCMD_check = 0,
+    WHITELISTCMD_setFile,
 } WHITELISTCMD;
 
 typedef struct __tag_WHITELIST_CONFIG{
@@ -63,8 +64,7 @@ void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
     }
     ESP_LOGD(TAG, "Set filename :%s for slot:%d", ch->filename, slot_num);
 
-    /* Не стандартный топик для whitelist
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/whitelist_0") + 3];
         sprintf(t_str, "%s/whitelist_%d", me_config.deviceName, slot_num);
@@ -78,6 +78,10 @@ void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
     */
     stdcommand_register(&ch->cmds, WHITELISTCMD_check, "action/check", PARAMT_string);
 
+    /* Сменить файл списка на лету - имя файла в корне SD
+    */
+    stdcommand_register(&ch->cmds, WHITELISTCMD_setFile, "action/setFile", PARAMT_string);
+
     /* Возвращает если совпадений не найдено
     */
     ch->report = stdreport_register(RPTT_int, slot_num, "", "event/noMatches", 0, 1);
@@ -89,7 +93,8 @@ void configure_whitelist(PWHITELIST_CONFIG ch, int slot_num){
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -100,9 +105,12 @@ void whitelist_task(void *arg) {
     WHITELIST_CONFIG c = {0};
     configure_whitelist(&c, slot_num);
     STDCOMMAND_PARAMS params = {0};
-    bool active_state = 1;
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    bool active_state = !get_option_flag_val(slot_num, "disableOnStart");
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, active_state);
 
     while(1){
         int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);
@@ -117,6 +125,7 @@ void whitelist_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "[whitelist_%d] enable:%d", slot_num, active_state);
+                    stdreport_enable(slot_num, active_state);
                 }
                 break;
 
@@ -156,6 +165,21 @@ void whitelist_task(void *arg) {
 
                     if(count == 0){
                         stdreport_i(c.report, 1);
+                    }
+                }
+                break;
+
+            case WHITELISTCMD_setFile:
+                if(!active_state) break;
+                if(cmd_arg != NULL && strlen(cmd_arg) > 0){
+                    char newPath[MAX_LINE_LENGTH];
+                    snprintf(newPath, sizeof(newPath), "/sdcard/%s", cmd_arg);
+                    if(access(newPath, F_OK) == 0){
+                        strncpy(c.filename, newPath, sizeof(c.filename) - 1);
+                        c.filename[sizeof(c.filename) - 1] = '\0';
+                        ESP_LOGD(TAG, "[whitelist_%d] setFile:%s", slot_num, c.filename);
+                    }else{
+                        ESP_LOGW(TAG, "[whitelist_%d] setFile - file not found:%s", slot_num, newPath);
                     }
                 }
                 break;

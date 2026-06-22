@@ -257,7 +257,7 @@ esp_err_t pipelineStart(PRTPCONFIG c) {
 	return ESP_OK;
 }
 
-/* Звук по сети - RTP поток без сжатия в I2S, unicast или multicast. Задержка порядка 70мс.
+/* Звук по сети - RTP поток без сжатия в I2S, unicast или multicast, задержка порядка 70 мс
 slots: 0-0
 */
 void configure_audioLAN(PRTPCONFIG c, int slot_num)

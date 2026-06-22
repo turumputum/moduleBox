@@ -13,8 +13,6 @@
 #include "stdreport.h"
 #include <mbdebug.h>
 
-#include <generated_files/gen_analog.h>
-
 
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
@@ -74,66 +72,52 @@ typedef struct {
 // -------------------------------- FUNCTIONS --------------------------------
 // ---------------------------------------------------------------------------
 
-/* 
-    Старая версия поддержки ADC (для плат версии < 4)
-*/
+/* Легаси single-shot ADC fallback для плат версии < 4 - внутренний, без манифеста */
 void configure_analog(analog_context_t *ctx, int slot_num)
 {
-    /* Флаг определяет формат выводящего значения, 
-       если указан - будет выводиться значение с плавающей точкой,
-       иначе - целочисленное
-    */
+    /* Флаг - выводить значение с плавающей точкой вместо целого */
     int flag_float_output = get_option_flag_val(slot_num, "floatOutput");
     ESP_LOGD(TAG, "S%d: float output = %d", slot_num, flag_float_output);
 
-    /* Определяет верхний порог значений */
+    /* Верхний порог значений - По умолчанию 4095 */
     ctx->MAX_VAL = get_option_int_val(slot_num, "maxVal", "", 4095, 0, 4095);
     ESP_LOGD(TAG, "S%d: max_val:%d", slot_num, ctx->MAX_VAL);
 
-    /* Определяет нижний порог значений */
+    /* Нижний порог значений - По умолчанию 0 */
     ctx->MIN_VAL = get_option_int_val(slot_num, "minVal", "", 0, 0, 4095);
     ESP_LOGD(TAG, "S%d: min_val:%d", slot_num, ctx->MIN_VAL);
 
-    /* Флаг задаёт инвертирование значений */
+    /* Флаг инвертирования значений */
     ctx->inverse = get_option_flag_val(slot_num, "inverse");
 
-    /* Коэфициент фильтрации */
+    /* Коэффициент фильтрации - По умолчанию 1 */
     ctx->k = get_option_float_val(slot_num, "filterK", 1);
     ESP_LOGD(TAG, "S%d: filter k:%f", slot_num, ctx->k);
-    
-    /* Фильтрация дребезга - определяет порог срабатывания */
+
+    /* Порог срабатывания фильтра дребезга - По умолчанию 10 */
     ctx->dead_band = get_option_int_val(slot_num, "deadBand", "", 10, 1, 4095);
     ESP_LOGD(TAG, "S%d: dead_band:%d", slot_num, ctx->dead_band);
 
-    /* Задаёт периодичночть отсчётов в миллисекундах */
+    /* Периодичность отсчётов в мс - По умолчанию 0 */
     ctx->periodic = get_option_int_val(slot_num, "periodic", "", 0, 0, 4095);
     ESP_LOGD(TAG, "S%d: periodic:%d", slot_num, ctx->periodic);
 
-    /* Задаёт режим делителя */
+    /* Режим делителя 5V/3V3/10V */
     if ((ctx->divider = get_option_enum_val(slot_num, "dividerMode", "5V", "3V3", "10V", NULL)) < 0) {
         ESP_LOGE(TAG, "S%d: dividerMode: unrecognized value", slot_num);
         ctx->divider = 0;
     }
 
-    /* Задаёт пороговое значение - при превышении рапортует 1, иначе 0
-       Если задан - режим float игнорируется
-    */
+    /* Пороговое значение - выше порога рапорт 1 иначе 0, при задании режим float игнорируется - По умолчанию -1 (выкл) */
     ctx->threshold = get_option_int_val(slot_num, "threshold", "", -1, -1, 4095);
 
-    /* Ширина зоны гистерезиса порога
-       Для перехода в 1 значение должно превысить threshold + hysteresis/2
-       Для перехода в 0 значение должно опуститься ниже threshold - hysteresis/2
-    */
+    /* Ширина зоны гистерезиса порога - По умолчанию 0 */
     ctx->thresholdHyst = get_option_int_val(slot_num, "thresholdHysteresis", "", 0, 0, 2048);
 
-    /* Задержка подтверждения перехода в состояние 1 (мс)
-       Если за это время уровень не удержался - переход игнорируется
-    */
+    /* Задержка подтверждения перехода в 1 в мс - По умолчанию 0 */
     ctx->thresholdRiseLag = get_option_int_val(slot_num, "thresholdRiseLag", "ms", 0, 0, 10000);
 
-    /* Задержка подтверждения перехода в состояние 0 (мс)
-       Если за это время уровень не удержался - переход игнорируется
-    */
+    /* Задержка подтверждения перехода в 0 в мс - По умолчанию 0 */
     ctx->thresholdFallLag = get_option_int_val(slot_num, "thresholdFallLag", "ms", 0, 0, 10000);
 
     if (ctx->threshold >= 0) {
@@ -142,16 +126,13 @@ void configure_analog(analog_context_t *ctx, int slot_num)
                  ctx->thresholdRiseLag, ctx->thresholdFallLag);
     }
 
-    /* Возвращает текущее значение канала ввиде числа с плавающей точкой, выражающее отношение к заданной шкале
-    */
+    /* Значение канала как отношение к шкале (float) */
     ctx->ratioReport = stdreport_register(RPTT_ratio, slot_num, "unit", "event/ratio", (int)ctx->MIN_VAL, (int)ctx->MAX_VAL);
 
-    /* Возвращает текущее сырое целочисленное значение канала
-    */
+    /* Сырое целочисленное значение канала */
     ctx->rawReport = stdreport_register(RPTT_int, slot_num, "unit", "event/rawVal");
 
-    /* Рапортует 0/1 при пороговом режиме
-    */
+    /* Состояние порога 0/1 */
     ctx->thresholdReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);
 
     if (ctx->threshold >= 0) {
@@ -360,9 +341,4 @@ void start_analog_task(int slot_num)
 
     ESP_LOGD(TAG, "S%d: analog_task started, heap usage: %lu free: %u",
              slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-}
-
-const char * get_manifest_analog()
-{
-    return manifesto;
 }

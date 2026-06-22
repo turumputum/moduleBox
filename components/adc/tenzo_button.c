@@ -8,6 +8,7 @@
 #include "executor.h"
 #include "esp_log.h"
 #include "me_slot_config.h"
+#include "stdreport.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -21,6 +22,8 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
+#include <generated_files/gen_tenzo_button.h>
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern adc_channel_t SLOT_ADC_MAP[6];
 extern configuration me_config;
@@ -30,11 +33,60 @@ extern stateStruct me_state;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "TENZO_BUTTON";
 
+typedef struct {
+    uint32_t    detThres;
+    int         integrMult;
+    int         oversample;
+    int         boolean;
+    int         valReport;
+} tenzo_ctx_t;
+
+/*
+    Тензо-кнопка - нажатие определяется по силе на тензодатчике через ADC
+    slots: 0-5
+*/
+void configure_tenzoButton(tenzo_ctx_t *c, int slot_num)
+{
+    /* Порог срабатывания нажатия, По умолчанию 100
+    */
+    c->detThres = get_option_int_val(slot_num, "threshold", "", 100, 1, 4096) * 1024;
+    ESP_LOGD(TAG, "Set threshold:%ld for slot:%d", c->detThres / 1024, slot_num);
+
+    /* Инерция - больше значение, медленнее реакция, По умолчанию 50
+    */
+    c->integrMult = get_option_int_val(slot_num, "inertia", "", 50, 1, 4096);
+    ESP_LOGD(TAG, "Set inertia:%d for slot:%d", c->integrMult, slot_num);
+
+    /* Усреднение выборок ADC, По умолчанию 8
+    */
+    c->oversample = get_option_int_val(slot_num, "oversample", "", 8, 1, 64);
+    ESP_LOGD(TAG, "Set oversample:%d for slot:%d", c->oversample, slot_num);
+
+    /* Флаг - слать 1-0 вместо величины силы
+    */
+    c->boolean = get_option_flag_val(slot_num, "boolean");
+    ESP_LOGD(TAG, "Set boolean:%d for slot:%d", c->boolean, slot_num);
+
+    {
+        char t_str[strlen(me_config.deviceName) + strlen("/tenzoButton_0") + 3];
+        sprintf(t_str, "%s/tenzoButton_%d", me_config.deviceName, slot_num);
+        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
+    }
+
+    /* Сила нажатия, 0 при отпускании
+    */
+    c->valReport = stdreport_register(RPTT_int, slot_num, "", "event/val");
+}
+
 void tenzo_button_task(void *arg){
     int slot_num = (int)(intptr_t)arg;
 
+    tenzo_ctx_t c = {0};
+    configure_tenzoButton(&c, slot_num);
+
     ChanCfg adc_channel;
-    adc_channel.chan= SLOT_ADC_MAP[slot_num];
+    adc_channel.chan = SLOT_ADC_MAP[slot_num];
     gpio_reset_pin(SLOTS_PIN_MAP[slot_num][0]);
 	gpio_set_direction(SLOTS_PIN_MAP[slot_num][0], GPIO_MODE_INPUT);
 
@@ -53,44 +105,12 @@ void tenzo_button_task(void *arg){
         goto EXIT;
     }else{
        adc_channel.adc = ADC_UNIT_1;
-       adc1_config_width(ADC_ATTEN_DB_11); 
+       adc1_config_width(ADC_ATTEN_DB_11);
        adc1_config_channel_atten(adc_channel.chan, ADC_ATTEN_DB_11);
     }
 
-    //---options block---
-    uint32_t detThres = 100*1024; // distance for mass to go
-    if (strstr(me_config.slot_options[slot_num], "threshold") != NULL) {
-		detThres = get_option_int_val(slot_num, "threshold", "", 10, 1, 4096)*1024;
-		ESP_LOGD(TAG, "Set threshold :%ld for slot:%d",detThres/1024, slot_num);
-	}
-    
-    int integrMult = 50; // 1/moving_mass (20...100) inertia
-    if (strstr(me_config.slot_options[slot_num], "inertia") != NULL) {
-		integrMult = get_option_int_val(slot_num, "inertia", "", 10, 1, 4096)*1024;
-		ESP_LOGD(TAG, "Set inertia :%d for slot:%d", integrMult, slot_num);
-	}
-
-    int oversample = 8; //
-    if (strstr(me_config.slot_options[slot_num], "oversample") != NULL) {
-		oversample = get_option_int_val(slot_num, "oversample", "", 10, 1, 4096);
-		ESP_LOGD(TAG, "Set oversample:%d for slot:%d",oversample, slot_num);
-	}
-
-    int boolean = 0; // 
-    if (strstr(me_config.slot_options[slot_num], "boolean") != NULL) {
-		boolean = 1; 
-		ESP_LOGD(TAG, "Set boolean output for slot:%d", slot_num);
-	}
-
-    {
-		char t_str[strlen(me_config.deviceName)+strlen("/tenzoButton_0")+3];
-		sprintf(t_str, "%s/tenzoButton_%d",me_config.deviceName, slot_num);
-		me_state.trigger_topic_list[slot_num]=strdup(t_str);
-		ESP_LOGD(TAG, "Standart trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-	}
-
     TickType_t lastWakeTime;
-    lastWakeTime = xTaskGetTickCount(); 
+    lastWakeTime = xTaskGetTickCount();
 
     adc_channel.trig = 0;
     adc_channel._val = 0;
@@ -101,7 +121,7 @@ void tenzo_button_task(void *arg){
 
     while(1){
         vTaskDelayUntil(&lastWakeTime, 10);
-        
+
         int hpfUp = 1; //high pass filter coeff
         int hpfDown = 200; //high pass filter coeff when signal goes down
 
@@ -109,21 +129,19 @@ void tenzo_button_task(void *arg){
 
         adc_channel.val = 0;
         adc_channel.samples = 0;
-        for (uint8_t j=0; j < oversample; j++){
+        for (uint8_t j=0; j < c.oversample; j++){
             int val=-1;
             if(adc_channel.adc == ADC_UNIT_1){
                 val = adc1_get_raw(adc_channel.chan);
             }else{
-               adc2_get_raw(adc_channel.chan,ADC_ATTEN_DB_11, &val); 
+               adc2_get_raw(adc_channel.chan,ADC_ATTEN_DB_11, &val);
             }
             adc_channel.val += val;
             adc_channel.samples++;
         }
 
         adc_channel.val = adc_channel.val / adc_channel.samples;
-        //printf("%d,",adc_channel.val);
-        //ESP_LOGD(TAG, "ADC Channel[%d] Raw Data: %d", adc_channel.chan,  adc_channel.val);
-        
+
         //--- dimonMagic math ---
         adc_channel.val = adc_channel.val*1024;
         if (adc_channel._val == 0) adc_channel._val = adc_channel.val;
@@ -133,34 +151,20 @@ void tenzo_button_task(void *arg){
         int currentVal = (adc_channel._val + (((adc_channel.val-adc_channel._val)*hpfVal)/1024));
         int dcCorrected = adc_channel.val - currentVal;
 
-        adc_channel.integrated = dcCorrected > integrThres ? (adc_channel.integrated + (dcCorrected * integrMult)/1024) : 0;
+        adc_channel.integrated = dcCorrected > integrThres ? (adc_channel.integrated + (dcCorrected * c.integrMult)/1024) : 0;
         adc_channel.integrated2 = dcCorrected > integrThres ? (adc_channel.integrated2 + adc_channel.integrated) : 0;
 
-        //printf("%d,%d,%d\n",currentVal, adc_channel.integrated, adc_channel.integrated2);
-        // if((adc_channel.integrated>0)||(adc_channel.integrated2>0)){
-        //     ESP_LOGD(TAG, "dcCorrected:%d Iint_1:%d Int_2:%d detThres:%d",dcCorrected,adc_channel.integrated, adc_channel.integrated2, detThres);
-        // }
-
-        char str[255];
-
-        if (adc_channel.integrated2 > detThres){
+        if (adc_channel.integrated2 > c.detThres){
             if (adc_channel.trig == 0){
                 adc_channel.trig = 1;
-                memset(str, 0, strlen(str));
-                if(boolean){
-                    sprintf(str, "1");
-                }else{
-                    sprintf(str, "%d",((adc_channel.integrated/1024) * (adc_channel.integrated/1024)) + 1);
-                }
-                report(str, slot_num);
+                int force = c.boolean ? 1 : ((adc_channel.integrated/1024) * (adc_channel.integrated/1024)) + 1;
+                stdreport_i(c.valReport, force);
                 gpio_set_level(ledPin, 1);
             }
-        }else{ 
+        }else{
             if (adc_channel.trig == 1){
-            adc_channel.trig = 0;
-                memset(str, 0, strlen(str));
-                sprintf(str, "0");
-                report(str, slot_num);
+                adc_channel.trig = 0;
+                stdreport_i(c.valReport, 0);
                 gpio_set_level(ledPin, 0);
             }
         }
@@ -169,6 +173,7 @@ void tenzo_button_task(void *arg){
     }
 
     EXIT:
+    vTaskDelete(NULL);
 }
 
 
@@ -179,4 +184,9 @@ void start_tenzo_button_task(int slot_num){
 	xTaskCreatePinnedToCore(tenzo_button_task, tmpString, 1024*4, (void*)(intptr_t)slot_num,12, NULL, 1);
 
 	ESP_LOGD(TAG,"tenzo_button_task created for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
+}
+
+const char * get_manifest_tenzo_button()
+{
+	return manifesto;
 }

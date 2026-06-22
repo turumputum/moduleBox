@@ -83,7 +83,7 @@ void configure_benewakeTOF(distanceSens_t *distanceSens, uint8_t slot_num)
         ESP_LOGD(TAG, "Set min_val:%d. Slot:%d", distanceSens->minVal, slot_num);
     }
 
-    /* Задержка между рапортами (антидребезг) мс 1-4096, По умолчанию 10 */
+    /* Антидребезг порога в мс - новое состояние держится это время до рапорта, По умолчанию 10 */
     if (strstr(me_config.slot_options[slot_num], "debounceGap") != NULL) {
         distanceSens->debounceGap = get_option_int_val(slot_num, "debounceGap", "", 10, 1, 4096);
         ESP_LOGD(TAG, "Set debounceGap:%ld. Slot:%d", distanceSens->debounceGap, slot_num);
@@ -162,7 +162,7 @@ void configure_benewakeTOF(distanceSens_t *distanceSens, uint8_t slot_num)
     
     /* Текущее расстояние в мм */
     distanceSens->distanceReport = stdreport_register(RPTT_int, slot_num, "mm", "event/distance", 0, distanceSens->maxVal);
-    /* Текущее расстояние в формате float (от 0 до 1) */
+    /* Текущее расстояние в формате float (от 0.0 до 1.0) */
     distanceSens->distanceFloatReport = stdreport_register(RPTT_ratio, slot_num, "ratio", "event/ratio", 0.0f, 1.0f);
     /* Состояние порогового датчика 0/1 */
     distanceSens->stateReport = stdreport_register(RPTT_int, slot_num, "bool", "event/threshold", 0, 1);

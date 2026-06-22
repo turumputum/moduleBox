@@ -59,8 +59,7 @@ void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
     ch->waitingTime = get_option_int_val(slot_num, "waitingTime", "ms", 3000, 1, 60000);
     ESP_LOGD(TAG, "Set waitingTime:%d for slot:%d", ch->waitingTime, slot_num);
 
-    /* Не стандартный топик для collector
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/collector_0") + 3];
         sprintf(t_str, "%s/collector_%d", me_config.deviceName, slot_num);
@@ -89,7 +88,8 @@ void configure_collector(PCOLLECTOR_CONFIG ch, int slot_num)
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -107,9 +107,12 @@ void collector_task(void *arg) {
     memset(str, 0, sizeof(str));
     uint32_t dial_start_time = 0;
     uint8_t state_flag = 0;
-    bool active_state = 1;
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    bool active_state = !get_option_flag_val(slot_num, "disableOnStart");
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, active_state);
 
     while(1){
         int cmd = stdcommand_receive(&c.cmds, &params, pdMS_TO_TICKS(15));
@@ -123,6 +126,7 @@ void collector_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "[collector_%d] enable:%d", slot_num, active_state);
+                    stdreport_enable(slot_num, active_state);
                 }
                 break;
 

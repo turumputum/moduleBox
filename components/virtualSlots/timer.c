@@ -51,8 +51,7 @@ void configure_timer(PTIMER_CONFIG ch, int slot_num){
     ch->time = get_option_int_val(slot_num, "time", "ms", 1000, 1, INT32_MAX);
     ESP_LOGD(TAG, "Set time :%ld for slot:%d", ch->time, slot_num);
 
-    /* Не стандартный топик для таймера
-    */
+    // Standard topic
     {
         char t_str[strlen(me_config.deviceName) + strlen("/timer_0") + 3];
         sprintf(t_str, "%s/timer_%d", me_config.deviceName, slot_num);
@@ -77,12 +76,14 @@ void configure_timer(PTIMER_CONFIG ch, int slot_num){
 
     /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
+    /* Включить 1 или выключить 0 модуль
+    */
     stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Состояние модуля - активен 1 или спит 0
+    */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 }
 
@@ -111,9 +112,12 @@ void timer_task(void *arg) {
     };
     esp_timer_create(&delay_timer_args, &virtual_timer);
 
-    bool active_state = 1;
+    /* Старт в выключенном состоянии до action/enable 1, По умолчанию активен
+    */
+    bool active_state = !get_option_flag_val(slot_num, "disableOnStart");
 
     waitForWorkPermit(slot_num);
+    stdreport_enable(slot_num, active_state);
 
     while(1){
         uint8_t tmp;
@@ -131,6 +135,7 @@ void timer_task(void *arg) {
             case STDCMD_ENABLE:
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
+                    stdreport_enable(slot_num, active_state);
                     ESP_LOGD(TAG, "[timer_%d] enable:%d", slot_num, active_state);
                 }
                 break;
