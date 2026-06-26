@@ -155,6 +155,11 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->WIFI_gateWay = strdup(value);
 	} else if (MATCH("WIFI", "channel")) {
 		pconfig->WIFI_channel = atoi(value);
+	} else if (MATCH("WIFI", "reconnectPeriod")) {
+		int v = atoi(value);
+		if (v < 1) v = 1;          // 0 - запрещён, иначе ретрай без паузы
+		if (v > 3600) v = 3600;    // верхний разумный предел - 1 час
+		pconfig->WIFI_reconnectPeriod = v;
 	} else if (MATCH("MDNS", "MDNS_enable")) {//-----------------------------------------------
 		pconfig->MDNS_enable = _yesno(value);
 	} else if (MATCH("FTP", "FTP_enable")) {//-----------------------------------------------
@@ -224,7 +229,7 @@ void load_Default_Config(void) {
 
 	me_config.deviceName = strdup("moduleBox");
 	me_config.logLevel = ESP_LOG_WARN;
-	me_config.cleanLogOnStart = 0;
+	me_config.cleanLogOnStart = 1;
 	me_config.statusPeriod = 0;
 	me_config.statusAllChannels = true;
 	me_config.USB_debug = 0;
@@ -240,7 +245,9 @@ void load_Default_Config(void) {
 	me_config.WIFI_ssid = strdup("");
 	me_config.WIFI_pass = strdup("");
 	me_config.WIFI_channel = 6;
+	me_config.WIFI_reconnectPeriod = 5;   // секунды
 	me_state.WIFI_init_res = ESP_FAIL;
+	me_state.WIFI_attempts = 0;
 
 	me_config.LAN_enable = 0;
 	me_config.LAN_DHCP = 1;

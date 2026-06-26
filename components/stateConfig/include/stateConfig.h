@@ -59,6 +59,7 @@ typedef struct {
 
 	int8_t eth_connected;
 
+	uint32_t WIFI_attempts;   // счётчик попыток подключения WiFi (накопительный)
 
 	int udplink_socket;
 	int osc_socket;
@@ -106,7 +107,8 @@ typedef struct {
 	char *WIFI_netMask;
 	char *WIFI_gateWay;
 	uint8_t WIFI_channel;
-	
+	uint32_t WIFI_reconnectPeriod; // период попыток (пере)подключения WiFi, секунды
+
 	uint8_t LAN_enable;
 	uint8_t LAN_DHCP;
 	char *LAN_ipAdress;

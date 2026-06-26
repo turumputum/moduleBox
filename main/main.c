@@ -315,43 +315,30 @@ bool startNetworkServices()
 
 		if (result)
 		{
-#define NETWORK_INIT_TIMEOUT		100
-
-			int timeout		= NETWORK_INIT_TIMEOUT;
-			bool ready 		= false;
+extern int network_get_active_interfaces();
+			bool ready = false;
 
 			ESP_LOGD(TAG, "waiting for active interfaces...");
 
-			do 
+			// Фоновое ожидание без таймаута (мы уже в network_services_task):
+			// сервисы стартуют, как только поднимется любой интерфейс.
+			// WiFi может подключиться спустя любое время - его ретрай бесконечен.
+			while (!ready)
 			{
-extern int network_get_active_interfaces();				
-				if ((ESP_OK == me_state.WIFI_init_res) || (ESP_OK == me_state.LAN_init_res))
+				if (((ESP_OK == me_state.WIFI_init_res) || (ESP_OK == me_state.LAN_init_res))
+					&& (network_get_active_interfaces() > 0))
 				{
-					int net_if_num = network_get_active_interfaces();
-
-					if (net_if_num > 0)
-					{
-						ready = true;
-					}
+					ready = true;
+					break;
 				}
-				else
-				{
-					vTaskDelay(pdMS_TO_TICKS(200));
-					timeout--;
-				}
-				
-			} while (!ready && timeout);
-
-			if (ready)
-			{
-				start_udp_receive_task(); 	// OK
-				start_osc_recive_task(); 	// OK
-				start_ftp_task(); 			// OK
-				start_mdns_task();			// OK
-				start_mqtt_task();			// OK
+				vTaskDelay(pdMS_TO_TICKS(200));
 			}
-			else
-				sprintf(errorString, "Network initialization timeout (%d)", NETWORK_INIT_TIMEOUT);
+
+			start_udp_receive_task(); 	// OK
+			start_osc_recive_task(); 	// OK
+			start_ftp_task(); 			// OK
+			start_mdns_task();			// OK
+			start_mqtt_task();			// OK
 		}
 	}
 	else
@@ -364,6 +351,15 @@ extern int network_get_active_interfaces();
 	}
 
 	return result;
+}
+
+// Поднятие сети в фоне, чтобы не задерживать старт слотов на ожидание
+// LAN/WIFI (до 20 с по LAN и до 100 с по WIFI при недоступном линке).
+// Модули, которым сеть действительно нужна, сами ждут LAN_init_res.
+void network_services_task(void *arg)
+{
+	startNetworkServices();
+	vTaskDelete(NULL);
 }
 void makeStatusReport(bool spread)
 {
@@ -539,12 +535,13 @@ void app_main(void)
 	
 	start_scheduler_task();
 
-	startNetworkServices();
+	// Слоты без сети стартуют немедленно; сеть поднимается в фоне.
+	setWorkPermission(EVERY_SLOT);
+
+	xTaskCreatePinnedToCore(network_services_task, "net_up", 1024 * 8, NULL, configMAX_PRIORITIES - 10, NULL, 0);
 
 	ESP_LOGI(TAG, "Ver %s. Load complite, start working. free Heap size %d", VERSION, xPortGetFreeHeapSize());
 	//xTaskCreatePinnedToCore(heap_report, "heap_report",  1024 * 4,NULL ,configMAX_PRIORITIES - 16, NULL, 0);
-
-	setWorkPermission(EVERY_SLOT);
 
 	int freeHeapSize;
 	int freeHeapSizeFLAG = 0;

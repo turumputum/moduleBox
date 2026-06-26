@@ -186,6 +186,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_CONNECTED");
 		me_state.MQTT_init_res = ESP_OK;
+		mblog(I, "MQTT - connected");
 		s_mqtt_diag.connected++;
 		s_mqtt_diag.last_connect_us = esp_timer_get_time();
 		s_mqtt_diag.is_connected = 1;
@@ -266,6 +267,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	case MQTT_EVENT_DISCONNECTED:
 		ESP_LOGD(TAG, "MQTT_EVENT_DISCONNECTED");
 		me_state.MQTT_init_res = ESP_FAIL;
+		mblog(W, "MQTT - disconnected");
 		s_mqtt_diag.disconnected++;
 		s_mqtt_diag.last_disconnect_us = esp_timer_get_time();
 		s_mqtt_diag.is_connected = 0;

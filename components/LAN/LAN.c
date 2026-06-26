@@ -64,11 +64,14 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t ev
 		esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
 		ESP_LOGI(TAG, "Ethernet Link Up");
 		ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+		mblog(I, "LAN - link up");
 		break;
 	case ETHERNET_EVENT_DISCONNECTED:
 		me_state.eth_connected = 0;
+		me_state.LAN_init_res = ESP_FAIL;   // сбрасываем, чтобы транспорты не слали в мёртвый линк
 		ESP_LOGW(TAG, "!!! ETH LINK DOWN at %lld ms", (long long)(esp_timer_get_time()/1000));
 		ESP_LOGI(TAG, "Ethernet Link Down");
+		mblog(W, "LAN - link down");
 		break;
 	case ETHERNET_EVENT_START:
 		ESP_LOGI(TAG, "Ethernet Started");
@@ -93,6 +96,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t
 	ESP_LOGI(TAG, "ETHMASK:" IPSTR, IP2STR(&ip_info->netmask));
 	ESP_LOGI(TAG, "ETHGW:" IPSTR, IP2STR(&ip_info->gw));
 	ESP_LOGI(TAG, "~~~~~~~~~~~");
+	mblog(I, "LAN - got ip " IPSTR, IP2STR(&ip_info->ip));
 }
 
 //-----------------------OSC-----------------------------------
@@ -419,10 +423,11 @@ const char * networkGetStatusString()
 		}
 
 
-		sprintf(statusString, "EHT %s, WIFI %s, %s, MQTT %s, UDP %s", 
+		sprintf(statusString, "EHT %s, WIFI %s(try %lu), %s, MQTT %s, UDP %s",
 								me_state.eth_connected == -1 ? "?" : (me_state.eth_connected ? "on" : "off"),
 								me_state.WIFI_init_res == ESP_OK ? "on" : "off",
-								addr, 
+								(unsigned long)me_state.WIFI_attempts,
+								addr,
 								me_state.MQTT_init_res == ESP_OK ? "on" : "off",
 								me_state.UDP_init_res  == ESP_OK ? "on" : "off"
 		);

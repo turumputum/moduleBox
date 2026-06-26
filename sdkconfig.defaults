@@ -20,3 +20,9 @@ CONFIG_LWIP_UDP_RECVMBOX_SIZE=16
 # in start_mdns_task when internal RAM is tight).
 CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM=y
 CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
+
+# --- System event task stack ------------------------------------------------
+# LAN/WIFI event handlers write link up/down transitions to the SD log via
+# mblog() (FATFS fopen/fwrite). The default 2304 B stack is too tight for a
+# file write from this context - bump to 4096 to avoid stack overflow.
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096

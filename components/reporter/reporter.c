@@ -20,6 +20,7 @@
 #include "esp_vfs_fat.h"
 #include "esp_heap_caps.h"
 #include <fcntl.h>
+#include <stdbool.h>
 #include <mbdebug.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -28,7 +29,7 @@ static const char *TAG = "REPORTER";
 #define MAILBOX_SIZE 10
 #define MAX_STRING_LENGTH 512
 
-int err;
+static uint32_t s_droppedReports = 0;   // сколько отчётов выкинуто при переполнении буфера
 
 typedef struct
 {
@@ -43,6 +44,21 @@ extern configuration me_config;
 extern stateStruct me_state;
 
 void forward_report(char *msg, int slot_num);
+
+// Есть ли физический линк для отправки отчётов (IP-уровень проверяется
+// транспортами внутри send_report). eth_connected и WIFI_init_res
+// корректно сбрасываются обработчиками событий при обрыве.
+static inline bool reporter_link_up(void)
+{
+	return (me_state.eth_connected == 1) || (me_state.WIFI_init_res == ESP_OK);
+}
+
+// Ожидается ли сеть вообще. Если ни один интерфейс не включён -
+// буферизировать отчёты незачем, просто выгребаем и отбрасываем.
+static inline bool reporter_net_expected(void)
+{
+	return me_config.LAN_enable || me_config.WIFI_enable;
+}
 
 void crosslinker_(char* 	str,
 				  char * 	rules)
@@ -274,7 +290,8 @@ void crosslinker(char* str){
 void send_report(reporter_message_t * msg)
 {
 	char * tmpStr = msg->str;
-	usbprint(tmpStr);
+	// usbprint вынесен в forward_report - локальное эхо идёт сразу, не ждёт
+	// сеть и не задерживается буферизацией при обрыве линка
 
 	if(me_state.MQTT_init_res==ESP_OK){
 
@@ -342,16 +359,10 @@ void send_report(reporter_message_t * msg)
 
 		int res = sendto(me_state.osc_socket, tmpString, len, 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
 		if (res < 0){
-			ESP_LOGE(TAG,"Failed to send osc errno: %d len:%d string:%s\n", errno, len, tmpString);
-			err++;
-			if(err>10){
-				esp_restart();
-			}
+			ESP_LOGW(TAG,"Failed to send osc errno: %d len:%d string:%s", errno, len, tmpString);
+			// сеть могла отвалиться - не перезагружаемся, отчёты снова уйдут в
+			// буфер по reporter_link_up(), как только линк восстановится
 			return;
-		}else{
-			err--;
-			if(err<0)err=0;
-			//ESP_LOGD(TAG,"send osc OK: \n");
 		}
 	}
 	if(me_state.UDP_init_res==ESP_OK)
@@ -359,16 +370,9 @@ void send_report(reporter_message_t * msg)
 		int res = udplink_send(msg->slot_num, tmpStr);
 
 		if (res < 0){
-			ESP_LOGE(TAG,"Failed to send UDP errno: %d string:%s\n", errno, tmpStr);
-			err++;
-			if(err>10){
-				esp_restart();
-			}
+			ESP_LOGW(TAG,"Failed to send UDP errno: %d string:%s", errno, tmpStr);
+			// без перезагрузки - см. комментарий в OSC-ветке выше
 			return;
-		}else{
-			err--;
-			if(err<0)err=0;
-			//ESP_LOGD(TAG,"send UDP OK: \n");
 		}
 	}
 }
@@ -377,13 +381,36 @@ void spread_the_word_task(void *arg)
 {
 	//char tmpStr[555];
 	reporter_message_t received_message;
+	bool buffering = false;
 	for(;;){
-		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, portMAX_DELAY) == pdPASS)
+		// Пока сеть ожидается, но линка нет - не выгребаем очередь, копим
+		// отчёты. Очередь сама работает буфером; переполнение обрабатывает
+		// forward_report (выкидывает самые старые).
+		if (reporter_net_expected() && !reporter_link_up())
+		{
+			if (!buffering)
+			{
+				buffering = true;
+				mblog(W, "reporter - link down, buffering reports");
+			}
+			vTaskDelay(pdMS_TO_TICKS(200));
+			continue;
+		}
+		if (buffering)
+		{
+			buffering = false;
+			mblog(I, "reporter - link up, flushing %d buffered reports",
+					(int)uxQueueMessagesWaiting(me_state.reporter_spread_queue));
+			s_droppedReports = 0;
+		}
+		// таймаут вместо portMAX_DELAY, чтобы при пустой очереди успевать
+		// заметить обрыв линка и снова уйти в буферизацию
+		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, pdMS_TO_TICKS(200)) == pdPASS)
 		{
 			send_report(&received_message);
 
 			heap_caps_free(received_message.str);
-		}	
+		}
 	}
 }
 void forward_report(char *msg, int slot_num)
@@ -392,22 +419,38 @@ void forward_report(char *msg, int slot_num)
 
 	char *copy = heap_caps_malloc(strlen(msg)+1, MALLOC_CAP_8BIT);
 
-	if (copy)
+	if (!copy)
 	{
-		strcpy(copy, msg);
-		send_message.str = copy;
-
-		send_message.slot_num = slot_num;
-		esp_err_t ret = xQueueSend(me_state.reporter_spread_queue, &send_message, 5);
-
-		if(ret!= pdPASS){
-			ESP_LOGE(TAG, "QueueSend error:%d", ret);
-
-			heap_caps_free(copy);
-		}
-	}
-	else
 		ESP_LOGE(TAG, "Der Heap ist kaputt");
+		return;
+	}
+
+	strcpy(copy, msg);
+	send_message.str = copy;
+	send_message.slot_num = slot_num;
+
+	// локальное эхо в USB-консоль - всегда сразу, независимо от сети
+	usbprint(msg);
+
+	if (xQueueSend(me_state.reporter_spread_queue, &send_message, 0) == pdPASS)
+		return;
+
+	// Очередь переполнена (линк лежит давно) - выкидываем самый старый отчёт
+	// и кладём новый. Так буфер всегда содержит свежие события.
+	reporter_message_t oldest;
+	if (xQueueReceive(me_state.reporter_spread_queue, &oldest, 0) == pdPASS)
+	{
+		heap_caps_free(oldest.str);
+		s_droppedReports++;
+	}
+
+	if (xQueueSend(me_state.reporter_spread_queue, &send_message, 0) != pdPASS)
+		heap_caps_free(copy);   // не влезло даже после освобождения - сдаёмся
+
+	// логируем переполнение, но не на каждый дроп, чтобы не забивать лог
+	if (s_droppedReports == 1 || (s_droppedReports % 50) == 0)
+		mblog(W, "reporter - buffer full, dropped %lu oldest reports",
+				(unsigned long)s_droppedReports);
 }
 
 void reporter_task(void *arg){
