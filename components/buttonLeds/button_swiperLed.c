@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "me_slot_config.h"
+#include <mbdebug.h>
 #include "stateConfig.h"
 #include "executor.h"
 #include "stdcommand.h"
@@ -266,6 +267,7 @@ void button_swiperLed_task(void *arg)
 {
     int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
+    if (!ctx) { mblog(E, "swiperLed ctx alloc fail slot:%d", slot_num); vTaskDelete(NULL); }
     setup_button_hw(slot_num, ctx);
     configure_button_swiperLed(ctx, slot_num);
 
@@ -280,6 +282,7 @@ void button_swiperLed_task(void *arg)
     size_t pixels_size = ctx->led.num_of_led * 3;
     uint8_t *pixels = heap_caps_calloc(1, pixels_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (pixels == NULL) pixels = calloc(1, pixels_size);
+    if (pixels == NULL) { mblog(E, "swiperLed pixels alloc fail slot:%d", slot_num); free(ctx); vTaskDelete(NULL); }
 
     rmt_led_heap_t rmt_heap = RMT_LED_HEAP_DEFAULT();
     rmt_heap.tx_chan_config.gpio_num = pin_out;
@@ -295,6 +298,10 @@ void button_swiperLed_task(void *arg)
     swiper.ledBrightMass = malloc(swiper.num_led);
     swiper.ledAngleRadian = 2 * M_PI / swiper.num_led;
     swiper.ledsCoordinate = malloc(swiper.num_led / 2 * sizeof(uint16_t));
+    if (swiper.ledBrightMass == NULL || swiper.ledsCoordinate == NULL) {
+        mblog(E, "swiperLed alloc fail slot:%d", slot_num);
+        free(swiper.ledBrightMass); free(swiper.ledsCoordinate); free(pixels); free(ctx); vTaskDelete(NULL);
+    }
     swiper.state = LED_STOP;
     swiper.offset = ctx->led.offset;
 

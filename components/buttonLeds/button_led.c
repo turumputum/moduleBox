@@ -18,6 +18,7 @@
 #include "freertos/queue.h"
 #include "esp_log.h"
 #include "me_slot_config.h"
+#include <mbdebug.h>
 #include "stateConfig.h"
 #include "executor.h"
 #include "stdcommand.h"
@@ -188,6 +189,7 @@ void button_led_task(void *arg)
 {
     int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
+    if (!ctx) { mblog(E, "buttonLed ctx alloc fail slot:%d", slot_num); vTaskDelete(NULL); }
     setup_button_hw(slot_num, ctx);
     configure_button_led(ctx, slot_num);
 

@@ -12,6 +12,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -126,8 +127,8 @@ void dialer_task(void* arg) {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT,
         .pin_bit_mask = (1ULL << ena_pin),
-        .pull_down_en = 1,
-        .pull_up_en = 0,
+        .pull_down_en = 0,
+        .pull_up_en = 1,
     };
     gpio_config(&io_conf);
 
@@ -139,7 +140,7 @@ void dialer_task(void* arg) {
         .mode = GPIO_MODE_INPUT,
         .pin_bit_mask = (1ULL << pulse_pin),
         .pull_down_en = 0,
-        .pull_up_en = 0,
+        .pull_up_en = 1,
     };
     gpio_config(&in_conf);
     gpio_install_isr_service(0);
@@ -152,6 +153,7 @@ void dialer_task(void* arg) {
     uint8_t prev_ena_state = 0;
     uint32_t dial_start_time = 0;
     uint8_t state_flag = 0;
+    int64_t last_pulse_us = 0;   // время последнего принятого импульса (антидребезг)
 
     waitForWorkPermit(slot_num);
     stdreport_enable(slot_num, c.active_state);
@@ -226,12 +228,15 @@ void dialer_task(void* arg) {
             }
         }
 
-        // Обработка импульсов
+        // Обработка импульсов - неблокирующий антидребезг по времени
         uint8_t tmp;
         if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, pdMS_TO_TICKS(15)) == pdPASS){
             if(gpio_get_level(pulse_pin) == c.pulseInverse){
-                counter++;
-                vTaskDelay(c.debounceGap);
+                int64_t now = esp_timer_get_time();
+                if(now - last_pulse_us >= (int64_t)c.debounceGap * 1000){
+                    counter++;
+                    last_pulse_us = now;
+                }
             }
         }
     }

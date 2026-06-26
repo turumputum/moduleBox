@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "me_slot_config.h"
+#include <mbdebug.h>
 #include "stateConfig.h"
 #include "executor.h"
 #include "stdcommand.h"
@@ -344,6 +345,7 @@ void button_runFire_task(void *arg)
 {
     int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
+    if (!ctx) { mblog(E, "runFire ctx alloc fail slot:%d", slot_num); vTaskDelete(NULL); }
     setup_button_hw(slot_num, ctx);
     configure_button_runFire(ctx, slot_num);
 
@@ -360,6 +362,10 @@ void button_runFire_task(void *arg)
     if (current_pixels == NULL) current_pixels = calloc(pixel_buf_size, sizeof(uint8_t));
     uint8_t *target_pixels  = heap_caps_calloc(1, pixel_buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (target_pixels == NULL) target_pixels = calloc(pixel_buf_size, sizeof(uint8_t));
+    if (current_pixels == NULL || target_pixels == NULL) {
+        mblog(E, "runFire pixels alloc fail slot:%d", slot_num);
+        free(current_pixels); free(target_pixels); free(ctx); vTaskDelete(NULL);
+    }
 
     rmt_led_heap_t rmt_heap = RMT_LED_HEAP_DEFAULT();
     rmt_heap.tx_chan_config.gpio_num = pin_out;

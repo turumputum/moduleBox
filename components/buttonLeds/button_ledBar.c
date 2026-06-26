@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "me_slot_config.h"
+#include <mbdebug.h>
 #include "stateConfig.h"
 #include "executor.h"
 #include "stdcommand.h"
@@ -293,6 +294,7 @@ void button_ledBar_task(void *arg)
 {
     int slot_num = (int)(intptr_t)arg;
     PMODULE_CONTEXT ctx = calloc(1, sizeof(MODULE_CONTEXT));
+    if (!ctx) { mblog(E, "ledBar ctx alloc fail slot:%d", slot_num); vTaskDelete(NULL); }
     setup_button_hw(slot_num, ctx);
     configure_button_ledBar(ctx, slot_num);
 
@@ -315,6 +317,10 @@ void button_ledBar_task(void *arg)
     if (current_bright_mass == NULL) current_bright_mass = calloc(1, mass_size);
     uint8_t *target_bright_mass = heap_caps_calloc(1, mass_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (target_bright_mass == NULL) target_bright_mass = calloc(1, mass_size);
+    if (pixels == NULL || current_bright_mass == NULL || target_bright_mass == NULL) {
+        mblog(E, "ledBar buffers alloc fail slot:%d", slot_num);
+        free(pixels); free(current_bright_mass); free(target_bright_mass); free(ctx); vTaskDelete(NULL);
+    }
 
     rmt_led_heap_t rmt_heap = RMT_LED_HEAP_DEFAULT();
     rmt_heap.tx_chan_config.gpio_num = pin_out;

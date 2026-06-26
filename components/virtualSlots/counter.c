@@ -80,27 +80,35 @@ void configure_counter(PCOUNTER_CONFIG ch, int slot_num){
         ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
     }
 
+    
     stdcommand_init(&ch->cmds, slot_num);
+
+
+        /* === COMMANDS === */
+
+    /* Включить 1 или выключить 0 модуль
+    */
+    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
+
     /* Установка значений счетчика
        Параметр может быть задан инкрементально или абсолютно
     */
     stdcommand_register(&ch->cmds, COUNTERCMD_set, "action/set", PARAMT_string);
 
-    /* Отчёт значения счетчика
-    */
-    ch->report = stdreport_register(RPTT_int, slot_num, "", "event/val");
-
-    /* === COMMANDS === */
-
-    /* Включить 1 или выключить 0 модуль
-    */
-    stdcommand_register(&ch->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* === EVENTS === */
 
     /* Состояние модуля - активен 1 или спит 0
     */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    
+    /* Отчёт значения счетчика
+    */
+    ch->report = stdreport_register(RPTT_int, slot_num, "", "event/val");
+
+
+
+    
 }
 
 void counter_task(void *arg) {
