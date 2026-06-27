@@ -114,40 +114,40 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     ESP_LOGD(TAG, "[stepper_%d] Initial active_state:%d", slot_num, c->active_state);
 
     c->dir = CW;
-    /* Инверсия направления вращения
+    /* Инверсия направления вращения. CW\CCW. По умолчанию CW
 	*/
 	c->dir = get_option_flag_val(slot_num, "dirInverse") ? CCW : CW;
 	ESP_LOGD(TAG, "[stepper_%d] dir:%s", slot_num, (c->dir == CW)? "CW" : "CCW");
 
-    /* Включить рапорты положения
+    /* Включить рапорты положения. Флаг.
 	*/
 	c->posReportFlag = get_option_flag_val(slot_num, "posReport");
 	if(c->posReportFlag){
         ESP_LOGD(TAG, "[stepper_%d] posReport enable", slot_num);
     }
 
-    /* Режим кругового счётчика
+    /* Режим кругового счётчика. Флаг. 
 	*/
 	c->circularCounterFlag = get_option_flag_val(slot_num, "circularCounter");
 	if(c->circularCounterFlag){
         ESP_LOGD(TAG, "[stepper_%d] circularCounter enable", slot_num);
     }
 
-    /* Базировать сразу при старте - иначе ждать команду goHome
+    /* Базировать сразу при старте - иначе ждать команду goHome. Флаг.
 	*/
 	c->goHomeOnStart = get_option_flag_val(slot_num, "goHomeOnStart");
 	if(c->goHomeOnStart){
         ESP_LOGD(TAG, "[stepper_%d] goHomeOnStart enable", slot_num);
     }
 
-    /* Включить рапорты скорости
+    /* Включить рапорты скорости. Флаг.
 	*/
 	c->speedReportFlag = get_option_flag_val(slot_num, "speedReport");
 	if(c->speedReportFlag){
         ESP_LOGD(TAG, "[stepper_%d] speedReport enable", slot_num);
     }
 
-    /* Включить рапорты состояния - run или stop
+    /* Включить рапорты состояния - run или stop. Флаг.
 	*/
 	c->stateReportFlag = get_option_flag_val(slot_num, "stateReport");
 	if(c->stateReportFlag){
@@ -157,7 +157,7 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
     c->state=NOT_HOMED;
     c->homingDir = 0;
-    /* Направление базирования CW-CCW - по умолчанию поиск дома выключен
+    /* Направление базирования CW-CCW - по умолчанию поиск дома выключен.
     */
     if ((c->homingDir = get_option_enum_val(slot_num, "homingDir","", "CW", "CCW", NULL)) < 0){
         
@@ -175,12 +175,12 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
 
 
-    /* Ускорение и замедление в шаг-сек2, По умолчанию 100
+    /* Ускорение и замедление в шаг-сек2. Int 1..2147483647, По умолчанию 100
 	*/
 	c->accel =  get_option_int_val(slot_num, "accel", "step/sek^2", 100, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] accel:%ld", slot_num, c->accel);
 
-    /* Максимальная скорость в шаг-сек, По умолчанию 100
+    /* Максимальная скорость в шаг-сек. Int 1..2147483647, По умолчанию 100
 	*/
 	c->maxSpeed =  get_option_int_val(slot_num, "maxSpeed", "step/sek", 100, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] maxSpeed:%ld", slot_num, c->maxSpeed);
@@ -196,7 +196,7 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	c->refreshPeriod =  1000/get_option_int_val(slot_num, "refreshRate", "fps", 20, 1, 100);
     ESP_LOGD(TAG, "[stepper_%d] refreshPeriod:%d", slot_num, c->refreshPeriod);
 
-    /* Скорость базирования в шаг-сек, По умолчанию maxSpeed-4
+    /* Скорость базирования в шаг-сек. Int 1..2147483647, По умолчанию maxSpeed-4. 
 	*/
 	c->homingSpeed =  get_option_int_val(slot_num, "homingSpeed", "step/sek", c->maxSpeed / 4, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingSpeed:%ld", slot_num, c->homingSpeed);
@@ -219,12 +219,12 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     }
     ESP_LOGD(TAG, "[stepper_%d] pulseWidth(auto):%d us (maxSpeed:%ld)", slot_num, c->pulseWidth, c->maxSpeed);
 
-    /* Максимальное положение в шагах
+    /* Максимальное положение в шагах. Int32 -2147483648..2147483647, По умолчанию INT32_MAX
 	*/
 	c->maxVal =  get_option_int_val(slot_num, "maxVal", "step", INT32_MAX, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] maxVal:%ld", slot_num, c->maxVal);
 
-    /* Минимальное положение в шагах
+    /* Минимальное положение в шагах. Int32 -2147483648..2147483647, По умолчанию INT32_MIN
 	*/
 	c->minVal =  get_option_int_val(slot_num, "minVal", "step", INT32_MIN, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] minVal:%ld", slot_num, c->minVal);
@@ -238,11 +238,11 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 		ESP_LOGD(TAG, "Standart stepper_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
-    /* Текущее положение в шагах
+    /* Текущее положение в шагах. Int32 -2147483648..2147483647
 	*/
 	c->posReport = stdreport_register(RPTT_string, slot_num, "step", "event/pos");
 
-    /* Текущая скорость в шаг-сек
+    /* Текущая скорость в шаг-сек. Int32 -2147483648..2147483647
 	*/
 	c->speedReport = stdreport_register(RPTT_string, slot_num, "step/sek", "event/speed");
 
@@ -254,35 +254,35 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	*/
 	c->homeReport = stdreport_register(RPTT_string, slot_num, "", "event/homingState");
 
-    /* Запустить базирование
+    /* Запустить базирование. Без параметров. 
     */
     stdcommand_register(&c->cmds, stepCMD_goHome, "action/goHome", PARAMT_none);
 
-    /* Перейти в абсолютную позицию - режим по положению
+    /* Перейти в абсолютную позицию. Int32 -2147483648..2147483647.
     */
     stdcommand_register(&c->cmds, stepCMD_moveToAbs, "action/moveToAbs", PARAMT_int);
 
-    /* Сместиться на приращение - режим по положению
+    /* Сместиться на приращение. Int32 -2147483648..2147483647.
     */
     stdcommand_register(&c->cmds, stepCMD_moveToInc, "action/moveToInc", PARAMT_int);
 
-    /* Вращать с заданной скоростью - режим по скорости
+    /* Вращать с заданной скоростью. Int32 -2147483648..2147483647.
     */
     stdcommand_register(&c->cmds, stepCMD_runSpeed, "action/runSpeed", PARAMT_int);
 
-    /* Установить максимальную скорость
+    /* Установить максимальную скорость. Int32 0..2147483647.
     */
     stdcommand_register(&c->cmds, stepCMD_setMaxSpeed, "action/setMaxSpeed", PARAMT_int);
 
-    /* Установить ускорение
+    /* Установить ускорение. Int32 0..2147483647.
     */
     stdcommand_register(&c->cmds, stepCMD_setAccel, "action/setAccel", PARAMT_int);
 
-    /* Экстренная остановка
+    /* Экстренная остановка.
     */
     stdcommand_register(&c->cmds, stepCMD_stop, "action/stop", PARAMT_none);
 
-    /* Остановка с торможением
+    /* Остановка с торможением.
     */
     stdcommand_register(&c->cmds, stepCMD_break, "action/break", PARAMT_none);
 

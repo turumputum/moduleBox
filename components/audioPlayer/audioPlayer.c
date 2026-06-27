@@ -168,17 +168,17 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 	if(c->volume<0){c->volume=0;}
 	ESP_LOGD(TAG, "Set volume:%d", c->volume);
 
-	/* Скорость воспроизведения
+	/* Скорость воспроизведения. Float 0.1-3.0, По умолчанию 1.09
 	*/
 	c->speed = get_option_float_val(slot_num, "speed", 1.09);
 	ESP_LOGD(TAG, "Set speed:%f", c->speed);
 
-	/* Сдвиг тональности
+	/* Сдвиг тональности. Float 0.1-3.0, По умолчанию 1.0
 	*/
 	c->tone = get_option_float_val(slot_num, "tone", 1.0);
 	ESP_LOGD(TAG, "Set tone:%f", c->tone);
 
-	/* Нижняя граница эквалайзера
+	/* Нижняя граница эквалайзера. Int -20..0, По умолчанию -13
 	*/
 	if ((c->eqLow = get_option_int_val(slot_num, "eqLow", "", -13, -20, 0)) != 0)
 	{
@@ -186,7 +186,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Set eqLow:%d", c->eqLow);
 	}
 
-	/* Средняя граница эквалайзера
+	/* Средняя граница эквалайзера. Int -20..0, По умолчанию -13
 	*/
 	if ((c->eqMid = get_option_int_val(slot_num, "eqMid", "", -13, -20, 0)) != 0)
 	{
@@ -194,12 +194,12 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
 	}
 
-	/* Верхняя граница эквалайзера
+	/* Верхняя граница эквалайзера. Int -20..0, По умолчанию -13
 	*/
 	if ((c->eqHigh = get_option_int_val(slot_num, "eqHigh", "", -13, -20, 0)) != 0)
 	{
 		c->eqFlag = 1;
-		ESP_LOGD(TAG, "Set eqMid:%d", c->eqMid);
+		ESP_LOGD(TAG, "Set eqHigh:%d", c->eqHigh);
 	}
 
 	/* Период затухания громкости в мс (0 - выключено)
@@ -210,13 +210,13 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Enable attenuation: %d ms", c->attenuation);
 	}
 	
-	/* Пауза перед проигрыванием
+	/* Пауза перед проигрыванием в мс. Int 0..4096, По умолчанию 0
 	*/
 	c->play_delay = get_option_int_val(slot_num, "playDelay", "", 0, 0, 4096);
 	ESP_LOGD(TAG, "Set play_delay:%d", c->play_delay);
 
 
-	/* Проигрывать до конца
+	/* Проигрывать до конца. Флаг.
 	*/
 	c->play_to_end = get_option_flag_val(slot_num, "playToEnd");
 	ESP_LOGD(TAG, "Set play_to_end:%d", c->play_to_end);
@@ -235,19 +235,19 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 		ESP_LOGD(TAG, "Standart action_topic:%s", me_state.action_topic_list[slot_num]);
 	}
 
-	/* Номер трека по завершении воспроизведения
+	/* Номер трека по завершении воспроизведения.
 	*/
 	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "event/endOfTrack");
 
-    /* Проиграть трек - опционально номер трека
+    /* Проиграть трек. Абсолютное значение или инкрементально(+\-N). Без параметра - текущий трек.
     */
     stdcommand_register(&c->cmds, MYCMD_play, "action/play", PARAMT_string);
 
-    /* Остановить воспроизведение
+    /* Остановить воспроизведение. 
     */
     stdcommand_register(&c->cmds, MYCMD_stop, "action/stop", PARAMT_none);
 
-    /* Переключить трек
+    /* Переключить трек.  Абсолютное значение или инкрементально(+\-N).
     */
    	stdcommand_register(&c->cmds, MYCMD_shift, "action/shift", PARAMT_string);
 
