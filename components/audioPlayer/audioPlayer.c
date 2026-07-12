@@ -239,7 +239,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 	*/
 	c->ETreport = stdreport_register(RPTT_string, slot_num, "", "event/endOfTrack");
 
-    /* Проиграть трек. Абсолютное значение или инкрементально(+\-N). Без параметра - текущий трек.
+    /* Проиграть трек. Абсолютное значение или инкрементально(+-N). Без параметра - текущий трек.
     */
     stdcommand_register(&c->cmds, MYCMD_play, "action/play", PARAMT_string);
 
@@ -247,7 +247,7 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
     */
     stdcommand_register(&c->cmds, MYCMD_stop, "action/stop", PARAMT_none);
 
-    /* Переключить трек.  Абсолютное значение или инкрементально(+\-N).
+    /* Переключить трек.  Абсолютное значение или инкрементально(+-N).
     */
    	stdcommand_register(&c->cmds, MYCMD_shift, "action/shift", PARAMT_string);
 

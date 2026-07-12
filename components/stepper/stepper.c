@@ -45,8 +45,8 @@ static const char *TAG = "STEPPER";
 #define RUN_SPEED 3
 #define GOING_HOME 4
 
-#define CW 1
-#define CCW -1
+#define UP 1
+#define DOWN -1
 
 
 typedef struct __tag_STEPPERCONFIG{
@@ -58,6 +58,8 @@ typedef struct __tag_STEPPERCONFIG{
 	uint16_t                refreshPeriod;
 	int					    homingDir;
     int                     homingSensorState;
+    int                     upLimitState;    // аппаратный лимит верх (up/плюс): 1 - движение вверх запрещено
+    int                     downLimitState;  // аппаратный лимит низ (down/минус): 1 - движение вниз запрещено
     int32_t                 currentPos;
     int32_t                 targetPos;
 	uint32_t				homingSpeed;
@@ -90,7 +92,9 @@ typedef enum
     stepCMD_setAccel,
     stepCMD_stop,
 	stepCMD_break,
-    stepCMD_setHomingSensor
+    stepCMD_setHomingSensor,
+    stepCMD_setUpLimit,
+    stepCMD_setDownLimit
 } stepCMD;
 
 /* Положительный остаток (a mod m), m>0 - для режима кругового счетчика */
@@ -113,11 +117,11 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     c->active_state = !get_option_flag_val(slot_num, "disableOnStart");
     ESP_LOGD(TAG, "[stepper_%d] Initial active_state:%d", slot_num, c->active_state);
 
-    c->dir = CW;
-    /* Инверсия направления вращения. CW\CCW. По умолчанию CW
+    c->dir = UP;
+    /* Инверсия направления вращения. up-down. По умолчанию up
 	*/
-	c->dir = get_option_flag_val(slot_num, "dirInverse") ? CCW : CW;
-	ESP_LOGD(TAG, "[stepper_%d] dir:%s", slot_num, (c->dir == CW)? "CW" : "CCW");
+	c->dir = get_option_flag_val(slot_num, "dirInverse") ? DOWN : UP;
+	ESP_LOGD(TAG, "[stepper_%d] dir:%s", slot_num, (c->dir == UP)? "up" : "down");
 
     /* Включить рапорты положения. Флаг.
 	*/
@@ -157,18 +161,19 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
     c->state=NOT_HOMED;
     c->homingDir = 0;
-    /* Направление базирования CW-CCW - по умолчанию поиск дома выключен.
+    /* Направление базирования up-down - по умолчанию поиск дома выключен.
     */
-    if ((c->homingDir = get_option_enum_val(slot_num, "homingDir","", "CW", "CCW", NULL)) < 0){
+    if ((c->homingDir = get_option_enum_val(slot_num, "homingDir","", "up", "down", NULL)) < 0){
         
     }
     if(c->homingDir==1){
-        c->homingDir = CW;
-        ESP_LOGD(TAG, "[stepper_%d] homing dir:CW", slot_num);
+        c->homingDir = UP;
+        ESP_LOGD(TAG, "[stepper_%d] homing dir:up", slot_num);
     }else if(c->homingDir==2){
-        c->homingDir = CCW;
-        ESP_LOGD(TAG, "[stepper_%d] homing dir:CCW", slot_num);
+        c->homingDir = DOWN;
+        ESP_LOGD(TAG, "[stepper_%d] homing dir:down", slot_num);
     }else{
+        c->homingDir = 0;   // не задан - поиск дома выключен, сразу рабочий режим
         c->state=IDLE;
         ESP_LOGD(TAG, "[stepper_%d] homing procedure disabled", slot_num);
     }
@@ -246,11 +251,11 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	*/
 	c->speedReport = stdreport_register(RPTT_string, slot_num, "step/sek", "event/speed");
 
-    /* Состояние мотора - run или stop
+    /* Состояние мотора - run, stop, maxVal, minVal, upLimit или downLimit
 	*/
 	c->stateReport = stdreport_register(RPTT_string, slot_num, "", "event/state");
 
-    /* Состояние базирования
+    /* Состояние базирования - disable, waitingCommand, homing, done или homingTimeout
 	*/
 	c->homeReport = stdreport_register(RPTT_string, slot_num, "", "event/homingState");
 
@@ -291,6 +296,14 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     */
     stdcommand_register(&c->cmds, stepCMD_setHomingSensor, "action/setHomingSensor", PARAMT_int);
 
+    /* Аппаратный лимит хода вверх (up/плюс) 0-1 - 1 запрещает движение в плюс
+    */
+    stdcommand_register(&c->cmds, stepCMD_setUpLimit, "action/setUpLimit", PARAMT_int);
+
+    /* Аппаратный лимит хода вниз (down/минус) 0-1 - 1 запрещает движение в минус
+    */
+    stdcommand_register(&c->cmds, stepCMD_setDownLimit, "action/setDownLimit", PARAMT_int);
+
 
     /* === COMMANDS === */
 
@@ -307,8 +320,92 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 
 
 #define HOMING_WAITING 1
-#define HOMING_TO_SENSOR 2 
+#define HOMING_TO_SENSOR 2
 #define HOMING_OUT_SENSOR 3
+
+// Отложенная очередь: команды движения, пришедшие во время базирования, копим
+// здесь и проигрываем по завершению процедуры (все они несут один int-аргумент).
+#define STEPPER_DEFERRED_MAX 8
+typedef struct { int cmd; int32_t arg; } stepper_deferred_t;
+
+// Команды движения-параметров, которые можно отложить и проиграть помощником.
+static inline int stepper_is_motion_cmd(int cmd){
+    return cmd==stepCMD_moveToAbs || cmd==stepCMD_moveToInc ||
+           cmd==stepCMD_runSpeed  || cmd==stepCMD_setMaxSpeed ||
+           cmd==stepCMD_setAccel;
+}
+
+/* Исполнение команд движения-параметров. Вынесено отдельно, чтобы одинаково
+   выполнять их и в реальном времени, и при проигрывании отложенной очереди
+   после базирования. arg - уже разобранное целое (atoi). */
+static void stepper_exec_motion(PSTEPPERCONFIG c, stepper_t *stepper, int cmd, int32_t arg, int slot_num){
+    int32_t target;
+    switch(cmd){
+        case stepCMD_moveToInc:
+            c->state = RUN_POS;
+            stepper->runSpeedFlag = 0;
+            stepper->maxSpeed = c->maxSpeed;             // восстанавливаем cap позиционирования (runSpeed мог его испортить)
+            target = stepper->currentPos + arg;
+            if(!c->circularCounterFlag){                 // в круговом режиме ход не ограничиваем
+                if(target > c->maxVal) target = c->maxVal;
+                if(target < c->minVal) target = c->minVal;
+            }
+            // аппаратные лимиты: не назначаем цель в запрещённом направлении
+            if(c->upLimitState   && target > stepper->currentPos) target = stepper->currentPos;
+            if(c->downLimitState && target < stepper->currentPos) target = stepper->currentPos;
+            stepper_moveTo(stepper, target);
+            ESP_LOGD(TAG, "[stepper_%d] moveTo:%ld", slot_num, target);
+            break;
+
+        case stepCMD_moveToAbs:
+            c->state = RUN_POS;
+            stepper->runSpeedFlag = 0;
+            stepper->maxSpeed = c->maxSpeed;             // восстанавливаем cap позиционирования
+            target = arg;
+            if(c->circularCounterFlag && (c->maxVal > c->minVal)){
+                // круговой режим: кратчайший путь к цели с учетом заворота диапазона
+                int64_t range = (int64_t)c->maxVal - (int64_t)c->minVal;
+                int64_t cur   = stepper->currentPos;
+                int64_t fwd   = stepper_wrapmod((int64_t)target - cur, range); // путь вперед [0,range)
+                int64_t delta = (fwd <= range - fwd) ? fwd : (fwd - range);    // короче вперед или назад
+                target = (int32_t)(cur + delta);
+            }else{
+                if(target > c->maxVal) target = c->maxVal;   // ограничение хода
+                if(target < c->minVal) target = c->minVal;
+            }
+            // аппаратные лимиты: не назначаем цель в запрещённом направлении
+            if(c->upLimitState   && target > stepper->currentPos) target = stepper->currentPos;
+            if(c->downLimitState && target < stepper->currentPos) target = stepper->currentPos;
+            stepper_moveTo(stepper, target);
+            ESP_LOGD(TAG, "[stepper_%d] moveTo:%ld", slot_num, target);
+            break;
+
+        case stepCMD_runSpeed:
+            // аппаратный лимит блокирует старт в запрещённую сторону
+            if((c->upLimitState && arg > 0) || (c->downLimitState && arg < 0)){
+                ESP_LOGD(TAG, "[stepper_%d] runSpeed %ld blocked by hw limit", slot_num, (long)arg);
+                break;
+            }
+            c->state = RUN_SPEED;
+            stepper->runSpeedFlag = 1;
+            stepper->maxSpeed = arg;
+            stepper_moveTo(stepper, stepper->maxSpeed>0?(INT32_MAX-1):(INT32_MIN+1));
+            ESP_LOGD(TAG, "[stepper_%d] runSpeed%ld", slot_num, stepper->maxSpeed);
+            break;
+
+        case stepCMD_setMaxSpeed:
+            // Меняем постоянный cap скорости позиционирования (magnitude).
+            c->maxSpeed = abs(arg);
+            stepper->maxSpeed = c->maxSpeed;
+            ESP_LOGD(TAG, "[stepper_%d] set maxSpeed:%ld", slot_num, stepper->maxSpeed);
+            break;
+
+        case stepCMD_setAccel:
+            stepper->accel = arg;
+            ESP_LOGD(TAG, "[stepper_%d] set accel:%ld", slot_num, stepper->accel);
+            break;
+    }
+}
 
 void stepper_task(void *arg){
     PSTEPPERCONFIG c = calloc(1, sizeof(STEPPERCONFIG));
@@ -347,6 +444,10 @@ void stepper_task(void *arg){
     int homingProcedureState = HOMING_WAITING;
     TickType_t homingStartTick = 0;
 
+    // Очередь команд, отложенных на время базирования (FIFO).
+    stepper_deferred_t deferred[STEPPER_DEFERRED_MAX];
+    int deferredCount = 0;
+
     waitForWorkPermit(slot_num);
     stdreport_enable(slot_num, c->active_state);
 
@@ -356,13 +457,31 @@ void stepper_task(void *arg){
         if(c->goHomeOnStart){
             c->state=GOING_HOME;
         }else{
-            stdreport_s(c->homeReport, "waitingCommand"); 
+            stdreport_s(c->homeReport, "waitingCommand");
         }
     }
-    
+
+    // При старте публикуем текущее состояние включённых рапортов (retain не
+    // используется): позиция, скорость, run-stop. На старте pos=0, speed=0, stop.
+    if(c->posReportFlag){
+        char str[15];
+        sprintf(str, "%ld", stepper.absPos);
+        stdreport_s(c->posReport, str);
+        prevPos = stepper.absPos;
+    }
+    if(c->speedReportFlag){
+        char str[15];
+        sprintf(str, "%ld", stepper.currentSpeed);
+        stdreport_s(c->speedReport, str);
+        prevSpeed = stepper.currentSpeed;
+    }
+    if(c->stateReportFlag){
+        stdreport_s(c->stateReport, stepper.state==RUN ? "run" : "stop");
+        prevState = (stepper.state==RUN) ? 1 : 0;
+    }
+
 
     TickType_t lastWakeTime = xTaskGetTickCount();
-    int32_t target=0;
 
     while(1){
 
@@ -376,110 +495,102 @@ void stepper_task(void *arg){
             cmd = -1;
         }
 
-        switch (cmd){
-            case -1: // none
-                break;
+        /* Классификация: команды движения-параметров исполняет помощник, и их
+           можно откладывать. Управляющие (enable, goHome, stop, break,
+           setHomingSensor) исполняются немедленно. */
+        int isMotion = stepper_is_motion_cmd(cmd);
 
-            case STDCMD_ENABLE:
-                if (params.count > 0) {
-                    int new_state = params.p[0].i ? 1 : 0;
-                    if (new_state != c->active_state) {
-                        c->active_state = new_state;
-                        ESP_LOGD(TAG, "[stepper_%d] enable:%d", slot_num, c->active_state);
-                        stdreport_enable(slot_num, c->active_state);
-                        if (!c->active_state) {
-                            /* Экстренная остановка при выключении (Конституция §6) */
-                            stepper_stop(&stepper);
+        /* Во время базирования команды движения сразу не исполняем, а копим в
+           очередь и проигрываем по завершению процедуры. setHomingSensor, break,
+           stop, goHome и enable проходят немедленно - через switch ниже. */
+        if (c->state==GOING_HOME && isMotion) {
+            if (deferredCount < STEPPER_DEFERRED_MAX) {
+                deferred[deferredCount].cmd = cmd;
+                deferred[deferredCount].arg = atoi(cmd_arg);
+                deferredCount++;
+                ESP_LOGD(TAG, "[stepper_%d] homing, deferring cmd:%d (queued:%d)", slot_num, cmd, deferredCount);
+            } else {
+                ESP_LOGW(TAG, "[stepper_%d] deferred queue full, dropping cmd:%d", slot_num, cmd);
+            }
+            cmd = -1;
+            isMotion = 0;
+        }
+
+        if (isMotion) {
+            stepper_exec_motion(c, &stepper, cmd, atoi(cmd_arg), slot_num);
+        } else {
+            switch (cmd){
+                case -1: // none
+                    break;
+
+                case STDCMD_ENABLE:
+                    if (params.count > 0) {
+                        int new_state = params.p[0].i ? 1 : 0;
+                        if (new_state != c->active_state) {
+                            c->active_state = new_state;
+                            ESP_LOGD(TAG, "[stepper_%d] enable:%d", slot_num, c->active_state);
+                            stdreport_enable(slot_num, c->active_state);
+                            if (!c->active_state) {
+                                /* Экстренная остановка при выключении (Конституция §6) */
+                                stepper_stop(&stepper);
+                                /* Если шло базирование - корректно отменяем, иначе автомат
+                                   замрёт в GOING_HOME и после enable 1 не доедет. */
+                                if (c->state==GOING_HOME) {
+                                    c->state = NOT_HOMED;
+                                    homingProcedureState = HOMING_WAITING;
+                                    deferredCount = 0;
+                                    stdreport_s(c->homeReport, "waitingCommand");
+                                }
+                            }
                         }
                     }
-                }
-                break;
+                    break;
 
-            case stepCMD_goHome:
-                homingProcedureState=HOMING_WAITING;
-                c->state = GOING_HOME;
-                ESP_LOGD(TAG, "[stepper_%d] lets go home", slot_num);
-                break;
+                case stepCMD_goHome:
+                    homingProcedureState=HOMING_WAITING;
+                    c->state = GOING_HOME;
+                    ESP_LOGD(TAG, "[stepper_%d] lets go home", slot_num);
+                    break;
 
-            case stepCMD_moveToInc:
-                // if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
-                //     break;
-                // }
-                c->state = RUN_POS;
-                stepper.runSpeedFlag = 0;
-                stepper.maxSpeed = c->maxSpeed;             // восстанавливаем cap позиционирования (runSpeed мог его испортить)
-                target = stepper.currentPos + atoi(cmd_arg); // atoi сам разбирает знак
-                if(!c->circularCounterFlag){                 // в круговом режиме ход не ограничиваем
-                    if(target > c->maxVal) target = c->maxVal;
-                    if(target < c->minVal) target = c->minVal;
-                }
-                stepper_moveTo(&stepper, target);
-                ESP_LOGD(TAG, "[stepper_%d] moveTo:%ld", slot_num, target);
-                break;
+                case stepCMD_stop:
+                    stepper_stop(&stepper);
+                    ESP_LOGD(TAG, "[stepper_%d] STOP", slot_num);
+                    if(c->state==GOING_HOME){
+                        // базирование прервано вручную - отложенная очередь неактуальна
+                        c->state=NOT_HOMED;
+                        homingProcedureState=HOMING_WAITING;
+                        deferredCount=0;
+                        stdreport_s(c->homeReport, "waitingCommand");
+                    }
+                    break;
 
-            case stepCMD_moveToAbs:
-                // if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
-                //     break;
-                // }
-                c->state = RUN_POS;
-                stepper.runSpeedFlag = 0;
-                stepper.maxSpeed = c->maxSpeed;             // восстанавливаем cap позиционирования
-                target = atoi(cmd_arg);
-                if(c->circularCounterFlag && (c->maxVal > c->minVal)){
-                    // круговой режим: кратчайший путь к цели с учетом заворота диапазона
-                    int64_t range = (int64_t)c->maxVal - (int64_t)c->minVal;
-                    int64_t cur   = stepper.currentPos;
-                    int64_t fwd   = stepper_wrapmod((int64_t)target - cur, range); // путь вперед [0,range)
-                    int64_t delta = (fwd <= range - fwd) ? fwd : (fwd - range);    // короче вперед или назад
-                    target = (int32_t)(cur + delta);
-                }else{
-                    if(target > c->maxVal) target = c->maxVal;   // ограничение хода
-                    if(target < c->minVal) target = c->minVal;
-                }
-                stepper_moveTo(&stepper, target);
-                ESP_LOGD(TAG, "[stepper_%d] moveTo:%ld", slot_num, target);
-                break;
+                case stepCMD_break:
+                    stepper_break(&stepper);
+                    ESP_LOGD(TAG, "[stepper_%d] break", slot_num);
+                    if(c->state==GOING_HOME){
+                        c->state=NOT_HOMED;
+                        homingProcedureState=HOMING_WAITING;
+                        deferredCount=0;
+                        stdreport_s(c->homeReport, "waitingCommand");
+                    }
+                    break;
 
-            case stepCMD_runSpeed:
-                // if((c->state==NOT_HOMED)||(c->state==GOING_HOME)){
-                //     break; 
-                // }
-                c->state = RUN_SPEED;
-                stepper.runSpeedFlag = 1;
-                stepper.maxSpeed = atoi(cmd_arg);
-                stepper_moveTo(&stepper, stepper.maxSpeed>0?(INT32_MAX-1):(INT32_MIN+1));
-                ESP_LOGD(TAG, "[stepper_%d] runSpeed%ld", slot_num, stepper.maxSpeed);
-                break;
+                case stepCMD_setHomingSensor:
+                    c->homingSensorState = atoi(cmd_arg);
+                    ESP_LOGD(TAG, "[stepper_%d] setHomingSensor:%d", slot_num, c->homingSensorState);
+                    break;
 
-            case stepCMD_setMaxSpeed:
-                // Меняем постоянный cap скорости позиционирования (magnitude).
-                c->maxSpeed = abs(atoi(cmd_arg));
-                stepper.maxSpeed = c->maxSpeed;
-                ESP_LOGD(TAG, "[stepper_%d] set maxSpeed:%ld", slot_num, stepper.maxSpeed);
-                break;
+                case stepCMD_setUpLimit:
+                    // Обновляем состояние концевика всегда; enforcement - в рабочем цикле.
+                    c->upLimitState = atoi(cmd_arg) ? 1 : 0;
+                    ESP_LOGD(TAG, "[stepper_%d] setUpLimit:%d", slot_num, c->upLimitState);
+                    break;
 
-            case stepCMD_setAccel:
-                stepper.accel = atoi(cmd_arg);
-                ESP_LOGD(TAG, "[stepper_%d] set accel:%ld", slot_num, stepper.accel);
-                break;
-
-            case stepCMD_stop:
-                stepper_stop(&stepper);
-                ESP_LOGD(TAG, "[stepper_%d] STOP", slot_num);
-                if(c->state==GOING_HOME){
-                    c->state=NOT_HOMED;
-                }
-                break;
-
-            case stepCMD_break:
-                stepper_break(&stepper);
-                ESP_LOGD(TAG, "[stepper_%d] break", slot_num);
-                break;
-
-            case stepCMD_setHomingSensor:
-                c->homingSensorState = atoi(cmd_arg);
-                ESP_LOGD(TAG, "[stepper_%d] setHomingSensor:%d", slot_num, c->homingSensorState);
-                break;
+                case stepCMD_setDownLimit:
+                    c->downLimitState = atoi(cmd_arg) ? 1 : 0;
+                    ESP_LOGD(TAG, "[stepper_%d] setDownLimit:%d", slot_num, c->downLimitState);
+                    break;
+            }
         }
 
         if(c->active_state && c->state==GOING_HOME){
@@ -491,29 +602,32 @@ void stepper_task(void *arg){
 
                 if(c->homingSensorState==1){
                     homingProcedureState = HOMING_OUT_SENSOR;
-                    stepper_moveTo(&stepper,(c->homingDir) ? INT32_MIN : INT32_MAX);
+                    stepper_moveTo(&stepper,(c->homingDir == UP) ? INT32_MIN : INT32_MAX);
                     ESP_LOGD(TAG, "[stepper_%d] homing out of sensor", slot_num);
                 }else{
                     homingProcedureState = HOMING_TO_SENSOR;
-                    stepper_moveTo(&stepper, (c->homingDir) ? INT32_MAX : INT32_MIN);
+                    stepper_moveTo(&stepper, (c->homingDir == UP) ? INT32_MAX : INT32_MIN);
                     ESP_LOGD(TAG, "[stepper_%d] homing to sensor", slot_num);
                 }
             }else if(c->homingTimeout>0 &&
                      (xTaskGetTickCount()-homingStartTick) > pdMS_TO_TICKS(c->homingTimeout*1000)){
-                // датчик не найден за отведенное время - аварийно прекращаем базирование
+                // датчик не найден за отведенное время - прекращаем базирование,
+                // остаёмся в ожидании повторной команды goHome. Отложенные команды
+                // сбрасываем: ехать по накопленным координатам на небазированной оси нельзя.
                 stepper_stop(&stepper);
                 stepper.maxSpeed = c->maxSpeed;
                 stepper.accel = c->accel;
                 c->state = NOT_HOMED;
                 homingProcedureState = HOMING_WAITING;
-                stdreport_s(c->homeReport, "timeout");
+                deferredCount = 0;
+                stdreport_s(c->homeReport, "homingTimeout");
                 ESP_LOGW(TAG, "[stepper_%d] homing timeout", slot_num);
             }else if(homingProcedureState == HOMING_OUT_SENSOR){
                 if(c->homingSensorState==0){
                     ESP_LOGD(TAG, "[stepper_%d] sensor reseted, homing again", slot_num);
                     vTaskDelay(500);
                     homingProcedureState = HOMING_TO_SENSOR; 
-                    stepper_moveTo(&stepper, (c->homingDir) ? INT32_MAX : INT32_MIN);
+                    stepper_moveTo(&stepper, (c->homingDir == UP) ? INT32_MAX : INT32_MIN);
                 }
             }else if(homingProcedureState == HOMING_TO_SENSOR){
                 if(c->homingSensorState==1){
@@ -524,6 +638,14 @@ void stepper_task(void *arg){
                     stepper.accel = c->accel;
                     c->state=IDLE;
 				    stdreport_s(c->homeReport, "done");
+                    // проигрываем команды, накопленные во время базирования (FIFO)
+                    for(int k=0; k<deferredCount; k++){
+                        stepper_exec_motion(c, &stepper, deferred[k].cmd, deferred[k].arg, slot_num);
+                    }
+                    if(deferredCount){
+                        ESP_LOGD(TAG, "[stepper_%d] replayed %d deferred cmd(s)", slot_num, deferredCount);
+                        deferredCount = 0;
+                    }
                 }
             }
         }
@@ -533,6 +655,78 @@ void stepper_task(void *arg){
         }
         stepper_getCurrentPos(&stepper);
         //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
+
+        // --- Ограничение хода по minVal-maxVal и индикация границ ---
+        // Работает и в позиционном режиме, и в режиме скорости (runSpeed).
+        // absPos - истинная позиция, переживающая хак runSpeed. В круговом режиме
+        // границы отключены. По умолчанию maxVal-INT32_MAX, minVal-INT32_MIN,
+        // поэтому без настройки границы никогда не срабатывают.
+        int atMaxVal = 0, atMinVal = 0;
+        if(!c->circularCounterFlag){
+            // Тормозной путь на текущей скорости: v^2/(2a). Считаем в int64 -
+            // при большом maxSpeed квадрат скорости и 2*accel переполняют int32.
+            int64_t brakeWay = ((int64_t)stepper.currentSpeed * (int64_t)stepper.currentSpeed)
+                               / (2 * (int64_t)(stepper.accel > 0 ? stepper.accel : 1));
+
+            // Предиктивное торможение в режиме скорости: начинаем тормозить заранее,
+            // чтобы плавно (по трапеции) встать точно на границе. Перед moveTo снимаем
+            // runSpeedFlag, иначе хак сброса currentPos не даст торможению завершиться.
+            // Цель задаём в координатах currentPos: (maxVal - absPos) - остаток хода.
+            if(c->active_state && c->state==RUN_SPEED && stepper.state==RUN){
+                if(stepper.dir==DIR_UP && stepper.absPos < c->maxVal &&
+                   (int64_t)stepper.absPos + brakeWay >= (int64_t)c->maxVal){
+                    stepper.runSpeedFlag = 0;
+                    stepper_moveTo(&stepper, stepper.currentPos + (c->maxVal - stepper.absPos));
+                    c->state = RUN_POS;
+                    ESP_LOGD(TAG, "[stepper_%d] braking to maxVal:%ld", slot_num, c->maxVal);
+                }else if(stepper.dir==DIR_DOWN && stepper.absPos > c->minVal &&
+                         (int64_t)stepper.absPos - brakeWay <= (int64_t)c->minVal){
+                    stepper.runSpeedFlag = 0;
+                    stepper_moveTo(&stepper, stepper.currentPos + (c->minVal - stepper.absPos));
+                    c->state = RUN_POS;
+                    ESP_LOGD(TAG, "[stepper_%d] braking to minVal:%ld", slot_num, c->minVal);
+                }
+            }
+
+            // Индикация границ + жёсткий backstop: если позицию всё же вынесло за
+            // границу (например runSpeed без запаса на торможение) - стоп немедленно.
+            if(stepper.absPos >= c->maxVal){
+                // не индицируем границу, если уже уезжаем от неё
+                if(!(stepper.state==RUN && stepper.dir==DIR_DOWN)) atMaxVal = 1;
+                if(c->active_state && stepper.state==RUN && stepper.dir==DIR_UP){
+                    stepper_stop(&stepper);
+                    if(c->state==RUN_SPEED) c->state=IDLE;
+                    ESP_LOGD(TAG, "[stepper_%d] maxVal:%ld backstop", slot_num, c->maxVal);
+                }
+            }else if(stepper.absPos <= c->minVal){
+                if(!(stepper.state==RUN && stepper.dir==DIR_UP)) atMinVal = 1;
+                if(c->active_state && stepper.state==RUN && stepper.dir==DIR_DOWN){
+                    stepper_stop(&stepper);
+                    if(c->state==RUN_SPEED) c->state=IDLE;
+                    ESP_LOGD(TAG, "[stepper_%d] minVal:%ld backstop", slot_num, c->minVal);
+                }
+            }
+        }
+
+        // --- Аппаратные лимиты (концевики) + индикация ---
+        // upLimit запрещает движение up/плюс, downLimit - down/минус. Из-под лимита
+        // всегда можно уехать в обратную сторону. В базировании лимиты игнорируем.
+        int atUpLimit = 0, atDownLimit = 0;
+        if(c->state!=GOING_HOME){
+            atUpLimit   = c->upLimitState   ? 1 : 0;
+            atDownLimit = c->downLimitState ? 1 : 0;
+            if(c->active_state && stepper.state==RUN){
+                if(c->upLimitState && stepper.dir==DIR_UP){
+                    stepper_stop(&stepper);
+                    if(c->state==RUN_SPEED) c->state=IDLE;
+                    ESP_LOGD(TAG, "[stepper_%d] upLimit hit, stop", slot_num);
+                }else if(c->downLimitState && stepper.dir==DIR_DOWN){
+                    stepper_stop(&stepper);
+                    if(c->state==RUN_SPEED) c->state=IDLE;
+                    ESP_LOGD(TAG, "[stepper_%d] downLimit hit, stop", slot_num);
+                }
+            }
+        }
 
         if(c->posReportFlag){
             // absPos - истинная позиция (переживает хак runSpeed); в круговом режиме заворачиваем
@@ -562,9 +756,22 @@ void stepper_task(void *arg){
         }
 
         if(c->stateReportFlag){
-            if(prevState!=stepper.state){
-                stdreport_s(c->stateReport, stepper.state==RUN ? "run" : "stop");
-                prevState=stepper.state;
+            // 0-stop 1-run 2-maxVal 3-minVal 4-upLimit 5-downLimit.
+            // Приоритет: аппаратный лимит > программная граница > run-stop.
+            int reportState = (stepper.state==RUN) ? 1 : 0;
+            if(atMaxVal) reportState = 2;
+            else if(atMinVal) reportState = 3;
+            if(atUpLimit) reportState = 4;
+            else if(atDownLimit) reportState = 5;
+            if(prevState!=reportState){
+                const char * stateStr = "stop";
+                if(reportState==1) stateStr = "run";
+                else if(reportState==2) stateStr = "maxVal";
+                else if(reportState==3) stateStr = "minVal";
+                else if(reportState==4) stateStr = "upLimit";
+                else if(reportState==5) stateStr = "downLimit";
+                stdreport_s(c->stateReport, stateStr);
+                prevState=reportState;
             }
         }
 

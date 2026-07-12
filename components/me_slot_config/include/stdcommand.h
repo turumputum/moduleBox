@@ -16,7 +16,7 @@
 // ------------------------------- DEFINITIONS -------------------------------
 // -----|-------------------|-------------------------------------------------
 
-#define STDCOMMAN_MAX_KEYWORDS  10
+#define STDCOMMAN_MAX_KEYWORDS  16
 #define STDCOMMAN_MAX_PARAMS    10
 
 /* Зарезервированный ID для action/enable (Конституция §6).

@@ -40,7 +40,7 @@ typedef enum{
 } TIMERCMD;
 
 /* 
-    Виртуальный модуль таймер
+    Виртуальный модуль таймер. В миллисекундах. Максимальное время таймера INT32_MAX(2147483647)
     slots: 0-9
 */
 void configure_timer(PTIMER_CONFIG ch, int slot_num){
@@ -52,13 +52,13 @@ void configure_timer(PTIMER_CONFIG ch, int slot_num){
     ESP_LOGD(TAG, "Set time :%ld for slot:%d", ch->time, slot_num);
 
     // Standard topic
-    {
-        char t_str[strlen(me_config.deviceName) + strlen("/timer_0") + 3];
-        sprintf(t_str, "%s/timer_%d", me_config.deviceName, slot_num);
-        me_state.action_topic_list[slot_num] = strdup(t_str);
-        me_state.trigger_topic_list[slot_num] = strdup(t_str);
-        ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
-    }
+
+    char t_str[strlen(me_config.deviceName) + strlen("/timer_0") + 3];
+    sprintf(t_str, "%s/timer_%d", me_config.deviceName, slot_num);
+    me_state.action_topic_list[slot_num] = strdup(t_str);
+    me_state.trigger_topic_list[slot_num] = strdup(t_str);
+    ESP_LOGD(TAG, "Standart topic:%s", me_state.action_topic_list[slot_num]);
+
 
     stdcommand_init(&ch->cmds, slot_num);
     /* Запустить таймер

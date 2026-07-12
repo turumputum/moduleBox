@@ -30,7 +30,9 @@ typedef enum
 
 typedef struct __tag_STDREPORT
 {
-    uint32_t                slot_num    : 3;
+    // slot_num должен вмещать 0..NUM_OF_SLOTS-1. При 3 битах (0..7) слоты 8-9
+    // молча усекались (8->0, 9->1) и рапорт уходил в чужой топик. 5 бит = 0..31.
+    uint32_t                slot_num    : 5;
     uint32_t                outType     : 3;
 
     char                    topic       [ 65 ];

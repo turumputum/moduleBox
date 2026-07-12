@@ -141,6 +141,18 @@ void flywheel_task(void *arg){
     waitForWorkPermit(slot_num);
     stdreport_enable(slot_num, active_state);
 
+    // При старте публикуем текущее состояние (retain не используется): в пороговом
+    // режиме - state, иначе - значение счётчика. На старте оба равны 0.
+    if(active_state){
+        if(c.threshold > 0){
+            stdreport_i(c.stateReport, flywheel_state);
+        } else {
+            stdreport_i(c.countReport, (int)flywheelCount);
+        }
+    }
+    _flywheel_state = flywheel_state;
+    _flywheelCount = flywheelCount;
+
     for(;;) {
         flywheelCount -= c.decrement;
         if(flywheelCount < c.minVal){

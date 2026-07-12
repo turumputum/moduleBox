@@ -337,22 +337,22 @@ void stepper_setPeriod(stepper_t *stepper, uint32_t period){
 
 
 void stepper_checkDir(stepper_t *stepper){
-    if((stepper->dir==DIR_CW)&&(stepper->currentPos > stepper->targetPos)){
+    if((stepper->dir==DIR_UP)&&(stepper->currentPos > stepper->targetPos)){
         //надо менять направление вращения
-        //ESP_LOGD(TAG, "Dir change needed, CW");
+        //ESP_LOGD(TAG, "Dir change needed, up");
         stepper->targetSpeed = 0;
-    }else if((stepper->dir==DIR_CCW)&&(stepper->currentPos < stepper->targetPos)){
+    }else if((stepper->dir==DIR_DOWN)&&(stepper->currentPos < stepper->targetPos)){
         //надо менять направление вращения
-        //ESP_LOGD(TAG, "Dir change needed, CCW");
+        //ESP_LOGD(TAG, "Dir change needed, down");
         stepper->targetSpeed = 0;
     }
 
     if(stepper->currentSpeed==0){
-        int8_t dir = stepper->targetPos > stepper->currentPos ? DIR_CW : DIR_CCW;
+        int8_t dir = stepper->targetPos > stepper->currentPos ? DIR_UP : DIR_DOWN;
         if(dir!=stepper->dir){
             stepper->dir=dir;
-            gpio_set_level(stepper->dirPin, dir==DIR_CW ? !stepper->dirInverse : stepper->dirInverse);
-            ESP_LOGD(TAG, "Dir changed, newDir:%s dirInverse:%d", stepper->dir==DIR_CW?"CW":"CCW", stepper->dirInverse);
+            gpio_set_level(stepper->dirPin, dir==DIR_UP ? !stepper->dirInverse : stepper->dirInverse);
+            ESP_LOGD(TAG, "Dir changed, newDir:%s dirInverse:%d", stepper->dir==DIR_UP?"up":"down", stepper->dirInverse);
             stepper->targetSpeed = stepper->maxSpeed;
         }
         
@@ -380,11 +380,11 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
 
     stepper_checkDir(stepper);
 
-    if(stepper->dir==DIR_CW){
+    if(stepper->dir==DIR_UP){
         while(watchPoint>INT16_MAX){
             watchPoint-=INT16_MAX;
         }
-    }else if(stepper->dir==DIR_CCW){
+    }else if(stepper->dir==DIR_DOWN){
         while(watchPoint<INT16_MIN){
             watchPoint-=INT16_MIN;
         }
@@ -399,9 +399,9 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     stepper->pcnt_watchPoint = (int16_t)watchPoint;
 
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
-    if(stepper->dir==DIR_CW){
+    if(stepper->dir==DIR_UP){
         pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX);
-    }else if(stepper->dir==DIR_CCW){
+    }else if(stepper->dir==DIR_DOWN){
         pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
     }
     //ESP_LOGD(TAG, "add watch point %d", stepper->pcnt_watchPoint);
@@ -440,7 +440,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     }
 
     ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld  state:%s", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, break_distance, stepper->breakPoint, stepper->state==STOP?"STOP":"RUN");
-    //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld dir:%s", stepper->currentSpeed, stepper->targetSpeed, stepper->dir==DIR_CW?"CW":"CCW");
+    //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld dir:%s", stepper->currentSpeed, stepper->targetSpeed, stepper->dir==DIR_UP?"up":"down");
 }
 
 void stepper_speedUpdate(stepper_t *stepper, int32_t period){  
@@ -455,14 +455,14 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
     }
 
     if(stepper->currentPos!=stepper->targetPos){
-        if((stepper->dir==DIR_CW)&&(stepper->currentPos>=(stepper->breakPoint - speedIncrement/4))){
+        if((stepper->dir==DIR_UP)&&(stepper->currentPos>=(stepper->breakPoint - speedIncrement/4))){
             //если достигли точки торможения при вращении по часовой стрелке    
             stepper->targetSpeed=0;
-            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_CW?"CW":"CCW");
-        }else if((stepper->dir==DIR_CCW)&&(stepper->currentPos<=(stepper->breakPoint + speedIncrement/4))){
+            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_UP?"up":"down");
+        }else if((stepper->dir==DIR_DOWN)&&(stepper->currentPos<=(stepper->breakPoint + speedIncrement/4))){
             //если достигли точки торможения при вращении против часовой стрелке    
             stepper->targetSpeed=0;
-            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_CW?"CW":"CCW");
+            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_UP?"up":"down");
 
         }
         

@@ -39,7 +39,7 @@ void configure_startup(PSTARTUP_CONFIG ch, int slot_num)
     /* Параметр задержки перед отправкой сообщения о запуске (мс)
        Числовое значение 0-4096, по умолчанию 0
     */
-    ch->delay = get_option_int_val(slot_num, "delay", "", 0, 0, 4096);
+    ch->delay = get_option_int_val(slot_num, "delay", "", 0, 0, INT32_MAX);
     ESP_LOGD(TAG, "Set startup delay:%d. Slot:%d", ch->delay , slot_num);
     
     /* Пользовательский топик для отправки сообщения о запуске

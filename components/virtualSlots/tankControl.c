@@ -133,6 +133,15 @@ void tankControl_task(void* arg) {
     waitForWorkPermit(slot_num);
     stdreport_enable(slot_num, c.active_state);
 
+    // При старте публикуем текущее (нейтральное) состояние выходов, чтобы драйвер
+    // на приёмной стороне знал исходные скорости (retain не используется).
+    if(c.active_state){
+        float ratio = (float)c.outputMaxVal / c.inputMaxVal;
+        int neutralSpeed = (int)(inputMidlVal * ratio);
+        stdreport_i(c.leftReport, neutralSpeed);
+        stdreport_i(c.rightReport, neutralSpeed);
+    }
+
     while(1){
         int cmd = stdcommand_receive(&c.cmds, &params, portMAX_DELAY);
         if (cmd < 0) continue;

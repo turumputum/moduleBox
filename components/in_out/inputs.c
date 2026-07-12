@@ -136,7 +136,9 @@ typedef struct {
 static void IRAM_ATTR gpio_isr_handler_in_2ch(void* arg) {
     int slot_num = (int)(intptr_t)arg;
     uint8_t tmp = 1;
-    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+    // Защита от гонки: ISR может сработать до создания очереди
+    if (me_state.interrupt_queue[slot_num])
+        xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
 }
 
 /* 
@@ -215,9 +217,10 @@ static void configure_in_2ch(in_2ch_context_t *ctx, int slot_num) {
 static void in_2ch_task(void *arg) {
     int slot_num = (int)(intptr_t)arg;
     in_2ch_context_t ctx = IN_2CH_CONTEXT_DEFAULT();
-    
-    configure_in_2ch(&ctx, slot_num);
+
+    // Очередь ДО configure: там регистрируются ISR-обработчики, шлющие в неё.
     me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
+    configure_in_2ch(&ctx, slot_num);
 
     uint8_t tmp;
 
@@ -226,6 +229,23 @@ static void in_2ch_task(void *arg) {
     int cand_0 = ctx.prevState_0, cand_1 = ctx.prevState_1;
     int64_t since_0 = 0, since_1 = 0;
     int64_t gap_us = (int64_t)ctx.debounceGap * 1000;
+
+    waitForWorkPermit(slot_num);
+
+    // При старте публикуем текущее состояние каналов: retain в системе не
+    // используется, поэтому подписчик иначе не узнает исходное значение.
+    ctx.stat_0 = gpio_get_level(ctx.pin_0) ? !ctx.inverse_0 : ctx.inverse_0;
+    ctx.stat_1 = gpio_get_level(ctx.pin_1) ? !ctx.inverse_1 : ctx.inverse_1;
+    if (ctx.logic == INDEPENDENT_MODE) {
+        stdreport_i(ctx.stateReport_0, ctx.stat_0);
+        stdreport_i(ctx.stateReport_1, ctx.stat_1);
+    } else if (ctx.logic == OR_LOGIC_MODE) {
+        stdreport_i(ctx.stateReport_combined, (ctx.stat_0 || ctx.stat_1) ? 1 : 0);
+    } else { // AND_LOGIC_MODE
+        stdreport_i(ctx.stateReport_combined, (ctx.stat_0 && ctx.stat_1) ? 1 : 0);
+    }
+    ctx.prevState_0 = cand_0 = ctx.stat_0;
+    ctx.prevState_1 = cand_1 = ctx.stat_1;
 
     while (1) {
         // While a candidate is still settling, poll at the debounce
@@ -301,7 +321,9 @@ void start_in_2ch_task(int slot_num) {
 static void IRAM_ATTR gpio_isr_handler_in_3ch(void* arg) {
     int slot_num = (int)(intptr_t)arg;
     uint8_t tmp = 1;
-    xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
+    // Защита от гонки: ISR может сработать до создания очереди
+    if (me_state.interrupt_queue[slot_num])
+        xQueueSendFromISR(me_state.interrupt_queue[slot_num], &tmp, NULL);
 }
 
 /* 
@@ -347,12 +369,11 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
     ESP_LOGD(TAG, "Set refreshPeriod:%d for slot:%d", ctx->refreshPeriod, slot_num);
 
     // Setup topic
-    {
-        char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
-        sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
-        me_state.trigger_topic_list[slot_num] = strdup(t_str);
-        ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
-    }
+    char t_str[strlen(me_config.deviceName) + strlen("/in_0") + 3];
+    sprintf(t_str, "%s/in_%d", me_config.deviceName, slot_num);
+    me_state.trigger_topic_list[slot_num] = strdup(t_str);
+    //me_state.action_topic_list[slot_num] = strdup(t_str);
+    ESP_LOGD(TAG, "Standard trigger_topic:%s", me_state.trigger_topic_list[slot_num]);
 
     /* Состояние канала 0, 0-1
     */
@@ -390,7 +411,10 @@ static void configure_in_3ch(in_3ch_context_t *ctx, int slot_num) {
 static void in_3ch_task(void *arg) {
     int slot_num = (int)(intptr_t)arg;
     in_3ch_context_t ctx = IN_3CH_CONTEXT_DEFAULT();
-    
+
+    // Очередь ДО configure (там регистрируются ISR-обработчики). Ранее очередь
+    // для in_3ch не создавалась вовсе - xQueueReceive-SendFromISR шли по NULL.
+    me_state.interrupt_queue[slot_num] = xQueueCreate(15, sizeof(uint8_t));
     configure_in_3ch(&ctx, slot_num);
 
     uint8_t tmp;
@@ -400,6 +424,25 @@ static void in_3ch_task(void *arg) {
     int cand_0 = ctx.prevState_0, cand_1 = ctx.prevState_1, cand_2 = ctx.prevState_2;
     int64_t since_0 = 0, since_1 = 0, since_2 = 0;
     int64_t gap_us = (int64_t)ctx.debounceGap * 1000;
+
+    waitForWorkPermit(slot_num);
+
+    // При старте публикуем текущее состояние каналов (retain не используется).
+    ctx.stat_0 = gpio_get_level(ctx.pin_0) ? !ctx.inverse_0 : ctx.inverse_0;
+    ctx.stat_1 = gpio_get_level(ctx.pin_1) ? !ctx.inverse_1 : ctx.inverse_1;
+    ctx.stat_2 = gpio_get_level(ctx.pin_2) ? !ctx.inverse_2 : ctx.inverse_2;
+    if (ctx.logic == INDEPENDENT_MODE) {
+        stdreport_i(ctx.stateReport_0, ctx.stat_0);
+        stdreport_i(ctx.stateReport_1, ctx.stat_1);
+        stdreport_i(ctx.stateReport_2, ctx.stat_2);
+    } else if (ctx.logic == OR_LOGIC_MODE) {
+        stdreport_i(ctx.stateReport_combined, (ctx.stat_0 || ctx.stat_1 || ctx.stat_2) ? 1 : 0);
+    } else { // AND_LOGIC_MODE
+        stdreport_i(ctx.stateReport_combined, (ctx.stat_0 && ctx.stat_1 && ctx.stat_2) ? 1 : 0);
+    }
+    ctx.prevState_0 = cand_0 = ctx.stat_0;
+    ctx.prevState_1 = cand_1 = ctx.stat_1;
+    ctx.prevState_2 = cand_2 = ctx.stat_2;
 
     while (1) {
         // While a candidate is still settling, poll at the debounce

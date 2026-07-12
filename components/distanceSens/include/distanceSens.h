@@ -43,7 +43,7 @@ typedef struct {
 
 #define DISTANCE_SENS_DEFAULT() {\
     .state = 0,\
-    .prevState = 0,\
+    .prevState = 0xFF,\
     .active_state = 1,\
     .currentPos = 0,\
     .prevPos = 0,\

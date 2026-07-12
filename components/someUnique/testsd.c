@@ -580,6 +580,10 @@ void testsd_task(void *arg)
 
 	waitForWorkPermit(slot_num);
 
+	// При старте публикуем текущее состояние (retain не используется); присутствие
+	// карты доотчитается на первой итерации цикла (cardDetected=-1).
+	stdreport_s(c->stateReport, (char*)getStateName(ts.state));
+
 	if (testsd_init() != ESP_OK) {
 		ESP_LOGW(TAG, "Slot:%d SDMMC host init failed, detection and testing unavailable until retry", slot_num);
 	}

@@ -113,8 +113,8 @@ typedef struct {
 #define RUN 1
 #define STOP 0
 
-#define DIR_CW 1
-#define DIR_CCW -1
+#define DIR_UP 1
+#define DIR_DOWN -1
 
 #define STEPPER_DEFAULT() {\
 	.stepPin = 0,\

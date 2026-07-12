@@ -121,6 +121,10 @@ void crsf_rx_task(void* arg) {
 
     waitForWorkPermit(slot_num);
 
+    // Первый принятый кадр публикуем целиком (обходя deadBand): подписчик должен
+    // узнать исходные положения каналов на старте (retain не используется).
+    int firstFrame = 1;
+
     while(1) {
         uint8_t buffer[64];
         crsf_frame_t frame;
@@ -154,8 +158,8 @@ void crsf_rx_task(void* arg) {
                             int32_t rawChannels[numOfChannel];
                             UnpackChannels(frame.payload, rawChannels);
                             for(int i=0; i<8; i++){
-                                if(abs(rawChannels[i]-channels[i])>deadBand){
-                                   
+                                if(firstFrame || abs(rawChannels[i]-channels[i])>deadBand){
+
                                     char str[255];
                                     memset(str, 0, sizeof(str));
                                     //sprintf(str, "/ch_%d:%d", i,(uint8_t)(fVal*255));
@@ -165,6 +169,7 @@ void crsf_rx_task(void* arg) {
                                     channels[i] = rawChannels[i];
                                 }
                             }
+                            firstFrame = 0;
                             // Now channels array contains 16 RC channel values
                             // Each channel is 11 bits
                             //ESP_LOGD(TAG, "CH1: %ld, CH2: %ld, CH3: %ld, CH4: %ld, CH5: %ld, CH6: %ld, CH7: %ld, CH8: %ld ",channels[0], channels[1], channels[2], channels[3], channels[4], channels[5], channels[6], channels[7]);

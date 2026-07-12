@@ -67,7 +67,8 @@ void configure_random(PRND_CONFIG ch, int slot_num){
     }
 
     stdcommand_init(&ch->cmds, slot_num);
-    /* Запуск генератора случайных чисел
+    /* Сгенерировать число. Без параметра - в диапазоне minVal-maxVal из опций;
+       одно число N - в диапазоне 0-N; два числа через пробел - в этом диапазоне
     */
     stdcommand_register(&ch->cmds, RNDCMD_gen, "action/generate", PARAMT_none);
 
@@ -116,12 +117,35 @@ void random_task(void *arg) {
                 }
                 break;
 
-            case RNDCMD_gen:
+            case RNDCMD_gen: {
                 if(!active_state) break;
-                int16_t val = (rand() % (c.maxVal - c.minVal + 1)) + c.minVal;
-                ESP_LOGD(TAG, "Gen:%d max:%ld min:%ld", val, c.maxVal, c.minVal);
+
+                // Диапазон выбирается по нагрузке команды:
+                //   без параметра  -> minVal-maxVal из опций
+                //   одно число N   -> 0-N
+                //   два числа A B  -> A-B
+                int32_t lo, hi;
+                if (params.count >= 2) {
+                    int32_t a = atoi(params.p[0].p);
+                    int32_t b = atoi(params.p[1].p);
+                    lo = a < b ? a : b;
+                    hi = a < b ? b : a;
+                } else if (params.count == 1) {
+                    int32_t n = atoi(params.p[0].p);
+                    lo = n < 0 ? n : 0;
+                    hi = n < 0 ? 0 : n;
+                } else {
+                    lo = c.minVal;
+                    hi = c.maxVal;
+                }
+
+                // span в int64 - защита от переполнения при широких диапазонах
+                int64_t span = (int64_t)hi - (int64_t)lo + 1;
+                int32_t val = (int32_t)(lo + (rand() % span));
+                ESP_LOGD(TAG, "Gen:%ld range:%ld-%ld argc:%d", (long)val, (long)lo, (long)hi, params.count);
                 stdreport_i(c.report, val);
                 break;
+            }
         }
     }
 }

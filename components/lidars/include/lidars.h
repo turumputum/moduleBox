@@ -84,7 +84,7 @@ typedef struct {
     .prevAngle = 0,\
     .filteredDist = 0.0f,\
     .state = 0,\
-    .prevState = 0,\
+    .prevState = 0xFF,\
     .lastTick = 0,\
     .debounceGap = 0,\
     .deadBand = 0,\

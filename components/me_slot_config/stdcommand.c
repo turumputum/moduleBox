@@ -54,6 +54,16 @@ int _stdcommand_register(PSTDCOMMANDS       cmd,
     int             i       = cmd->count;
     va_list         list;
 
+    /* Защита от переполнения таблицы: запись за границу keywords[] затирает
+       соседние поля структуры модуля и кучу (проявляется как stack overflow
+       в чужой задаче). Лучше потерять команду с явной ошибкой. */
+    if (i >= STDCOMMAN_MAX_KEYWORDS)
+    {
+        ESP_LOGE(TAG, "stdcommand: keyword table full (max %d), '%s' dropped",
+                 STDCOMMAN_MAX_KEYWORDS, keyword ? keyword : "?");
+        return -1;
+    }
+
     va_start(list, count);
 
     /* Регистрация по полному имени с префиксом направления, например
@@ -97,6 +107,13 @@ int _stdcommand_register_enum(PSTDCOMMANDS       cmd,
     int             result  = 1;
     int             i       = cmd->count;
     va_list         list;
+
+    if (i >= STDCOMMAN_MAX_KEYWORDS)
+    {
+        ESP_LOGE(TAG, "stdcommand: keyword table full (max %d), '%s' dropped",
+                 STDCOMMAN_MAX_KEYWORDS, keyword ? keyword : "?");
+        return -1;
+    }
 
     va_start(list, count);
 
