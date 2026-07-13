@@ -180,7 +180,11 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void* buff
       }
 
     }
-    
+
+    if (result < 0) {
+      tud_msc_set_sense(lun, SCSI_SENSE_MEDIUM_ERROR, 0x11, 0x00); // unrecovered read error
+    }
+
     return result;
 }
 
@@ -189,7 +193,7 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void* buff
 int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t* buffer, uint32_t bufsize)
 {
   int32_t    result  = -1;
-  
+
   (void) lun;
 
     if (!offset)
@@ -200,6 +204,9 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t* 
           result = bufsize;
         }
       }else{
+        // Хост начал писать том - кэш FATFS прошивки протух, запрещаем ей запись
+        // на карту до перезагрузки (на eject устройство ребутится).
+        sdcard_mark_host_dirty();
         if (spisd_sectors_write(buffer, lba, bufsize / spisd_get_sector_size()) > 0)
         {
           result = bufsize;
@@ -207,7 +214,15 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t* 
       }
     }
 
-  return bufsize;
+  // ВАЖНО: возвращаем именно result. Если вернуть bufsize при провалившейся
+  // записи, хост считает сектор записанным, идёт дальше и достраивает FAT по
+  // несуществующим данным - так и убивается файловая система. Отрицательный
+  // результат заставляет tinyusb выставить sense и хост повторит-сообщит об ошибке.
+  if (result < 0) {
+    tud_msc_set_sense(lun, SCSI_SENSE_MEDIUM_ERROR, 0x03, 0x00); // write fault
+  }
+
+  return result;
 }
 
 // Callback invoked when received an SCSI command not in built-in list below

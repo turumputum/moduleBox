@@ -516,6 +516,17 @@ void stepper_task(void *arg){
             isMotion = 0;
         }
 
+        /* Ось не базирована (старт без goHomeOnStart, отмена базирования или
+           провал по таймауту): команды движения игнорируем - ехать по координатам
+           на ненайденном нуле нельзя. НЕ откладываем: процедуры нет, копить не для
+           чего. Ждём новую goHome; управляющие команды (goHome, stop, break,
+           setHomingSensor, лимиты, enable) проходят через switch. */
+        if (c->state==NOT_HOMED && isMotion) {
+            ESP_LOGD(TAG, "[stepper_%d] not homed, ignoring cmd:%d", slot_num, cmd);
+            cmd = -1;
+            isMotion = 0;
+        }
+
         if (isMotion) {
             stepper_exec_motion(c, &stepper, cmd, atoi(cmd_arg), slot_num);
         } else {
@@ -661,8 +672,12 @@ void stepper_task(void *arg){
         // absPos - истинная позиция, переживающая хак runSpeed. В круговом режиме
         // границы отключены. По умолчанию maxVal-INT32_MAX, minVal-INT32_MIN,
         // поэтому без настройки границы никогда не срабатывают.
+        // В базировании границы НЕ действуют: координаты ещё не валидны (ноль не
+        // найден), а ход к датчику идёт до INT32_MAX-MIN - иначе бэкстоп остановил
+        // бы мотор посреди процедуры. Индикацию границ там тоже не даём: в state
+        // во время поиска нуля должен идти обычный run-stop.
         int atMaxVal = 0, atMinVal = 0;
-        if(!c->circularCounterFlag){
+        if(!c->circularCounterFlag && c->state!=GOING_HOME){
             // Тормозной путь на текущей скорости: v^2/(2a). Считаем в int64 -
             // при большом maxSpeed квадрат скорости и 2*accel переполняют int32.
             int64_t brakeWay = ((int64_t)stepper.currentSpeed * (int64_t)stepper.currentSpeed)

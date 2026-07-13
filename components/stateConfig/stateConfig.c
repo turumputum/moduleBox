@@ -348,12 +348,22 @@ uint8_t loadConfig(void) {
 
 }
 
+// Определена в main/sd_card.c: том отдан USB-хосту (PC писал сектора)
+int sdcard_is_host_dirty(void);
+
 int saveConfig(void) {
 
 	ESP_LOGD(TAG, "saving file");
 
 	FILE *configFile;
 	char tmp[200];
+
+	// Писать конфиг, пока карта смонтирована на PC, нельзя: два писателя в одну
+	// FAT гарантированно ломают том. Отказываемся до перезагрузки.
+	if (sdcard_is_host_dirty()) {
+		ESP_LOGE(TAG, "saveConfig refused: SD is owned by USB host");
+		return ESP_FAIL;
+	}
 
 	if (remove("/sdcard/config.ini")) {
 		//ESP_LOGD(TAG, "/sdcard/config.ini delete failed");

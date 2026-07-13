@@ -40,6 +40,64 @@ void sdcard_unlock(void) {
 	if (s_sdcard_mutex) xSemaphoreGive(s_sdcard_mutex);
 }
 
+// ---------- Защита файловой системы ----------
+// 1) Ретраи: одиночный сбой обмена (помеха от силовой части, просадка питания)
+//    не должен превращаться в потерянный сектор.
+// 2) host_dirty: как только PC (USB MSC) записал хоть один сектор, кэш FATFS
+//    прошивки (окно FAT, дескрипторы каталога, счётчик свободных кластеров)
+//    считается протухшим. Любая последующая запись со стороны прошивки сбросит
+//    старые метаданные поверх новых - это и убивает том. Поэтому запись из
+//    прошивки запрещаем до перезагрузки (на eject устройство и так ребутится).
+
+#define SD_IO_RETRY 3
+
+extern sdmmc_card_t *card;   // определение ниже в файле
+
+static volatile int      s_host_dirty = 0;
+static volatile uint32_t s_io_err_cnt = 0;
+
+void sdcard_mark_host_dirty(void) { s_host_dirty = 1; }
+int sdcard_is_host_dirty(void)    { return s_host_dirty; }
+uint32_t sdcard_io_errors(void)   { return s_io_err_cnt; }
+
+static esp_err_t sd_read_retry(void *dst, uint32_t sector, uint32_t count) {
+	esp_err_t err = ESP_FAIL;
+	sdcard_lock();
+	for (int attempt = 0; attempt < SD_IO_RETRY; attempt++) {
+		err = sdmmc_read_sectors(card, dst, sector, count);
+		if (err == ESP_OK) break;
+		s_io_err_cnt++;
+		ESP_LOGW(TAG, "read sect:%lu cnt:%lu failed (0x%x), attempt %d/%d",
+		         (unsigned long)sector, (unsigned long)count, err, attempt + 1, SD_IO_RETRY);
+		vTaskDelay(pdMS_TO_TICKS(5));
+	}
+	sdcard_unlock();
+	if (err != ESP_OK) {
+		ESP_LOGE(TAG, "read sect:%lu FAILED after %d attempts", (unsigned long)sector, SD_IO_RETRY);
+	}
+	return err;
+}
+
+static esp_err_t sd_write_retry(const void *src, uint32_t sector, uint32_t count) {
+	esp_err_t err = ESP_FAIL;
+	sdcard_lock();
+	for (int attempt = 0; attempt < SD_IO_RETRY; attempt++) {
+		err = sdmmc_write_sectors(card, (void*)src, sector, count);
+		if (err == ESP_OK) break;
+		s_io_err_cnt++;
+		ESP_LOGW(TAG, "write sect:%lu cnt:%lu failed (0x%x), attempt %d/%d",
+		         (unsigned long)sector, (unsigned long)count, err, attempt + 1, SD_IO_RETRY);
+		vTaskDelay(pdMS_TO_TICKS(5));
+	}
+	sdcard_unlock();
+	if (err != ESP_OK) {
+		// Молчаливо проглотить эту ошибку нельзя: вызывающий обязан сообщить
+		// о провале наверх (хосту или FATFS), иначе том останется битым.
+		ESP_LOGE(TAG, "write sect:%lu FAILED after %d attempts", (unsigned long)sector, SD_IO_RETRY);
+	}
+	return err;
+}
+
 // ---------- Mutex-wrapped diskio для FATFS ----------
 // Регистрируем свои функции после mount, чтобы и FATFS (аудио),
 // и USB MSC (прямые sector read/write) использовали один мьютекс.
@@ -52,17 +110,17 @@ static DSTATUS sd_diskio_init(BYTE pdrv) { return 0; }
 static DSTATUS sd_diskio_status(BYTE pdrv) { return 0; }
 
 static DRESULT sd_diskio_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
-	sdcard_lock();
-	esp_err_t err = sdmmc_read_sectors(card, buff, sector, count);
-	sdcard_unlock();
-	return (err == ESP_OK) ? RES_OK : RES_ERROR;
+	return (sd_read_retry(buff, sector, count) == ESP_OK) ? RES_OK : RES_ERROR;
 }
 
 static DRESULT sd_diskio_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
-	sdcard_lock();
-	esp_err_t err = sdmmc_write_sectors(card, (void*)buff, sector, count);
-	sdcard_unlock();
-	return (err == ESP_OK) ? RES_OK : RES_ERROR;
+	// Пока том в руках у PC (были записи по MSC) - прошивка на карту не пишет:
+	// её метаданные FATFS протухли, запись затрёт то, что записал хост.
+	if (sdcard_is_host_dirty()) {
+		ESP_LOGE(TAG, "write sect:%lu blocked: disk is owned by USB host", (unsigned long)sector);
+		return RES_WRPRT;
+	}
+	return (sd_write_retry(buff, sector, count) == ESP_OK) ? RES_OK : RES_ERROR;
 }
 
 static DRESULT sd_diskio_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
@@ -246,10 +304,10 @@ int spisd_init() {
 	slot_config.width = 1;
 
 	// SDMMC_FREQ_DEFAULT = 20MHz — стандартная скорость для GPIO Matrix.
-	// 40MHz (HIGHSPEED) через GPIO Matrix + USB-нагрузка даёт end-bit error (0x8008).
+	// 40MHz (HIGHSPEED) через GPIO Matrix + USB-нагрузка (а тем более помеха от
+	// силовой части шагового драйвера) даёт end-bit error (0x8008) на записи.
 	// input_delay_phase работает только при HIGHSPEED/52M, при 20MHz не нужна.
-	host.max_freq_khz =SDMMC_FREQ_HIGHSPEED;
-	host.input_delay_phase = SDMMC_DELAY_PHASE_1;
+	host.max_freq_khz = SDMMC_FREQ_DEFAULT;
 
 	int res=spisd_mount_fs();
 	ESP_LOGD(TAG, "SDcard init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(),
@@ -270,9 +328,7 @@ int spisd_get_sector_num() {
 
 int spisd_sectors_read(void *dst, uint32_t start_sector, uint32_t num) {
 	int result = -1;
-	sdcard_lock();
-    esp_err_t ret = sdmmc_read_sectors(card, dst, start_sector, num);
-	sdcard_unlock();
+    esp_err_t ret = sd_read_retry(dst, start_sector, num);
 	if (ret == ESP_OK) {
 		result = 1;
 	} else {
@@ -313,11 +369,9 @@ int spisd_sectors_read(void *dst, uint32_t start_sector, uint32_t num) {
 int spisd_sectors_write(void *dst, uint32_t start_sector, uint32_t num) {
 	int result = -1;
 
-	sdcard_lock();
-	if (sdmmc_write_sectors(card, dst, start_sector, num) == ESP_OK) {
+	if (sd_write_retry(dst, start_sector, num) == ESP_OK) {
 		result = 1;
 	}
-	sdcard_unlock();
 
 	return result;
 }

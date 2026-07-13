@@ -18,4 +18,12 @@ void spisd_list_root();
 void sdcard_lock(void);
 void sdcard_unlock(void);
 
+/** Пометить том как захваченный USB-хостом: PC записал сектора, кэш FATFS
+ *  прошивки протух. С этого момента прошивка на карту не пишет до перезагрузки. */
+void sdcard_mark_host_dirty(void);
+int sdcard_is_host_dirty(void);
+
+/** Счётчик сбоев обмена с картой (диагностика помех-питания). */
+uint32_t sdcard_io_errors(void);
+
 #endif // __SPISD_H__
