@@ -145,7 +145,7 @@ static void execCommand(char *cmd, int len) {
 			remove("/sdcard/config.ini");
 			usbprint("OK\r\n Device will be rebooted\r\n");
 			vTaskDelay(pdMS_TO_TICKS(USB_PRINT_DELAY));
-			esp_restart();
+			safeRestart();
 		}
 	}else if (len < 2) {
 		// //printf("vot:%s\n", cmd);
@@ -194,7 +194,7 @@ void cdc_task(void *params) {
 		}
 
 		if(FLAG_PC_EJECT ==1){
-      		esp_restart();
+      		safeRestart();
 		}
 
 		vTaskDelay(5);

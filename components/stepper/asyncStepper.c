@@ -11,6 +11,7 @@
 #include "esp_log.h"
 #include "me_slot_config.h"
 #include "math.h"
+#include "esp_rom_sys.h"   // esp_rom_delay_us - выдержка DIR при развороте
 
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
@@ -129,6 +130,28 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 // Защищает таймер mcpwm от слишком высокой частоты при большом currentSpeed.
 #define STEPPER_MIN_PERIOD 5
 
+// Допуск парковки, шагов.
+// Раньше единственным условием останова было ТОЧНОЕ равенство currentPos==targetPos.
+// Стоит промахнуться хотя бы на шаг - равенство не наступит никогда: мотор не
+// паркуется, таймер продолжает импульсы, checkDir разворачивает направление, и
+// система уходит в автоколебания вокруг цели (дребезг dir в логе).
+// PCNT считает НАШИ ЖЕ импульсы (io_loop_back), а не энкодер, поэтому ошибка
+// позиции не физическая - догонять последние шаги бессмысленно, надо парковаться.
+#define STEPPER_POS_TOLERANCE 2
+
+// Выдержка DIR перед возобновлением импульсов step, мкс. С запасом перекрывает
+// требования типовых драйверов (A4988 ~200нс, DRV8825 ~650нс, TMC - больше).
+// Платим ею только в момент разворота, когда скорость и так нулевая.
+#define STEPPER_DIR_SETUP_US 10
+
+// Зовётся в том числе из ISR (pcnt_on_target_reached, IRAM_ATTR), поэтому без
+// llabs и прочих вызовов, которые могут оказаться во flash: только инлайн-арифметика.
+static inline int stepper_atTarget(stepper_t *stepper){
+    int64_t err = (int64_t)stepper->targetPos - (int64_t)stepper->currentPos;
+    if(err < 0) err = -err;
+    return (err <= STEPPER_POS_TOLERANCE);
+}
+
 void stepper_getCurrentPos(stepper_t *stepper){
     int pos = 0;
     pcnt_unit_get_count(stepper->pcntUnit, &pos);
@@ -179,7 +202,9 @@ static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt
     //ESP_LOGD(TAG, "currentPos: %ld", stepper->currentPos);
     // pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->currentPos);
     //stepper->state++;
-    if(stepper->currentPos == stepper->targetPos){
+    // Допуск, а не точное равенство: при перелёте на шаг равенство не наступит
+    // никогда и мотор не припаркуется (см. STEPPER_POS_TOLERANCE).
+    if(stepper_atTarget(stepper)){
         // Останавливаем двигатель
         stepper_stop(stepper);
         pcnt_unit_clear_count(stepper->pcntUnit);
@@ -350,12 +375,46 @@ void stepper_checkDir(stepper_t *stepper){
     if(stepper->currentSpeed==0){
         int8_t dir = stepper->targetPos > stepper->currentPos ? DIR_UP : DIR_DOWN;
         if(dir!=stepper->dir){
+            // Менять DIR, пока идут импульсы step, нельзя: часть драйверов
+            // защёлкивает направление по фронту step, и переключение "на ходу"
+            // они отрабатывают непредсказуемо - мотор просто встаёт (симптом
+            // плавает от драйвера к драйверу). Скорость здесь уже нулевая, но
+            // таймер mcpwm продолжает пульсировать на полу minSpeed, поэтому на
+            // время смены DIR гасим генерацию, выдерживаем паузу и запускаем снова.
+            int wasRunning = (stepper->state == RUN);
+
+            if(wasRunning){
+                mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL);
+            }
+
             stepper->dir=dir;
             gpio_set_level(stepper->dirPin, dir==DIR_UP ? !stepper->dirInverse : stepper->dirInverse);
+            esp_rom_delay_us(STEPPER_DIR_SETUP_US);
+
+            if(wasRunning){
+                stepper_setPeriod(stepper, UINT16_MAX);   // возобновляем с самого медленного периода
+                mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP);
+            }
+
             ESP_LOGD(TAG, "Dir changed, newDir:%s dirInverse:%d", stepper->dir==DIR_UP?"up":"down", stepper->dirInverse);
-            stepper->targetSpeed = stepper->maxSpeed;
+
+            // Скорость разворота берём по ОСТАТКУ хода: v = sqrt(2*a*s). Раньше
+            // здесь безусловно ставился maxSpeed - разгон на полной скорости ради
+            // коррекции в пару шагов гарантировал перелёт и раскачивал
+            // автоколебания. На длинном ходе формула сама даёт maxSpeed, так что
+            // обычные перемещения не замедляются.
+            // Порядок клампов важен: сначала пол minSpeed, потом потолок maxSpeed -
+            // потолок должен побеждать, иначе runSpeed:0 (maxSpeed==0) уполз бы
+            // на minSpeed вместо остановки.
+            int64_t dist = llabs((int64_t)stepper->targetPos - (int64_t)stepper->currentPos);
+            int64_t v    = (int64_t)sqrt(2.0 * (double)stepper->accel * (double)dist);
+
+            if(v < stepper->minSpeed) v = stepper->minSpeed;
+            if(v > stepper->maxSpeed) v = stepper->maxSpeed;
+
+            stepper->targetSpeed = (int32_t)v;
         }
-        
+
     }
 }
 
@@ -399,11 +458,13 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     stepper->pcnt_watchPoint = (int16_t)watchPoint;
 
     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint));
-    if(stepper->dir==DIR_UP){
-        pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX);
-    }else if(stepper->dir==DIR_DOWN){
-        pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
-    }
+    // Взводим ОБЕ границы аккумуляции, а не только "по текущему dir". Направление
+    // может смениться ПОЗЖЕ: при реверсе на ходу checkDir разворачивает мотор лишь
+    // когда скорость дойдёт до нуля, уже после moveTo. Тогда нужная граница
+    // осталась бы невзведённой, PCNT перестал бы аккумулировать на ±32767, и
+    // currentPos уехал бы. Watch-точек хватает: thresh + high_limit + low_limit.
+    pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX);
+    pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
     //ESP_LOGD(TAG, "add watch point %d", stepper->pcnt_watchPoint);
     ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
     stepper->pcnt_prevPos = 0;
@@ -452,6 +513,17 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
         if(llabs(stepper->targetPos-stepper->currentPos)<stepper->breakWay*2){
             stepper->currentPos=0;
         }
+    }
+
+    // Цель достигнута (в пределах допуска) - паркуемся и выходим. Это и рвёт
+    // предельный цикл: stepper_stop гасит таймер и подтягивает targetPos к
+    // currentPos, поэтому checkDir дальше не разворачивает направление.
+    // В режиме runSpeed сюда не попадаем - хак выше держит остаток хода большим.
+    if(stepper_atTarget(stepper)){
+        if(stepper->state != STOP){
+            stepper_stop(stepper);
+        }
+        return;
     }
 
     if(stepper->currentPos!=stepper->targetPos){

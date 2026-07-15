@@ -196,6 +196,13 @@ void initWorkPermissions();
 int workIsPermitted_(int slot_num, const char * moduleName);
 void waitForWorkPermit_(int slot_num, const char * moduleName);
 void setWorkPermission(int slot_num);
+
+/** Безопасная перезагрузка: дописывает лог и размонтирует ФС (сброс окна FAT и
+ *  записей каталога), затем esp_restart(). Голый esp_restart() посреди файловой
+ *  операции оставляет том несогласованным, а у FAT нет журнала - повреждение
+ *  метаданных не привязано к файлу и способно утащить config.ini.
+ *  ИСПОЛЬЗОВАТЬ ВМЕСТО esp_restart() ВЕЗДЕ. */
+void safeRestart(void);
 uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTicksToWait);
 
 void makeStatusReport(bool spread);

@@ -481,11 +481,13 @@ void app_main(void)
 		ESP_LOGE(TAG, "sdcard_init FAIL");
 		const char *base_path = "/sdcard";
 		const esp_vfs_fat_mount_config_t mount_config = {
-				.max_files = 3,
+				/* лог держится открытым между записями и постоянно занимает
+				   один дескриптор (см. mblog.c) - берём запас */
+				.max_files = 5,
 				.format_if_mount_failed = true,
 				.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
 		};
-		//esp_vfs_fat_spiflash_mount_rw_wl 
+		//esp_vfs_fat_spiflash_mount_rw_wl
 		//esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "storage", &mount_config, &s_wl_handle);
 		esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(base_path, "storage", &mount_config, &s_wl_handle);
 		
@@ -658,6 +660,35 @@ void setWorkPermission(int slot)
 	// EVERY_SLOT + 1 = 0
 	xEventGroupSetBits(uxWorkPerm, 1 << (slot + 1));
 }
+
+/* Безопасная перезагрузка (объявлена в stateConfig.h). Порядок важен:
+   1) закрыть лог - он держится открытым между записями, иначе его хвост и
+      размер в каталоге не доедут до карты;
+   2) размонтировать ФС - f_mount(NULL) сбрасывает окно FAT и записи каталога.
+
+   sdcard_lock() здесь НЕ берём: размонтирование идёт через тот же diskio и
+   захватило бы этот же нерекурсивный мьютекс - получили бы дедлок. Сериализацию
+   с чужими операциями обеспечивает сам diskio.
+
+   Оговорка: это защита от ПРОГРАММНОГО ребута. От реального обрыва питания она
+   не спасает - там код просто не выполнится. */
+void safeRestart(void)
+{
+	mblog_close();
+
+	if (me_state.sd_init_res == ESP_OK)
+	{
+		spisd_umount_fs();
+	}
+	else if (s_wl_handle != WL_INVALID_HANDLE)
+	{
+		/* SD не поднялась - /sdcard обслуживает внутренний раздел storage */
+		esp_vfs_fat_spiflash_unmount_rw_wl("/sdcard", s_wl_handle);
+	}
+
+	esp_restart();
+}
+
 void waitForWorkPermit_(int slot, const char * moduleName)
 {
 	EventBits_t bits;

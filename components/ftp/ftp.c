@@ -1904,7 +1904,7 @@ void ftp_task(void *pvParameters) {
 
 				moveUpdateToTheInternalStorage();
 
-				esp_restart();
+				safeRestart();
 			}
 			// else
 			// 	ESP_LOGI(TAG_CL, "RESET timeout: %d", resetTimeout);			

@@ -571,7 +571,7 @@ void audio_task(void *arg) {
 		if(el_state == AEL_STATE_ERROR){
 			ESP_LOGE(TAG, "mp3Player Error state: %d", el_state);
 			mblog(ESP_LOG_ERROR,"mp3Player Error state: %d", el_state);
-			esp_restart();
+			safeRestart();
 		}
 
 		//listen audio event i2s_stream_writer

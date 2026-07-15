@@ -40,7 +40,7 @@ static mqtt_diag_t s_mqtt_diag = {0};
 
 static void mqtt_watchdog_timer_cb(void *arg) {
     ESP_LOGE(TAG, "MQTT watchdog timeout! No connection for %d sec. Restarting...", me_config.mqttWatchdogTimeout);
-    esp_restart();
+    safeRestart();
 }
 
 static void mqtt_watchdog_start(void) {
@@ -113,7 +113,7 @@ static void mqtt_liveness_timer_cb(void *arg) {
         ESP_LOGE(TAG, "MQTT liveness timeout: %lld s without confirmed publish "
                       "(is_connected=1, half-open). Restarting...", (long long)age_s);
         mblog(E, "MQTT half-open frozen -> restart");
-        esp_restart();
+        safeRestart();
     }
 }
 

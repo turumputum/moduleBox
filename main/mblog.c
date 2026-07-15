@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <time.h>
+#include <unistd.h>
 #include <mbdebug.h>
 #include <stateConfig.h>
 #include <esp_vfs_fat.h>
@@ -36,16 +37,31 @@
 
 //#define LOG_BUFF_SIZE       2048
 
+/* Политика сброса на карту.
+   Раньше каждая строка делала fopen(a)+fprintf+fclose: fclose обновляет размер
+   и mtime в каталоге, то есть КАЖДАЯ строка лога писала метаданные тома. У FAT
+   нет журнала - обрыв питания в этот момент бьёт по таблице FAT и каталогу, а
+   это повреждение не привязано к файлу и способно утащить за собой config.ini.
+   Теперь файл держится открытым, строки копятся в stdio-буфере, а метаданные
+   трогаются только на сбросе: по объёму, по времени, и всегда на ошибке -
+   причина падения обязана лечь на карту до ребута. */
+#define LOG_FLUSH_BYTES        2048
+#define LOG_FLUSH_INTERVAL_MS  5000
+#define LOG_LOCK_TIMEOUT_MS    500     /* ребут не должен зависнуть на мьютексе */
+
 // ---------------------------------------------------------------------------
 // ---------------------------------- DATA -----------------------------------
 // -----|-------------------|-------------------------------------------------
 
 static  SemaphoreHandle_t   logMutex    = NULL;
-static  FILE *              logFile     = NULL;
+static  FILE *              logFile     = NULL;   /* держим открытым между записями */
 
 static  int                 s_curIdx    = 0;        /* индекс текущего файла кольца */
 static  long                s_capPerFile = LOG_MAX_FILE_SIZE; /* лимит на файл, байт */
 static  bool                s_logReady  = false;    /* выполнена ли инициализация кольца */
+
+static  long                s_bytesSinceFlush = 0;
+static  TickType_t          s_lastFlushTick   = 0;
 
 extern configuration        me_config;
 
@@ -143,6 +159,47 @@ static void _logSetup(void)
 
     s_logReady = true;
 }
+/* Открыть текущий файл кольца. Вызывать под logMutex.
+   Файл остаётся открытым между записями - именно это убирает обновление
+   каталога на каждую строку. */
+static void _logOpenLocked(void)
+{
+    char fn[64];
+    _logName(fn, sizeof(fn), s_curIdx);
+
+    logFile = fopen(fn, "a");
+    if (logFile)
+    {
+        /* крупный stdio-буфер: строки копятся в RAM и уходят на карту пачкой */
+        setvbuf(logFile, NULL, _IOFBF, LOG_FLUSH_BYTES);
+        s_bytesSinceFlush = 0;
+        s_lastFlushTick   = xTaskGetTickCount();
+    }
+}
+
+/* Протолкнуть данные до карты. Вызывать под logMutex.
+   fflush: stdio -> FATFS, fsync: FATFS -> карта + обновление размера в каталоге. */
+static void _logFlushLocked(void)
+{
+    if (!logFile) return;
+
+    fflush(logFile);
+    fsync(fileno(logFile));
+
+    s_bytesSinceFlush = 0;
+    s_lastFlushTick   = xTaskGetTickCount();
+}
+
+/* Дописать и закрыть. Вызывать под logMutex. */
+static void _logCloseLocked(void)
+{
+    if (!logFile) return;
+
+    _logFlushLocked();
+    fclose(logFile);
+    logFile = NULL;
+}
+
 void mblog(esp_log_level_t level, const char *msg, ...)
 {
     va_list             st_va_list;
@@ -167,22 +224,33 @@ void mblog(esp_log_level_t level, const char *msg, ...)
                 printf("\x1b[33m=%s= %s\x1b[0m\n", PRIONAMES_SHORT[level], logBuff);
 
                 if (!s_logReady) _logSetup();
+                if (!logFile)    _logOpenLocked();
 
-                char fn[64];
-                _logName(fn, sizeof(fn), s_curIdx);
-
-                if ((logFile = fopen(fn, "a")) != NULL)
+                if (logFile)
                 {
-                    fprintf(logFile, "%s\n", logBuff);
+                    int written = fprintf(logFile, "%s\n", logBuff);
+                    if (written > 0) s_bytesSinceFlush += written;
 
-                    long fsz = ftell(logFile);
+                    long fsz = ftell(logFile);   /* включает данные в буфере */
 
-                    fclose(logFile);
+                    /* Метаданные тома трогаем редко: по объёму, по времени и
+                       всегда на ошибке - её причина должна лечь на карту. */
+                    if ((level <= E)                                                                ||
+                        (s_bytesSinceFlush >= LOG_FLUSH_BYTES)                                      ||
+                        ((xTaskGetTickCount() - s_lastFlushTick) >= pdMS_TO_TICKS(LOG_FLUSH_INTERVAL_MS)))
+                    {
+                        _logFlushLocked();
+                    }
 
                     /* достигли лимита - переходим к следующему файлу по кругу
-                       и перезаписываем его (стираем перед первой записью) */
+                       и перезаписываем его (стираем перед первой записью).
+                       Следующий mblog откроет его сам. */
                     if (fsz >= s_capPerFile)
                     {
+                        char fn[64];
+
+                        _logCloseLocked();
+
                         s_curIdx = (s_curIdx + 1) % LOG_FILE_COUNT;
                         _logName(fn, sizeof(fn), s_curIdx);
                         remove(fn);
@@ -194,5 +262,29 @@ void mblog(esp_log_level_t level, const char *msg, ...)
 
             xSemaphoreGive(logMutex);
         }
+    }
+}
+
+void mblog_flush(void)
+{
+    if (!logMutex) return;
+
+    if (xSemaphoreTake(logMutex, pdMS_TO_TICKS(LOG_LOCK_TIMEOUT_MS)) == pdTRUE)
+    {
+        _logFlushLocked();
+        xSemaphoreGive(logMutex);
+    }
+}
+
+void mblog_close(void)
+{
+    if (!logMutex) return;
+
+    /* Таймаут, а не portMAX_DELAY: зовётся из safeRestart, и перезагрузка не
+       должна повиснуть навсегда из-за задачи, застрявшей с мьютексом лога. */
+    if (xSemaphoreTake(logMutex, pdMS_TO_TICKS(LOG_LOCK_TIMEOUT_MS)) == pdTRUE)
+    {
+        _logCloseLocked();
+        xSemaphoreGive(logMutex);
     }
 }

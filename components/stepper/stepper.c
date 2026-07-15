@@ -388,9 +388,16 @@ static void stepper_exec_motion(PSTEPPERCONFIG c, stepper_t *stepper, int cmd, i
             }
             c->state = RUN_SPEED;
             stepper->runSpeedFlag = 1;
-            stepper->maxSpeed = arg;
-            stepper_moveTo(stepper, stepper->maxSpeed>0?(INT32_MAX-1):(INT32_MIN+1));
-            ESP_LOGD(TAG, "[stepper_%d] runSpeed%ld", slot_num, stepper->maxSpeed);
+            /* maxSpeed - это МОДУЛЬ скорости (setMaxSpeed рядом не зря делает abs).
+               Раньше сюда клали знаковый arg, и отрицательная maxSpeed уводила
+               targetSpeed-currentSpeed в минус. При реверсе currentSpeed тогда мог
+               ПЕРЕСКОЧИТЬ ноль (шаг рампы не делит скорость нацело), а checkDir
+               меняет DIR строго по currentSpeed==0 - смена направления не
+               срабатывала вовсе, мотор продолжал получать step в старую сторону.
+               Знак теперь задаёт только цель хода. */
+            stepper->maxSpeed = abs(arg);
+            stepper_moveTo(stepper, (arg > 0) ? (INT32_MAX-1) : (INT32_MIN+1));
+            ESP_LOGD(TAG, "[stepper_%d] runSpeed:%ld dir:%s", slot_num, (long)arg, (arg > 0) ? "up" : "down");
             break;
 
         case stepCMD_setMaxSpeed:
@@ -643,10 +650,14 @@ void stepper_task(void *arg){
             }else if(homingProcedureState == HOMING_TO_SENSOR){
                 if(c->homingSensorState==1){
                     stepper_setZero(&stepper);
-                    stepper_break(&stepper);
-                    //stepper_stop(&stepper);
+                    /* Рабочие maxSpeed-accel восстанавливаем ДО торможения:
+                       stepper_break строит трапецию по текущему accel, а подмена
+                       ускорения сразу ПОСЛЕ него делала торможение резче плана -
+                       мотор промахивался мимо цели и уходил в автоколебания. */
                     stepper.maxSpeed = c->maxSpeed;
                     stepper.accel = c->accel;
+                    stepper_break(&stepper);
+                    //stepper_stop(&stepper);
                     c->state=IDLE;
 				    stdreport_s(c->homeReport, "done");
                     // проигрываем команды, накопленные во время базирования (FIFO)

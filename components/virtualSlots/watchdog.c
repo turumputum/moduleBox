@@ -106,7 +106,7 @@ void watchdog_task(void *arg) {
         if (xQueueReceive(me_state.interrupt_queue[slot_num], &tmp, 0) == pdPASS){
             ESP_LOGD(TAG, "%ld :: watchdog reset", xTaskGetTickCount());
             vTaskDelay(1000);
-            esp_restart();
+            safeRestart();
         }
 
         int cmd = stdcommand_receive(&c.cmds, &params, 0);

@@ -240,7 +240,7 @@ void executer_task(void * param){
 				sum++;
 			}else if(strstr(msg.str, "system/restart")!=NULL){
 				ESP_LOGD(TAG, "restart");
-				esp_restart();
+				safeRestart();
 				sum++;
 
 			}else{

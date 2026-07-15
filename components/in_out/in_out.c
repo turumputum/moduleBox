@@ -262,16 +262,12 @@ static void in_out_task(void *arg) {
     ctx.out_state = ctx.defaultState;
     set_out_level(&ctx, ctx.out_state);  
 
-    // Read initial INPUT state
+    // Read initial INPUT state (нужно для инициализации debounce; публикуем ниже,
+    // ПОСЛЕ waitForWorkPermit - см. комментарий у отчёта).
     if (gpio_get_level(ctx.in_pin_num)) {
         ctx.state = ctx.inverse_in ? 0 : 1;
     } else {
         ctx.state = ctx.inverse_in ? 1 : 0;
-    }
-
-    // Report initial input state (only if module active)
-    if (ctx.active_state) {
-        stdreport_i(ctx.stateReport, ctx.state);
     }
     ctx.prevState = ctx.state;
 
@@ -295,6 +291,21 @@ static void in_out_task(void *arg) {
 
     bool active_state = ctx.active_state;
     stdreport_enable(slot_num, active_state);
+
+    // Начальное состояние входа публикуем ТОЛЬКО здесь, после барьера. Раньше
+    // отчёт стоял до waitForWorkPermit - он уходил прежде, чем у слотов-приёмников
+    // кросслинка созданы очереди команд, и стартовое состояние ножки для линка
+    // терялось. Перечитываем уровень - на старте ножка уже устоялась.
+    if (gpio_get_level(ctx.in_pin_num)) {
+        ctx.state = ctx.inverse_in ? 0 : 1;
+    } else {
+        ctx.state = ctx.inverse_in ? 1 : 0;
+    }
+    ctx.prevState = ctx.state;
+    if (active_state) {
+        stdreport_i(ctx.stateReport, ctx.state);
+    }
+
     STDCOMMAND_PARAMS params = {0};
 
     // Main loop - handle both input and output

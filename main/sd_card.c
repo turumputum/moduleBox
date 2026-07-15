@@ -159,7 +159,10 @@ esp_vfs_fat_sdmmc_mount_config_t mount_config = {
 #else
 		.format_if_mount_failed = false,
 #endif // EXAMPLE_FORMAT_IF_MOUNT_FAILED
-		.max_files = 4, .allocation_unit_size = 16 * 1024 };
+		/* +1 к прежним 4: лог теперь держится открытым между записями (см. mblog.c),
+		   поэтому постоянно занимает один дескриптор. Остальные делят аудио, FTP,
+		   манифест и чтение UPDATE.FW. Берём запас. */
+		.max_files = 6, .allocation_unit_size = 16 * 1024 };
 
 int spisd_deinit() {
 	return 1;
