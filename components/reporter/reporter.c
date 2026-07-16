@@ -391,7 +391,10 @@ void spread_the_word_task(void *arg)
 			if (!buffering)
 			{
 				buffering = true;
-				mblog(W, "reporter - link down, buffering reports");
+				// Только в UART, НЕ в mblog: на старте линк ещё не поднят
+				// (eth_connected=-1), поэтому это срабатывает при каждой загрузке -
+				// незачем писать это на флешку и мутировать FAT.
+				ESP_LOGW(TAG, "reporter - link down, buffering reports");
 			}
 			vTaskDelay(pdMS_TO_TICKS(200));
 			continue;
@@ -399,7 +402,9 @@ void spread_the_word_task(void *arg)
 		if (buffering)
 		{
 			buffering = false;
-			mblog(I, "reporter - link up, flushing %d buffered reports",
+			// Парное к 'link down' - тоже только в UART (срабатывает на старте
+			// при подъёме линка, на флешку писать незачем).
+			ESP_LOGI(TAG, "reporter - link up, flushing %d buffered reports",
 					(int)uxQueueMessagesWaiting(me_state.reporter_spread_queue));
 			s_droppedReports = 0;
 		}

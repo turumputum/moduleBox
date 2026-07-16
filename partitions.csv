@@ -3,4 +3,8 @@
 nvs,      data, nvs,     0x9000,  0x6000,
 phy_init, data, phy,     0xf000,  0x1000,
 factory,  app,  factory,   0x50000, 3M,
+# cfgbak: невидимый раздел под резервную копию config.ini (сырой blob magic|len|crc32|bytes).
+# Стоит ПЕРЕД storage, в существующей дыре после factory - тогда storage остаётся
+# последним и может расти в хвост flash без перемещения бэкапа.
+cfgbak,   data, 0x40,    0x350000, 0x10000,
 storage,  data, spiffs,  0x450000,3M

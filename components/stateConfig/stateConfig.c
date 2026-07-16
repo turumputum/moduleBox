@@ -11,6 +11,9 @@
 #include "sdcard_scan.h"
 #include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include "esp_partition.h"
+#include "esp_rom_crc.h"
 #include "LAN.h"
 #include "audio_error.h"
 #include "audio_mem.h"
@@ -228,7 +231,11 @@ void load_Default_Config(void) {
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	me_config.deviceName = strdup("moduleBox");
-	me_config.logLevel = ESP_LOG_WARN;
+	// Лог на карту ВЫКЛЮЧЕН по умолчанию. mblog пишет в /sdcard/log*.txt, что мутирует
+	// FAT-таблицу и каталог; у FAT нет журнала, поэтому обрыв питания в момент записи
+	// повреждает метаданные тома и утаскивает config.ini. Включается явно опцией
+	// logLevel в config.ini (warn, error, debug ...) - только когда нужен отладочный лог.
+	me_config.logLevel = ESP_LOG_NONE;
 	me_config.cleanLogOnStart = 1;
 	me_config.statusPeriod = 0;
 	me_config.statusAllChannels = true;
@@ -318,33 +325,159 @@ void load_Default_Config(void) {
 	ESP_LOGD(TAG, "Load default config complite. Duration:%ld ms. Heap usage:%lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
 
+/* ============ Резервная копия config.ini в разделе cfgbak (внутренний flash) ============
+   config.ini живёт на SD (или на storage, если карты нет) - это FAT без журнала, и
+   повреждение тома при обрыве питания способно его обрезать. cfgbak - отдельный СЫРОЙ
+   раздел на внутреннем flash (не в файловой системе, пользователю не виден и не удаляем).
+   Формат: [magic|len|crc32|байты]. Целостность - CRC32.
+   Раздела может не быть (устройство прошито только через UPDATE-FW, без таблицы разделов) -
+   тогда все функции деградируют мягко, поведение остаётся прежним. */
+
+#define CFGBAK_MAGIC   0x4b414243u   /* 'CBAK' */
+#define CFGBAK_SUBTYPE 0x40
+
+typedef struct {
+	uint32_t magic;
+	uint32_t len;
+	uint32_t crc;
+} cfgbak_hdr_t;
+
+static const esp_partition_t * cfgbak_part(void){
+	return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, CFGBAK_SUBTYPE, "cfgbak");
+}
+
+/* Прочитать файл целиком в malloc-буфер. NULL при любой ошибке. */
+static char * cfg_read_file(const char *path, uint32_t *out_len){
+	struct stat st;
+	if (stat(path, &st) != 0 || st.st_size <= 0) return NULL;
+	FILE *f = fopen(path, "rb");
+	if (!f) return NULL;
+	char *buf = malloc(st.st_size);
+	if (!buf){ fclose(f); return NULL; }
+	size_t rd = fread(buf, 1, st.st_size, f);
+	fclose(f);
+	if (rd != (size_t)st.st_size){ free(buf); return NULL; }
+	*out_len = (uint32_t)st.st_size;
+	return buf;
+}
+
+/* Прочитать валидный бэкап из раздела. malloc-байты config или NULL. */
+static char * cfgbak_load(uint32_t *out_len){
+	const esp_partition_t *p = cfgbak_part();
+	if (!p) return NULL;
+	cfgbak_hdr_t h;
+	if (esp_partition_read(p, 0, &h, sizeof(h)) != ESP_OK) return NULL;
+	if (h.magic != CFGBAK_MAGIC || h.len == 0 || sizeof(h) + h.len > p->size) return NULL;
+	char *buf = malloc(h.len);
+	if (!buf) return NULL;
+	if (esp_partition_read(p, sizeof(h), buf, h.len) != ESP_OK){ free(buf); return NULL; }
+	if (esp_rom_crc32_le(0, (const uint8_t*)buf, h.len) != h.crc){ free(buf); return NULL; }
+	*out_len = h.len;
+	return buf;
+}
+
+/* Записать текущий config.ini в раздел (стереть + записать header+байты). */
+static esp_err_t cfgbak_save(const char *path){
+	const esp_partition_t *p = cfgbak_part();
+	if (!p) return ESP_ERR_NOT_FOUND;
+	uint32_t len = 0;
+	char *buf = cfg_read_file(path, &len);
+	if (!buf) return ESP_FAIL;
+	if (sizeof(cfgbak_hdr_t) + len > p->size){ free(buf); return ESP_ERR_INVALID_SIZE; }
+	esp_err_t err = esp_partition_erase_range(p, 0, p->size);
+	if (err == ESP_OK){
+		cfgbak_hdr_t h = { CFGBAK_MAGIC, len, esp_rom_crc32_le(0, (const uint8_t*)buf, len) };
+		err = esp_partition_write(p, 0, &h, sizeof(h));
+		if (err == ESP_OK) err = esp_partition_write(p, sizeof(h), buf, len);
+	}
+	free(buf);
+	return err;
+}
+
+/* Совпадает ли бэкап с текущим config.ini (чтобы не писать в раздел зря). */
+static bool cfgbak_matches(const char *path){
+	const esp_partition_t *p = cfgbak_part();
+	if (!p) return true;   /* раздела нет - считаем совпавшим, save не зовём */
+	cfgbak_hdr_t h;
+	if (esp_partition_read(p, 0, &h, sizeof(h)) != ESP_OK) return false;
+	if (h.magic != CFGBAK_MAGIC) return false;
+	uint32_t len = 0;
+	char *buf = cfg_read_file(path, &len);
+	if (!buf) return false;
+	bool same = (len == h.len) && (esp_rom_crc32_le(0, (const uint8_t*)buf, len) == h.crc);
+	free(buf);
+	return same;
+}
+
+/* Восстановить config.ini из бэкапа (атомарно: tmp -> fsync -> rename). */
+static esp_err_t cfgbak_restore(const char *path){
+	uint32_t len = 0;
+	char *buf = cfgbak_load(&len);
+	if (!buf) return ESP_FAIL;
+	char tmp[128];
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+	FILE *f = fopen(tmp, "wb");
+	if (!f){ free(buf); return ESP_FAIL; }
+	size_t wr = fwrite(buf, 1, len, f);
+	fflush(f);
+	fsync(fileno(f));
+	fclose(f);
+	free(buf);
+	if (wr != len){ remove(tmp); return ESP_FAIL; }
+	remove(path);
+	if (rename(tmp, path) != 0) return ESP_FAIL;
+	return ESP_OK;
+}
+
 uint8_t loadConfig(void) {
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	ESP_LOGD(TAG, "Init config");
-	int res = ESP_OK;
 
 	struct stat st;
-	if (me_config.configFile[0] != 0 && stat(me_config.configFile, &st) == 0) {
-		if (st.st_size < 102) {
-			ESP_LOGW(TAG, "config file too small (%ld bytes), create default config", (long)st.st_size);
-			saveConfig();
-			return res;
-		}
-		res = ini_parse(me_config.configFile, handler, &me_config);
-		if (res != 0) {
-			ESP_LOGE(TAG, "Can't load 'config.ini' check line: %d, set default\n", res);
-			return res;
+	bool loaded = false;
+
+	/* 1) Штатный config.ini */
+	if (me_config.configFile[0] != 0 &&
+	    stat(me_config.configFile, &st) == 0 && st.st_size >= 102) {
+		if (ini_parse(me_config.configFile, handler, &me_config) == 0) {
+			loaded = true;
+		} else {
+			ESP_LOGE(TAG, "config.ini parse failed, trying cfgbak backup");
 		}
 	} else {
-		ESP_LOGD(TAG, "config file not found, create default config");
+		ESP_LOGW(TAG, "config.ini missing or too small, trying cfgbak backup");
+	}
+
+	/* 2) Не вышло - восстанавливаем из раздела cfgbak и парсим восстановленный */
+	if (!loaded) {
+		if (cfgbak_restore(me_config.configFile) == ESP_OK &&
+		    stat(me_config.configFile, &st) == 0 && st.st_size >= 102 &&
+		    ini_parse(me_config.configFile, handler, &me_config) == 0) {
+			ESP_LOGW(TAG, "config.ini restored from cfgbak backup partition");
+			loaded = true;
+		}
+	}
+
+	/* 3) Ни файла, ни валидного бэкапа - пишем дефолты (одноразово).
+	   me_config уже содержит дефолты (load_Default_Config вызван до loadConfig). */
+	if (!loaded) {
+		ESP_LOGW(TAG, "no valid config and no backup, writing defaults");
 		saveConfig();
-		return res;
+	}
+
+	/* 4) Обновляем бэкап, только если содержимое config.ini изменилось - запись в
+	   раздел редкая (конфиг меняют через MSC-FTP), континуального износа нет. */
+	if (!cfgbak_matches(me_config.configFile)) {
+		if (cfgbak_save(me_config.configFile) == ESP_OK)
+			ESP_LOGD(TAG, "config backup (cfgbak) updated");
+		else
+			ESP_LOGW(TAG, "config backup update skipped (cfgbak partition missing?)");
 	}
 
 	ESP_LOGD(TAG, "Load config complite. Duration:%ld ms. Heap usage:%ld free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_RATE_MS, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
-	return res;
+	return ESP_OK;
 
 }
 
