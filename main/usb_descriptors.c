@@ -28,6 +28,11 @@
 #include "esp_log.h"
 #include "stateConfig.h"
 
+/* Явно, а не транзитивно через OS-слой tusb: xTaskGetTickCount,
+   xPortGetFreeHeapSize и portTICK_PERIOD_MS для замера инициализации. */
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "esp_mac.h"
 // Connect by enabling internal pull-up resistor on D+/D-
 void dcd_connect(uint8_t rhport);
@@ -374,13 +379,24 @@ void set_usb_debug(void){
 
 void usb_device_task(void *param) {
   ESP_LOGD(TAG, "Starting USB device task");
-  
+
 	(void) param;
+
+	/* Замер именно вокруг tud_init: библиотека поднимается здесь, в задаче, а не
+	   в app_main - мерить у xTaskCreate бессмысленно, там видно только стек
+	   задачи, но не аллокации самого USB-стека (дескрипторы, FIFO классов). */
+	uint32_t startTick  = xTaskGetTickCount();
+	uint32_t heapBefore = xPortGetFreeHeapSize();
 
 	// init device stack on configured roothub port
 	// This should be called after scheduler/kernel is started.
 	// Otherwise it could cause kernel issue since USB IRQ handler does use RTOS queue API.
 	tud_init(BOARD_TUD_RHPORT);
+
+	ESP_LOGD(TAG, "USB stack init complite. Duration: %ld ms. Heap usage: %lu free heap:%u",
+			(long)((xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS),
+			(unsigned long)(heapBefore - xPortGetFreeHeapSize()),
+			xPortGetFreeHeapSize());
 
 	reconnectUsb();
 

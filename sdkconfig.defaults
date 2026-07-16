@@ -26,3 +26,12 @@ CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
 # mblog() (FATFS fopen/fwrite). The default 2304 B stack is too tight for a
 # file write from this context - bump to 4096 to avoid stack overflow.
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
+# --- FATFS per-file cache ---------------------------------------------------
+# Off: FF_FS_TINY=1, файлы делят одно окно FATFS вместо буфера на каждый.
+# С включённым кэшем каждый слот max_files нёс свой буфер FF_MAX_SS, а тот
+# равен MAX(FF_SS_SDCARD=512, FF_SS_WL=CONFIG_WL_SECTOR_SIZE=4096) = 4096.
+# То есть до 4 КБ кучи на файл: при max_files=5 это ~20 КБ только под кэши.
+# Плата - просадка скорости при одновременной работе с несколькими файлами
+# (аудио + лог + FTP): окно перечитывается при переключении между ними.
+CONFIG_FATFS_PER_FILE_CACHE=n

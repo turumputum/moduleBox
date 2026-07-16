@@ -29,14 +29,46 @@ static const char *TAG = "REPORTER";
 #define MAILBOX_SIZE 10
 #define MAX_STRING_LENGTH 512
 
-static uint32_t s_droppedReports = 0;   // сколько отчётов выкинуто при переполнении буфера
-
 typedef struct
 {
 	//char str[MAX_STRING_LENGTH];
 	char *str;
 	int  slot_num;
 } reporter_message_t;
+
+/* --- Транспорты доставки отчётов ---------------------------------------
+   У каждого транспорта СВОЙ буфер и СВОЯ задача. Раньше была одна общая
+   очередь с одним глобальным гейтом по линку: лежащий транспорт держал отчёты
+   для всех, а ошибка отправки в один (return в send_report) глотала отправку
+   в остальные.
+   Очередь заводится ТОЛЬКО под реально настроенный транспорт - не настроен,
+   значит нет очереди, нет копий строк и нет памяти под них.
+
+   USB CDC - такой же транспорт со своим буфером, а не "живая консоль". Раньше
+   forward_report звал usbprint синхронно, а тот молча выходит, пока
+   tud_is_plugged() == 0. Энумерация хоста занимает сотни мс, стартовые же
+   отчёты уходят через ~30 мс после подъёма USB-стека - и терялись все до
+   единого. Теперь они копятся кольцом и выливаются в консоль, как только хост
+   перечислил устройство. */
+#define TR_QUEUE_DEPTH  100
+
+typedef enum { TR_USB = 0, TR_MQTT, TR_OSC, TR_UDP, TR_COUNT } tr_id_t;
+
+typedef struct
+{
+	const char *    name;
+	QueueHandle_t   q;          // NULL - транспорт не настроен, отчёты игнорируем
+	uint32_t        dropped;    // выкинуто при переполнении своего буфера
+	bool            buffering;
+} transport_t;
+
+static transport_t s_tr[TR_COUNT] =
+{
+	[TR_USB]  = { .name = "usb"  },
+	[TR_MQTT] = { .name = "mqtt" },
+	[TR_OSC]  = { .name = "osc"  },
+	[TR_UDP]  = { .name = "udp"  },
+};
 
 QueueHandle_t mailbox;
 
@@ -45,19 +77,31 @@ extern stateStruct me_state;
 
 void forward_report(char *msg, int slot_num);
 
-// Есть ли физический линк для отправки отчётов (IP-уровень проверяется
-// транспортами внутри send_report). eth_connected и WIFI_init_res
-// корректно сбрасываются обработчиками событий при обрыве.
-static inline bool reporter_link_up(void)
-{
-	return (me_state.eth_connected == 1) || (me_state.WIFI_init_res == ESP_OK);
-}
-
 // Ожидается ли сеть вообще. Если ни один интерфейс не включён -
 // буферизировать отчёты незачем, просто выгребаем и отбрасываем.
 static inline bool reporter_net_expected(void)
 {
 	return me_config.LAN_enable || me_config.WIFI_enable;
+}
+
+/* Настроен ли транспорт - решается по КОНФИГУ, один раз при reporter_init.
+   Предикаты те же, по которым транспорт вообще поднимается: MQTT - LAN.c,
+   OSC-UDP - адрес сервера (без него отправлять некуда). */
+static bool tr_configured(tr_id_t id)
+{
+	/* USB CDC есть на плате всегда и от сети не зависит - буфер заводим
+	   безусловно, чтобы стартовые отчёты дождались подключения консоли. */
+	if (id == TR_USB) return true;
+
+	if (!reporter_net_expected()) return false;
+
+	switch (id)
+	{
+		case TR_MQTT: return me_config.mqttBrokerAdress && (strlen(me_config.mqttBrokerAdress) > 3);
+		case TR_OSC:  return me_config.oscServerAdress  && (strlen(me_config.oscServerAdress)  > 3);
+		case TR_UDP:  return me_config.udpServerAdress  && (strlen(me_config.udpServerAdress)  > 3);
+		default:      return false;
+	}
 }
 
 void crosslinker_(char* 	str,
@@ -287,23 +331,32 @@ void crosslinker(char* str){
 	}
 	//ESP_LOGD(TAG, "Crosslink calc time:%lld", esp_timer_get_time() - startTick);
 }
-void send_report(reporter_message_t * msg)
+/* Отправка в конкретный транспорт. Раньше это был один send_report со всеми
+   тремя ветками подряд, и ошибка отправки в OSC делала return - выход из всей
+   функции, то есть глотала отправку в UDP. Теперь транспорты независимы:
+   у каждого своя функция, свой буфер и своя задача. */
+static void tr_send_mqtt(const char * tmpStr)
 {
-	char * tmpStr = msg->str;
-	// usbprint вынесен в forward_report - локальное эхо идёт сразу, не ждёт
-	// сеть и не задерживается буферизацией при обрыве линка
+	char tmpString[strlen(tmpStr) + 1];
+	strcpy(tmpString, tmpStr);
+	char *payload;
+	char *topic = strtok_r(tmpString, ":", &payload);
 
-	if(me_state.MQTT_init_res==ESP_OK){
+	mqtt_pub(topic, payload);
+}
 
-		char tmpString[strlen(tmpStr) + 1];
-		strcpy(tmpString, tmpStr);
-		char *payload;
-		char *topic = strtok_r(tmpString, ":", &payload);
+static void tr_send_udp(int slot_num, const char * tmpStr)
+{
+	int res = udplink_send(slot_num, tmpStr);
 
-		mqtt_pub(topic, payload);
+	if (res < 0){
+		ESP_LOGW(TAG,"Failed to send UDP errno: %d string:%s", errno, tmpStr);
 	}
+}
 
-	if(me_state.OSC_init_res==ESP_OK){
+static void tr_send_osc(const char * tmpStr)
+{
+	{
 		char msg_copy[strlen(tmpStr) + 2];
 		if(tmpStr[0] != '/'){
 			msg_copy[0] = '/';
@@ -311,6 +364,7 @@ void send_report(reporter_message_t * msg)
 		}else{
 			strcpy(msg_copy, tmpStr);
 		}
+
 		char tmpString[strlen(msg_copy)+50];
 		char *rest;
 		char *tok = strtok_r(msg_copy, ":", &rest);
@@ -360,102 +414,128 @@ void send_report(reporter_message_t * msg)
 		int res = sendto(me_state.osc_socket, tmpString, len, 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
 		if (res < 0){
 			ESP_LOGW(TAG,"Failed to send osc errno: %d len:%d string:%s", errno, len, tmpString);
-			// сеть могла отвалиться - не перезагружаемся, отчёты снова уйдут в
-			// буфер по reporter_link_up(), как только линк восстановится
-			return;
-		}
-	}
-	if(me_state.UDP_init_res==ESP_OK)
-	{
-		int res = udplink_send(msg->slot_num, tmpStr);
-
-		if (res < 0){
-			ESP_LOGW(TAG,"Failed to send UDP errno: %d string:%s", errno, tmpStr);
-			// без перезагрузки - см. комментарий в OSC-ветке выше
-			return;
+			// сеть могла отвалиться - не перезагружаемся: отчёты снова уйдут в
+			// собственный буфер OSC, как только его init_res сбросится
 		}
 	}
 }
 
-void spread_the_word_task(void *arg)
+// Готов ли транспорт принимать отправку прямо сейчас (рантайм).
+static bool tr_ready(tr_id_t id)
 {
-	//char tmpStr[555];
-	reporter_message_t received_message;
-	bool buffering = false;
-	for(;;){
-		// Пока сеть ожидается, но линка нет - не выгребаем очередь, копим
-		// отчёты. Очередь сама работает буфером; переполнение обрабатывает
-		// forward_report (выкидывает самые старые).
-		if (reporter_net_expected() && !reporter_link_up())
+	switch (id)
+	{
+		/* Хост перечислил устройство. Ровно это же проверяет usbprint внутри,
+		   но здесь проверка ДО отправки - отчёт ждёт в буфере, а не пропадает. */
+		case TR_USB:  return usb_console_ready();
+		case TR_MQTT: return me_state.MQTT_init_res == ESP_OK;
+		case TR_OSC:  return me_state.OSC_init_res  == ESP_OK;
+		case TR_UDP:  return me_state.UDP_init_res  == ESP_OK;
+		default:      return false;
+	}
+}
+
+/* Задача одного транспорта. Копит свою очередь, пока ЕГО транспорт не готов,
+   и выгребает её, как только тот поднялся. Гейт персональный: лежащий MQTT
+   больше не задерживает OSC-UDP и наоборот. */
+static void transport_task(void *arg)
+{
+	tr_id_t         id  = (tr_id_t)(intptr_t)arg;
+	transport_t *   t   = &s_tr[id];
+	reporter_message_t m;
+
+	for(;;)
+	{
+		if (!tr_ready(id))
 		{
-			if (!buffering)
+			if (!t->buffering)
 			{
-				buffering = true;
-				// Только в UART, НЕ в mblog: на старте линк ещё не поднят
-				// (eth_connected=-1), поэтому это срабатывает при каждой загрузке -
-				// незачем писать это на флешку и мутировать FAT.
-				ESP_LOGW(TAG, "reporter - link down, buffering reports");
+				t->buffering = true;
+				// Только в UART, НЕ в mblog: на старте транспорт ещё не поднят,
+				// это срабатывает при каждой загрузке - незачем писать на флешку
+				// и мутировать FAT.
+				ESP_LOGW(TAG, "reporter[%s] - down, buffering reports", t->name);
 			}
 			vTaskDelay(pdMS_TO_TICKS(200));
 			continue;
 		}
-		if (buffering)
-		{
-			buffering = false;
-			// Парное к 'link down' - тоже только в UART (срабатывает на старте
-			// при подъёме линка, на флешку писать незачем).
-			ESP_LOGI(TAG, "reporter - link up, flushing %d buffered reports",
-					(int)uxQueueMessagesWaiting(me_state.reporter_spread_queue));
-			s_droppedReports = 0;
-		}
-		// таймаут вместо portMAX_DELAY, чтобы при пустой очереди успевать
-		// заметить обрыв линка и снова уйти в буферизацию
-		if (xQueueReceive(me_state.reporter_spread_queue, &received_message, pdMS_TO_TICKS(200)) == pdPASS)
-		{
-			send_report(&received_message);
 
-			heap_caps_free(received_message.str);
+		if (t->buffering)
+		{
+			t->buffering = false;
+			ESP_LOGI(TAG, "reporter[%s] - up, flushing %d buffered reports",
+					t->name, (int)uxQueueMessagesWaiting(t->q));
+			t->dropped = 0;
+		}
+
+		// таймаут вместо portMAX_DELAY, чтобы при пустой очереди успевать
+		// заметить падение транспорта и снова уйти в буферизацию
+		if (xQueueReceive(t->q, &m, pdMS_TO_TICKS(200)) == pdPASS)
+		{
+			switch (id)
+			{
+				case TR_USB:  usbprint(m.str);                break;
+				case TR_MQTT: tr_send_mqtt(m.str);            break;
+				case TR_OSC:  tr_send_osc(m.str);             break;
+				case TR_UDP:  tr_send_udp(m.slot_num, m.str); break;
+				default:                                      break;
+			}
+
+			heap_caps_free(m.str);
 		}
 	}
 }
-void forward_report(char *msg, int slot_num)
-{
-	reporter_message_t send_message;
 
+/* Положить отчёт в буфер транспорта. У каждого своя копия строки - каждый
+   освобождает её сам, когда отправит. Транспорт не настроен (очереди нет) -
+   молча игнорируем: ни копии, ни памяти. */
+static void tr_post(tr_id_t id, const char * msg, int slot_num)
+{
+	transport_t * t = &s_tr[id];
+
+	if (!t->q) return;
+
+	reporter_message_t send_message;
 	char *copy = heap_caps_malloc(strlen(msg)+1, MALLOC_CAP_8BIT);
 
 	if (!copy)
 	{
-		ESP_LOGE(TAG, "Der Heap ist kaputt");
+		ESP_LOGE(TAG, "reporter[%s] - malloc fail", t->name);
 		return;
 	}
 
 	strcpy(copy, msg);
-	send_message.str = copy;
+	send_message.str      = copy;
 	send_message.slot_num = slot_num;
 
-	// локальное эхо в USB-консоль - всегда сразу, независимо от сети
-	usbprint(msg);
-
-	if (xQueueSend(me_state.reporter_spread_queue, &send_message, 0) == pdPASS)
+	if (xQueueSend(t->q, &send_message, 0) == pdPASS)
 		return;
 
-	// Очередь переполнена (линк лежит давно) - выкидываем самый старый отчёт
-	// и кладём новый. Так буфер всегда содержит свежие события.
+	// Буфер переполнен (транспорт лежит давно) - выкидываем самый старый отчёт
+	// и кладём свежий. Так буфер всегда содержит актуальные события.
 	reporter_message_t oldest;
-	if (xQueueReceive(me_state.reporter_spread_queue, &oldest, 0) == pdPASS)
+	if (xQueueReceive(t->q, &oldest, 0) == pdPASS)
 	{
 		heap_caps_free(oldest.str);
-		s_droppedReports++;
+		t->dropped++;
 	}
 
-	if (xQueueSend(me_state.reporter_spread_queue, &send_message, 0) != pdPASS)
+	if (xQueueSend(t->q, &send_message, 0) != pdPASS)
 		heap_caps_free(copy);   // не влезло даже после освобождения - сдаёмся
 
 	// логируем переполнение, но не на каждый дроп, чтобы не забивать лог
-	if (s_droppedReports == 1 || (s_droppedReports % 50) == 0)
-		mblog(W, "reporter - buffer full, dropped %lu oldest reports",
-				(unsigned long)s_droppedReports);
+	if (t->dropped == 1 || (t->dropped % 50) == 0)
+		mblog(W, "reporter[%s] - buffer full, dropped %lu oldest reports",
+				t->name, (unsigned long)t->dropped);
+}
+
+void forward_report(char *msg, int slot_num)
+{
+	/* По своему буферу на каждый настроенный транспорт, USB в том числе:
+	   синхронный usbprint отсюда убран, иначе отчёт молча пропадал, пока хост
+	   не перечислил устройство (см. комментарий у TR_USB). */
+	for (tr_id_t id = 0; id < TR_COUNT; id++)
+		tr_post(id, msg, slot_num);
 }
 
 void reporter_task(void *arg){
@@ -471,7 +551,7 @@ void reporter_task(void *arg){
 				sprintf(tmpStr,"%s:%s", me_state.trigger_topic_list[received_message.slot_num], received_message.str);
 			}
 			//ESP_LOGD(TAG, "Report: %s", tmpStr);
-		
+
 			forward_report(tmpStr, received_message.slot_num);
 			crosslinker(tmpStr);
 
@@ -487,8 +567,27 @@ void reporter_init(void){
 	xTaskCreatePinnedToCore(reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
 	//xTaskCreate (reporter_task, "reporter_task", 1024 * 4, NULL, configMAX_PRIORITIES - 8, NULL);
 
-	me_state.reporter_spread_queue=xQueueCreate(150, sizeof(reporter_message_t));
-	xTaskCreatePinnedToCore(spread_the_word_task, "reporter_spread_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, NULL, 0);
+	/* Свой буфер и своя задача на каждый НАСТРОЕННЫЙ транспорт. Не настроен -
+	   очередь не создаём: tr_post тогда молча игнорирует его, копий строк нет.
+	   Сеть выключена целиком - не создаём ни одной. */
+	for (tr_id_t id = 0; id < TR_COUNT; id++)
+	{
+		if (!tr_configured(id)) continue;
+
+		s_tr[id].q = xQueueCreate(TR_QUEUE_DEPTH, sizeof(reporter_message_t));
+		if (!s_tr[id].q)
+		{
+			ESP_LOGE(TAG, "reporter[%s] - queue alloc failed, transport disabled", s_tr[id].name);
+			continue;
+		}
+
+		char taskName[24];
+		snprintf(taskName, sizeof(taskName), "reporter_%s", s_tr[id].name);
+		xTaskCreatePinnedToCore(transport_task, taskName, 1024 * 4,
+								(void*)(intptr_t)id, configMAX_PRIORITIES - 20, NULL, 0);
+
+		ESP_LOGD(TAG, "reporter[%s] - buffer %d created", s_tr[id].name, TR_QUEUE_DEPTH);
+	}
 }
 
 void report(char *msg, int slot_num){

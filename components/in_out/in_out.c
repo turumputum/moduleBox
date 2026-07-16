@@ -198,9 +198,9 @@ void configure_in_out(in_out_context_t *ctx, int slot_num) {
 
     /* === EVENTS === */
 
-    /* Активен 1 или спит 0
-    */
-    stdreport_register(RPTT_int, slot_num, "", "event/enable");
+    /* event/enable модуль не публикует - вариант 'только команда' (Конституция §6):
+       модулем управляют, но статус наружу не нужен. Наружу идёт то, ради чего
+       модуль существует: event/val - уровень на ножке. */
 }
 
 
@@ -290,7 +290,6 @@ static void in_out_task(void *arg) {
     waitForWorkPermit(slot_num);
 
     bool active_state = ctx.active_state;
-    stdreport_enable(slot_num, active_state);
 
     // Начальное состояние входа публикуем ТОЛЬКО здесь, после барьера. Раньше
     // отчёт стоял до waitForWorkPermit - он уходил прежде, чем у слотов-приёмников
@@ -355,7 +354,6 @@ static void in_out_task(void *arg) {
                 if (params.count > 0) {
                     active_state = params.p[0].i ? 1 : 0;
                     ESP_LOGD(TAG, "enable:%d slot:%d", active_state, slot_num);
-                    stdreport_enable(slot_num, active_state);
                     if (!active_state) {
                         // reset output to default state on disable
                         ctx.out_state = ctx.defaultState;

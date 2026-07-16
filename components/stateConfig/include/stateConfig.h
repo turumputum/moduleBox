@@ -12,7 +12,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION "3.62"
+#define VERSION "3.63"
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -71,7 +71,9 @@ typedef struct {
 //	led_state_t ledState;
 	QueueHandle_t executor_queue;
 	QueueHandle_t reporter_queue;
-	QueueHandle_t reporter_spread_queue;
+	/* Общей очереди рассылки больше нет: у каждого транспорта свой буфер
+	   внутри reporter.c (см. transport_t) - лежащий MQTT не должен держать
+	   отчёты для OSC-UDP. */
 
 	QueueHandle_t command_queue[NUM_OF_SLOTS];
 	QueueHandle_t interrupt_queue[NUM_OF_SLOTS];  

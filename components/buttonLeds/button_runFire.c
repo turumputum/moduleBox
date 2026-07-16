@@ -376,6 +376,16 @@ void button_runFire_task(void *arg)
     uint8_t prevState = 255; // force update on first cycle
 
     waitForWorkPermit(slot_num);
+
+    // Публикуем стартовый уровень кнопки: event/press - это уровень 0-1, и
+    // кросслинк должен знать состояние ножки на момент включения. Только после
+    // барьера: раньше очереди команд у слотов-приёмников ещё не созданы.
+    {
+        int raw0 = gpio_get_level(pin_in);
+        button_logic_report_initial(&ctx->button,
+                                    ctx->button.button_inverse ? !raw0 : raw0,
+                                    &prev_button_state);
+    }
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     while (1) {

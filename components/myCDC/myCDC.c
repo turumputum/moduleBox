@@ -31,9 +31,21 @@ extern QueueHandle_t exec_mailbox;
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 static const char *TAG = "myCDC";
 
-void usbprint(char *msg) 
+bool usb_console_ready(void)
 {
-#define USB_CHUNK_SZ	64 
+	/* Именно tud_cdc_connected() (бит DTR - терминал ОТКРЫЛ порт), а НЕ
+	   tud_is_plugged() (хост лишь перечислил устройство).
+	   При ребуте порт исчезает и появляется заново: plugState=1 приходит через
+	   ~10 мс после старта USB-стека, а терминал переоткрывает порт заметно
+	   позже. По tud_is_plugged() буфер сливался в пустоту - CDC TX FIFO никто
+	   не вычитывал, и стартовые отчёты пропадали. По DTR они ждут реального
+	   читателя. */
+	return tud_cdc_connected();
+}
+
+void usbprint(char *msg)
+{
+#define USB_CHUNK_SZ	64
 
 	char * 	on 	= msg;
 	int 	len = strlen(on) + 1;

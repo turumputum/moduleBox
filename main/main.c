@@ -481,9 +481,10 @@ void app_main(void)
 		ESP_LOGE(TAG, "sdcard_init FAIL");
 		const char *base_path = "/sdcard";
 		const esp_vfs_fat_mount_config_t mount_config = {
-				/* лог держится открытым между записями и постоянно занимает
-				   один дескриптор (см. mblog.c) - берём запас */
-				.max_files = 5,
+				/* Ровно +1 к прежним 3: лог держится открытым между записями
+				   (см. mblog.c) и постоянно занимает один дескриптор. Каждый
+				   лишний слот при PER_FILE_CACHE стоит до 4 КБ кучи. */
+				.max_files = 4,
 				.format_if_mount_failed = true,
 				.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
 		};
@@ -532,8 +533,21 @@ void app_main(void)
 
 	// Запускаем USB задачу только после завершения инициализации слотов
 	// чтобы избежать конкурентного доступа к SD карте (FATFS + USB MSC)
-	xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL, 0);
-	xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
+	{
+		/* Полная цена USB: стек задачи usbd (USBD_STACK_SIZE) берётся из кучи
+		   ЗДЕСЬ, а сам tud_init внутри задачи почти ничего не ест (TinyUSB
+		   аллоцирует статически, буферы классов лежат в BSS). Задача cdc
+		   считается лишь частично - её стек статический (cdc_stack в BSS),
+		   из кучи идёт только TCB. */
+		uint32_t usbHeapBefore = xPortGetFreeHeapSize();
+
+		xTaskCreatePinnedToCore(usb_device_task, "usbd", USBD_STACK_SIZE, NULL, configMAX_PRIORITIES - 12, NULL, 0);
+		xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SZIE, NULL, configMAX_PRIORITIES - 2, cdc_stack, &cdc_taskdef);
+
+		ESP_LOGD(TAG, "USB tasks created. Heap usage: %lu (usbd stack %d) free heap:%u",
+				(unsigned long)(usbHeapBefore - xPortGetFreeHeapSize()),
+				USBD_STACK_SIZE, xPortGetFreeHeapSize());
+	}
 
 	//start_dwinUart_task(1);
 	//debugTopicLists();

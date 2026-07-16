@@ -106,6 +106,26 @@ static void _buttonStateChanged(BUTTONCONFIG *	c,
 	}
 }
 
+void button_logic_report_initial(PBUTTONCONFIG c, int pin_level, int *prev_state)
+{
+	pin_level = pin_level ? 1 : 0;
+
+	/* Засеваем антидребезг и prev_state реальным уровнем: первый проход цикла
+	   не должен посчитать стартовый уровень "изменением" и выдать лишнее. */
+	c->debounce_inited   = true;
+	c->debounce_cand     = pin_level;
+	c->debounce_stable   = pin_level;
+	c->debounce_since_us = esp_timer_get_time();
+
+	*prev_state = pin_level;
+
+	/* Публикуем уровень напрямую, минуя _buttonStateChanged: та завязана на
+	   логику long-double и на старте (без предыдущего нажатия) исказила бы отчёт. */
+	stdreport_i(c->stateReport, pin_level);
+
+	ESP_LOGD(TAG, "Initial button level:%d reported", pin_level);
+}
+
 int button_logic_debounce(PBUTTONCONFIG c, int raw_state)
 {
     /* debounce_gap <= 0 - фильтр отключён, пропускаем уровень как есть. */

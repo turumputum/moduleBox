@@ -159,10 +159,13 @@ esp_vfs_fat_sdmmc_mount_config_t mount_config = {
 #else
 		.format_if_mount_failed = false,
 #endif // EXAMPLE_FORMAT_IF_MOUNT_FAILED
-		/* +1 к прежним 4: лог теперь держится открытым между записями (см. mblog.c),
-		   поэтому постоянно занимает один дескриптор. Остальные делят аудио, FTP,
-		   манифест и чтение UPDATE.FW. Берём запас. */
-		.max_files = 6, .allocation_unit_size = 16 * 1024 };
+		/* Ровно +1 к прежним 4: лог держится открытым между записями (см. mblog.c)
+		   и постоянно занимает один дескриптор. Остальные делят аудио, FTP,
+		   манифест и чтение UPDATE.FW.
+		   Запас здесь дорогой: при CONFIG_FATFS_PER_FILE_CACHE каждый слот несёт
+		   свой буфер FF_MAX_SS (= MAX(512, CONFIG_WL_SECTOR_SIZE)), то есть до
+		   4 КБ кучи на файл. Лишний слот - это лишние 4 КБ. */
+		.max_files = 5, .allocation_unit_size = 16 * 1024 };
 
 int spisd_deinit() {
 	return 1;
