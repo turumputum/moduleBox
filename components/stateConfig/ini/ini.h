@@ -98,15 +98,21 @@ int ini_parse_string(const char* string, ini_handler handler, void* user);
 #define INI_INLINE_COMMENT_PREFIXES ";"
 #endif
 
-/* Nonzero to use stack for line buffer, zero to use heap (malloc/free). */
+/* Nonzero to use stack for line buffer, zero to use heap (malloc/free).
+   moduleBox: буфер строки вынесен в кучу. Длина строки поднята до 1024, а
+   ini_parse() вызывается из main_task (стек 6000 байт, задача живёт вечно) -
+   держать там килобайтный кадр только ради разбора конфига накладно. В куче
+   буфер живёт только на время парсинга и сразу освобождается. */
 #ifndef INI_USE_STACK
-#define INI_USE_STACK 1
+#define INI_USE_STACK 0
 #endif
 
 /* Maximum line length for any line in INI file (stack or heap). Note that
-   this must be 3 more than the longest line (due to '\r', '\n', and '\0'). */
+   this must be 3 more than the longest line (due to '\r', '\n', and '\0').
+   moduleBox: 1024 вместо стоковых 512 - длинные списки crosslink в одну
+   строку не помещались, а обрезанный хвост валит разбор ВСЕГО config-ini. */
 #ifndef INI_MAX_LINE
-#define INI_MAX_LINE 512
+#define INI_MAX_LINE 1024
 #endif
 
 /* Nonzero to allow heap line buffer to grow via realloc(), zero for a
@@ -117,9 +123,11 @@ int ini_parse_string(const char* string, ini_handler handler, void* user);
 #endif
 
 /* Initial size in bytes for heap line buffer. Only applies if INI_USE_STACK
-   is zero. */
+   is zero.
+   ВАЖНО: при INI_ALLOW_REALLOC 0 буфер не растёт, и реальный лимит длины
+   строки задаёт именно эта константа, а не INI_MAX_LINE. Держать равными. */
 #ifndef INI_INITIAL_ALLOC
-#define INI_INITIAL_ALLOC 512
+#define INI_INITIAL_ALLOC 1024
 #endif
 
 /* Stop parsing on first error (default is to keep parsing). */

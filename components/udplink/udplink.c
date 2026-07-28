@@ -124,7 +124,10 @@ int execute_links(char * buff)
 			*event = 0;
 			event++;
 
-			for (int i = 0; !result && (i < linksCount); i++)
+			/* Прогоняем ВСЕ правила с совпавшим именем устройства, а не только
+			   первое. Раньше цикл рвался по !result, и для удалённого mbl1 всегда
+			   отрабатывал только самый первый кросслинк независимо от события. */
+			for (int i = 0; i < linksCount; i++)
 			{
 				if (!strcmp(name, links[i].name))
 				{
@@ -154,9 +157,12 @@ static void parseUdpCrossLinks()
 
 			do
 			{
-				on = _skip_spaces(begin);
+				/* name - уже без ведущих пробелов: правила пишут через ', ', и
+				   раньше в имя попадал пробел (' mbl1'), из-за чего strcmp в
+				   execute_links() не совпадал ни с одним правилом кроме первого. */
+				char * name = _skip_spaces(begin);
 
-				if ((on = strchr(on, '/')) != nil)
+				if ((on = strchr(name, '/')) != nil)
 				{
 					*on = 0;
 					on += 1;
@@ -167,13 +173,13 @@ static void parseUdpCrossLinks()
 						break;
 					}
 
-					links[linksCount].name 		= begin;
+					links[linksCount].name 		= name;
 					links[linksCount].rule 		= on;
 
 					linksCount++;
 				}
 				else
-					on = begin;
+					on = name;
 
 				if ((begin = strchr(on, ',')) != nil)
 				{
@@ -183,11 +189,10 @@ static void parseUdpCrossLinks()
 
 			} while (begin);
 
-			// printf("UDP cross links: %d\n", linksCount);
-			// for (int i = 0; i < linksCount; i++)
-			// {
-			// 	printf("name: %s rule: '%s'\n", links[i].name, links[i].rule);
-			// }
+			for (int i = 0; i < linksCount; i++)
+			{
+				ESP_LOGD(TAG, "UDP crosslink [%d]: name '%s' rule '%s'", i, links[i].name, links[i].rule);
+			}
 		}
 	}
 }

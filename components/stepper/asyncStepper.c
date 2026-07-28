@@ -182,6 +182,7 @@ void stepper_stop(stepper_t *stepper) {
     stepper->targetSpeed = 0;
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL));
     stepper->state=STOP;
+    stepper->pulsesPaused = 0;
     //ESP_LOGD(TAG, "stopped");
 }
 
@@ -394,6 +395,7 @@ void stepper_checkDir(stepper_t *stepper){
             if(wasRunning){
                 stepper_setPeriod(stepper, UINT16_MAX);   // возобновляем с самого медленного периода
                 mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP);
+                stepper->pulsesPaused = 0;
             }
 
             ESP_LOGD(TAG, "Dir changed, newDir:%s dirInverse:%d", stepper->dir==DIR_UP?"up":"down", stepper->dirInverse);
@@ -439,14 +441,18 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
 
     stepper_checkDir(stepper);
 
-    if(stepper->dir==DIR_UP){
-        while(watchPoint>INT16_MAX){
-            watchPoint-=INT16_MAX;
-        }
-    }else if(stepper->dir==DIR_DOWN){
-        while(watchPoint<INT16_MIN){
-            watchPoint-=INT16_MIN;
-        }
+    /* Свёртку делаем по ЗНАКУ ОСТАТКА, а не по stepper->dir. При команде на ходу
+       в обратную сторону checkDir выше НЕ меняет dir - он ждёт, пока скорость
+       дойдёт до нуля, - то есть здесь dir ещё старый. Раньше из-за этого ни одна
+       ветка свёртки не выбиралась, watchPoint зажимался в рельс ±32767 (видно в
+       логе: 'watchPoint:-32767' при distance -76176), и аппаратное прерывание
+       прибытия для реверсивных ходов не срабатывало вовсе. Обе петли выполнять
+       безопасно: значение не может быть одновременно больше MAX и меньше MIN. */
+    while(watchPoint>INT16_MAX){
+        watchPoint-=INT16_MAX;
+    }
+    while(watchPoint<INT16_MIN){
+        watchPoint-=INT16_MIN;
     }
     // Точка останова цели не должна совпадать с граничной watch-точкой аккумуляции
     // (INT16_MAX / INT16_MIN). Иначе второй add падает ('add watchpoint failed'),
@@ -470,21 +476,16 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     stepper->pcnt_prevPos = 0;
     
     
-    // Все множители приводим к int64 ДО умножения, иначе 2*accel считается в uint32
-    // и переполняется при больших accel (до INT32_MAX).
-    int64_t reachableSpeed = sqrt(((int64_t)2*stepper->accel*llabs(distance)+((int64_t)stepper->currentSpeed*(int64_t)stepper->currentSpeed))/2);
+    /* Профиль скорости больше НЕ планируется здесь заранее: stepper_speedUpdate
+       каждый тик пересчитывает потолок скорости от остатка пути. Прежний расчёт
+       reachableSpeed отсюда убран - он мог перебить обнулённый checkDir'ом
+       targetSpeed и на один тик продолжить разгон в старую сторону. */
 
-    // Пол трапеции: целевая скорость короткого хода не ниже minSpeed.
-    if(reachableSpeed < stepper->minSpeed) reachableSpeed = stepper->minSpeed;
-
-    if(reachableSpeed<stepper->maxSpeed){
-        stepper->targetSpeed = reachableSpeed;
-    }
-    //ESP_LOGD(TAG, "reachableSpeed: %lld", reachableSpeed);
- 
-    //pcnt_unit_start(stepper->pcntUnit);
-    //int64_t chisl = (((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed) - ((int64_t)stepper->currentSpeed * (int64_t)stepper->currentSpeed));
-    int64_t chisl = ((int64_t)stepper->targetSpeed * (int64_t)stepper->targetSpeed);
+    /* breakWay нужен только хаку runSpeed. Считаем его от maxSpeed, а НЕ от
+       targetSpeed: checkDir выше обнуляет targetSpeed при развороте на ходу, и
+       тогда отсюда выходил нулевой тормозной путь - в логе 'chisl:0
+       break_distance:0 breakPoint:0' при команде против движения. */
+    int64_t chisl = ((int64_t)stepper->maxSpeed * (int64_t)stepper->maxSpeed);
     float znam = 2.0f * stepper->accel;
     float break_distance = chisl / znam;
     ESP_LOGD(TAG, "chisl:%lld znam:%f break_distance: %f maxSpeed: %ld currentSpeed: %ld", chisl, znam, break_distance, stepper->maxSpeed, stepper->currentSpeed);
@@ -498,6 +499,7 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
         stepper_setPeriod(stepper, UINT16_MAX);
         ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP));
         stepper->state=RUN;
+        stepper->pulsesPaused = 0;
     }
 
     ESP_LOGD(TAG, "currentPos:%ld targetPos:%ld watchPoint:%d accel_distance: %f breakPoint: %ld  state:%s", stepper->currentPos, stepper->targetPos, stepper->pcnt_watchPoint, break_distance, stepper->breakPoint, stepper->state==STOP?"STOP":"RUN");
@@ -526,50 +528,87 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
         return;
     }
 
-    if(stepper->currentPos!=stepper->targetPos){
-        if((stepper->dir==DIR_UP)&&(stepper->currentPos>=(stepper->breakPoint - speedIncrement/4))){
-            //если достигли точки торможения при вращении по часовой стрелке    
-            stepper->targetSpeed=0;
-            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_UP?"up":"down");
-        }else if((stepper->dir==DIR_DOWN)&&(stepper->currentPos<=(stepper->breakPoint + speedIncrement/4))){
-            //если достигли точки торможения при вращении против часовой стрелке    
-            stepper->targetSpeed=0;
-            //ESP_LOGD(TAG,"Lets breaking, curPos:%ld breakPoint:%ld dir:%s", stepper->currentPos, stepper->breakPoint, stepper->dir==DIR_UP?"up":"down");
+    if (speedIncrement<1) speedIncrement=1;
 
-        }
-        
+    /* Разворот, если цель осталась позади: checkDir гасит targetSpeed, а по
+       достижении нулевой скорости меняет DIR и назначает скорость возврата. */
+    stepper_checkDir(stepper);
 
-        stepper_checkDir(stepper);
+    int8_t needDir = (stepper->targetPos > stepper->currentPos) ? DIR_UP : DIR_DOWN;
 
-        //ESP_LOGD(TAG, "currentSpeed: %ld targetSpeed: %ld period: %ld", stepper->currentSpeed, stepper->targetSpeed, period);
-    
-        if(stepper->targetSpeed!=stepper->currentSpeed){
-            
-            if (speedIncrement<1)speedIncrement=1;
-            
-            if(stepper->currentSpeed<stepper->targetSpeed){
-                stepper->currentSpeed += speedIncrement;
-                if(stepper->currentSpeed>stepper->targetSpeed){
-                    stepper->currentSpeed = stepper->targetSpeed;
-                }
-            }else{
-                stepper->currentSpeed -= speedIncrement;
-                if(stepper->currentSpeed<stepper->targetSpeed){
-                    stepper->currentSpeed = stepper->targetSpeed;
-                }
+    if(stepper->dir == needDir){
+        /* Потолок скорости считаем ОТ ОСТАТКА ПУТИ, а не по заранее посчитанной
+           точке торможения. Точка торможения планировалась один раз в moveTo и
+           после разворота оказывалась по ДРУГУЮ сторону от цели - обратный ход
+           шёл вообще без торможения и пролетал цель насквозь. Здесь же профиль
+           самокорректирующийся: работает в обе стороны, переживает разворот,
+           смену accel-maxSpeed на ходу и джиттер планировщика.
+
+           Формула - не непрерывная v=sqrt(2*a*s), а её ДИСКРЕТНО безопасный
+           вариант. За тик скорость держится постоянной, поэтому условие
+           'на следующем тике торможения ещё хватит' даёт
+                v <= sqrt((a*dt)^2 + 2*a*s) - a*dt,
+           где a*dt - это ровно speedIncrement. Непрерывная формула стабильно
+           перелетала на v*dt/2 (100 шагов при 10000 шаг-с и 20 мс). */
+        int64_t s   = llabs((int64_t)stepper->targetPos - (int64_t)stepper->currentPos);
+        int64_t adt = speedIncrement;
+        int64_t v   = (int64_t)(sqrt((double)adt*(double)adt + 2.0*(double)stepper->accel*(double)s) - (double)adt);
+
+        if(v < 0) v = 0;
+        /* Порядок клампов важен: сначала пол minSpeed, потом потолок maxSpeed -
+           потолок должен побеждать, иначе runSpeed:0 (maxSpeed==0) уполз бы на
+           minSpeed вместо остановки. */
+        if(v < stepper->minSpeed) v = stepper->minSpeed;
+        if(v > stepper->maxSpeed) v = stepper->maxSpeed;
+
+        stepper->targetSpeed = (int32_t)v;
+    }
+
+    if(stepper->targetSpeed!=stepper->currentSpeed){
+        if(stepper->currentSpeed<stepper->targetSpeed){
+            stepper->currentSpeed += speedIncrement;
+            if(stepper->currentSpeed>stepper->targetSpeed){
+                stepper->currentSpeed = stepper->targetSpeed;
             }
-            if(abs(stepper->currentSpeed)>0){
-                uint32_t period = abs((int32_t)stepper->resolution/stepper->currentSpeed);
-                // период клампится в stepper_setPeriod (MIN_PERIOD..UINT16_MAX),
-                // там же пересчитывается HIGH импульса под текущую частоту
-                stepper_setPeriod(stepper, period);
-            }else if((stepper->currentPos==stepper->targetPos)&&(stepper->state!=STOP)){
+        }else{
+            stepper->currentSpeed -= speedIncrement;
+            if(stepper->currentSpeed<stepper->targetSpeed){
+                stepper->currentSpeed = stepper->targetSpeed;
+            }
+        }
+    }
+
+    /* Инвариант: скорость больше нуля - генерация идёт, скорость нулевая -
+       генерация выключена. Владелец таймера на ходу - только этот код. */
+    if(stepper->currentSpeed > 0){
+        // период клампится в stepper_setPeriod (MIN_PERIOD..UINT16_MAX),
+        // там же пересчитывается HIGH импульса под текущую частоту
+        stepper_setPeriod(stepper, stepper->resolution/stepper->currentSpeed);
+        if(stepper->pulsesPaused && stepper->state == RUN){
+            mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_START_NO_STOP);
+            stepper->pulsesPaused = 0;
+        }
+    }else{
+        /* Скорость дошла до нуля - импульсы обязаны прекратиться. Раньше здесь
+           требовалось ТОЧНОЕ currentPos==targetPos, и при остатке хотя бы в шаг
+           таймер mcpwm продолжал пульсировать на последнем периоде (медленнее
+           ~15 шаг-с он не умеет - период зажат UINT16_MAX). Ось ползла мимо
+           цели и сама себя загоняла в автоколебания. */
+        if(stepper->dir == needDir){
+            // разворот не нужен, ехать некуда: ход окончен (в т-ч runSpeed:0)
+            if(stepper->state != STOP){
                 stepper_stop(stepper);
             }
+        }else if(stepper->state == RUN && !stepper->pulsesPaused){
+            /* Нулевая скорость перед разворотом: гасим генерацию, но state=RUN
+               оставляем - ход не окончен. Флаг нужен, чтобы вернуть генерацию,
+               даже если разворота в итоге не будет: придёт новая команда в
+               ТЕКУЩУЮ сторону - checkDir промолчит, а moveTo перезапускает
+               таймер только из state==STOP, и ось зависла бы без импульсов. */
+            mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL);
+            stepper->pulsesPaused = 1;
         }
-
     }
-        
 }
 
 

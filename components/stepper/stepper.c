@@ -672,11 +672,16 @@ void stepper_task(void *arg){
             }
         }
 
+        /* Позицию читаем ДО расчёта профиля. Раньше getCurrentPos стоял ПОСЛЕ
+           speedUpdate, и все решения (приехали-ли, пора-ли тормозить, не нужен-ли
+           разворот) принимались по координате, устаревшей на целый тик - при
+           10000 шаг-с и 20 мс это 200 шагов слепоты при допуске парковки в 2 шага. */
+        stepper_getCurrentPos(&stepper);
+        //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
+
         if (c->active_state) {
             stepper_speedUpdate(&stepper, c->refreshPeriod);
         }
-        stepper_getCurrentPos(&stepper);
-        //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
 
         // --- Ограничение хода по minVal-maxVal и индикация границ ---
         // Работает и в позиционном режиме, и в режиме скорости (runSpeed).
