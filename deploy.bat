@@ -28,7 +28,7 @@ if errorlevel 1 (
 
 echo Запускаю bin2fw.exe...
 cd bootldsd
-bin2fw.exe moduleBox.bin
+"%~dp0bootldsd\bin2fw.exe" moduleBox.bin
 if errorlevel 1 (
     echo ОШИБКА: bin2fw.exe завершился с ошибкой
     pause
