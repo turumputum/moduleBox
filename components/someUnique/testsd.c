@@ -211,10 +211,12 @@ static const char * getResultName(int result)
 static int detect_sd_card_presence(void)
 {
 	if (!host_inited) {
-		/* Хост не инициализирован — проверяем наличие карты по уровню на DATA0 пине.
-		   SD-карта имеет внутренние pull-up на линиях; без карты pullup на плате даёт HIGH,
-		   при вставленной карте линия CMD тоже HIGH. Используем sdmmc_card_init через хост. 
-		   Без хоста надёжная детекция невозможна — возвращаем -1 (неизвестно). */
+		// Хост не инициализирован — проверяем наличие карты по уровню на DATA0 пине.
+		// SD-карта имеет внутренние pull-up на линиях; без карты pullup на плате даёт HIGH,
+		// при вставленной карте линия CMD тоже HIGH. Используем sdmmc_card_init через хост.
+		// Без хоста надёжная детекция невозможна — возвращаем -1 (неизвестно).
+		// (однострочные комментарии: manifesto берёт в описание модуля ближайший
+		//  блочный комментарий выше configure_testsd)
 		return -1;
 	}
 
@@ -315,29 +317,6 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 	ESP_LOGD(TAG, "Slot:%d run delay = %d", slot_num, c->runDelay);
 
 
-    /* Рапортует о текущем статусе (фазе) тестирования, а также детекции карты
-       Возможные значения: 'stopped', 'initializing', 'running', 'formatting', 'done', 'inserted', 'ejected'
-	*/
-	c->stateReport = stdreport_register(RPTT_string, slot_num, "string", "state");
-
-    /* Рапортует результат завершенного тестирования
-       Возможные значения: 'none', 'success', 'error', 'formatError'
-	*/
-	c->resultReport = stdreport_register(RPTT_string, slot_num, "string", "result");
-
-	/* Рапортует прогресс тестирования в целых процентах.
-	   Возможные значения: 0 — 100
-	*/
-	c->progressReport = stdreport_register(RPTT_int, slot_num, "percent", "progress");
-
-    /* Команда запускает тестирование
-    */
-    stdcommand_register(&c->cmds, rtpCMD_start, "start", PARAMT_none);
-
-    /* Команда остатавливает тестирование
-    */
-    stdcommand_register(&c->cmds, rtpCMD_stop, "stop", PARAMT_none);
-
     {
 		char *str = calloc(strlen(me_config.deviceName)+strlen("/testsd_")+4, sizeof(char));
 		sprintf(str, "%s/testsd_%d",me_config.deviceName, slot_num);
@@ -345,15 +324,38 @@ void configure_testsd(PTESTSD_CONFIG	c, int slot_num)
 		me_state.trigger_topic_list[slot_num]=str;
 	}
 
-    /* === COMMANDS === */
-
-    /* Включить (1) или выключить (0) модуль (Конституция §6). */
-    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
-
     /* === EVENTS === */
 
-    /* Состояние модуля - активен (1) или спит (0). Retained. */
+    /* Рапортует о текущем статусе (фазе) тестирования, а также детекции карты
+       Возможные значения: 'stopped', 'initializing', 'running', 'formatting', 'done', 'inserted', 'ejected'
+	*/
+	c->stateReport = stdreport_register(RPTT_string, slot_num, "string", "event/state");
+
+    /* Рапортует результат завершенного тестирования
+       Возможные значения: 'none', 'success', 'error', 'formatError'
+	*/
+	c->resultReport = stdreport_register(RPTT_string, slot_num, "string", "event/result");
+
+	/* Рапортует прогресс тестирования в целых процентах
+	   Возможные значения: 0 - 100
+	*/
+	c->progressReport = stdreport_register(RPTT_int, slot_num, "percent", "event/progress");
+
+    /* Состояние модуля - активен (1) или спит (0) */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
+
+    /* === COMMANDS === */
+
+    /* Команда запускает тестирование
+    */
+    stdcommand_register(&c->cmds, rtpCMD_start, "action/start", PARAMT_none);
+
+    /* Команда останавливает тестирование
+    */
+    stdcommand_register(&c->cmds, rtpCMD_stop, "action/stop", PARAMT_none);
+
+    /* Включить (1) или выключить (0) модуль (Конституция §6) */
+    stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 }
 
 static PSDCARDPINSET check_pinset(PSDCARDPINSET ps)

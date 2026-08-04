@@ -622,7 +622,7 @@ void report(char *msg, int slot_num){
 void reportFreeRAM(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
-	snprintf(tmpStr, 128, "%s/system/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
+	snprintf(tmpStr, 128, "%s/system/event/freeRAM:%d",me_config.deviceName, xPortGetFreeHeapSize());
 	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
@@ -633,9 +633,9 @@ void reportFreeDisk(){
 	uint64_t total = 0, free_bytes = 0;
 	esp_err_t ret = esp_vfs_fat_info("/sdcard", &total, &free_bytes);
 	if(ret == ESP_OK){
-		snprintf(tmpStr, 128, "%s/system/freeDisk:%llu", me_config.deviceName, (unsigned long long)free_bytes);
+		snprintf(tmpStr, 128, "%s/system/event/freeDisk:%llu", me_config.deviceName, (unsigned long long)free_bytes);
 	}else{
-		snprintf(tmpStr, 128, "%s/system/freeDisk:error", me_config.deviceName);
+		snprintf(tmpStr, 128, "%s/system/event/freeDisk:error", me_config.deviceName);
 	}
 	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
@@ -644,7 +644,7 @@ void reportFreeDisk(){
 void reportVersion(){
 	char * tmpStr = heap_caps_malloc(128, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
-	snprintf(tmpStr, 128, "%s/system/version:%s",me_config.deviceName, VERSION);
+	snprintf(tmpStr, 128, "%s/system/event/version:%s",me_config.deviceName, VERSION);
 	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);
 }
@@ -653,7 +653,7 @@ void reportNETstatus(){
 	int bufSize = 768;
 	char * tmpStr = heap_caps_malloc(bufSize, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
-	int pos = snprintf(tmpStr, bufSize, "%s/system/NETstatus:{",me_config.deviceName);
+	int pos = snprintf(tmpStr, bufSize, "%s/system/event/netStatus:{",me_config.deviceName);
 	pos += snprintf(tmpStr + pos, bufSize - pos, "\"WIFI_init_res\":%d," , me_state.WIFI_init_res);
 	if (me_state.WIFI_init_res == ESP_OK) {
 		pos += snprintf(tmpStr + pos, bufSize - pos,
@@ -691,7 +691,7 @@ void reportNETstatus(){
 void reportTaskList(){
 	char * tmpStr = heap_caps_malloc(2048, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
-	int pos = snprintf(tmpStr, 2048, "%s/system/TaskList:",me_config.deviceName);
+	int pos = snprintf(tmpStr, 2048, "%s/system/event/taskList:",me_config.deviceName);
 	vTaskList(tmpStr + pos);
 	forward_report(tmpStr, -1);
 	heap_caps_free(tmpStr);

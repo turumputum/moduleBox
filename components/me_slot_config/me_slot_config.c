@@ -194,6 +194,8 @@ int init_slots(void){
 			start_dialer_task(i);		// W, NOC
 		}else if(!strcmp(mode, "whitelist")){
 			start_whitelist_task(i);	// W, C
+		}else if(!strcmp(mode, "listOfActions")){
+			start_listOfActions_task(i);	// W, C
 		}else if(!strcmp(mode, "collector")){
 			start_collector_task(i);	// W, NOC
 		}else if(!strcmp(mode, "masquerade")){

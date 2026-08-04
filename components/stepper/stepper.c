@@ -44,6 +44,13 @@ static const char *TAG = "STEPPER";
 #define RUN_POS 2
 #define RUN_SPEED 3
 #define GOING_HOME 4
+// Анабиоз: базирование задано, но дом не найден за homingTimeout. Импульсы step
+// молчат, команды движения не принимаются - ждём повторный goHome. Опознаётся
+// снаружи по морганию светодиода DIR при тишине на step.
+#define HOMING_FAILED 5
+
+// Период смены уровня DIR в анабиозе, мс (два переключения в секунду).
+#define ANABIOSIS_BLINK_MS 500
 
 #define UP 1
 #define DOWN -1
@@ -335,6 +342,14 @@ static inline int stepper_is_motion_cmd(int cmd){
            cmd==stepCMD_setAccel;
 }
 
+/* Вернуть пину DIR уровень, соответствующий логическому направлению мотора.
+   Обязателен при выходе из анабиоза: stepper_checkDir трогает пин только в
+   момент СМЕНЫ stepper->dir, а моргание уже увело физический уровень - без
+   восстановления первый же ход после повторного goHome мог пойти не туда. */
+static void stepper_restoreDirPin(stepper_t *stepper){
+    gpio_set_level(stepper->dirPin, stepper->dir==DIR_UP ? !stepper->dirInverse : stepper->dirInverse);
+}
+
 /* Исполнение команд движения-параметров. Вынесено отдельно, чтобы одинаково
    выполнять их и в реальном времени, и при проигрывании отложенной очереди
    после базирования. arg - уже разобранное целое (atoi). */
@@ -455,6 +470,12 @@ void stepper_task(void *arg){
     stepper_deferred_t deferred[STEPPER_DEFERRED_MAX];
     int deferredCount = 0;
 
+    // Моргание DIR в анабиозе. anabiosisBlink=1 означает, что пин DIR сейчас под
+    // управлением индикации, а не мотора, и его надо восстановить при выходе.
+    int anabiosisBlink = 0;
+    int anabiosisDirLevel = 0;
+    TickType_t anabiosisBlinkTick = 0;
+
     waitForWorkPermit(slot_num);
     stdreport_enable(slot_num, c->active_state);
 
@@ -502,6 +523,20 @@ void stepper_task(void *arg){
             cmd = -1;
         }
 
+        /* Анабиоз: дом не найден за отведённое время. Не реагируем ни на что,
+           кроме повторной команды базирования. Исключения - enable (выключение
+           модуля по Конституции §6 должно проходить всегда) и обновления
+           состояний датчика нуля и концевиков: это не команды, а телеметрия, они
+           не двигают мотор, но без них повторный goHome стартовал бы по устаревшей
+           картине датчиков. */
+        if (c->state==HOMING_FAILED && cmd != -1 &&
+            cmd != stepCMD_goHome && cmd != STDCMD_ENABLE &&
+            cmd != stepCMD_setHomingSensor &&
+            cmd != stepCMD_setUpLimit && cmd != stepCMD_setDownLimit) {
+            ESP_LOGD(TAG, "[stepper_%d] anabiosis, ignoring cmd:%d", slot_num, cmd);
+            cmd = -1;
+        }
+
         /* Классификация: команды движения-параметров исполняет помощник, и их
            можно откладывать. Управляющие (enable, goHome, stop, break,
            setHomingSensor) исполняются немедленно. */
@@ -523,8 +558,8 @@ void stepper_task(void *arg){
             isMotion = 0;
         }
 
-        /* Ось не базирована (старт без goHomeOnStart, отмена базирования или
-           провал по таймауту): команды движения игнорируем - ехать по координатам
+        /* Ось не базирована (старт без goHomeOnStart или отмена базирования
+           командой stop-break-enable): команды движения игнорируем - ехать по координатам
            на ненайденном нуле нельзя. НЕ откладываем: процедуры нет, копить не для
            чего. Ждём новую goHome; управляющие команды (goHome, stop, break,
            setHomingSensor, лимиты, enable) проходят через switch. */
@@ -611,6 +646,29 @@ void stepper_task(void *arg){
             }
         }
 
+        /* --- Индикация анабиоза ---
+           Мотор стоит, на step тишина, поэтому единственный способ показать
+           наружу режим ожидания - моргать светодиодом DIR. Блок стоит ДО обработки
+           GOING_HOME: в тот же тик, когда пришёл повторный goHome, состояние уже
+           не HOMING_FAILED, и восстановление уровня DIR отработает раньше, чем
+           базирование дёрнет мотор. Пин DIR - вход level для PCNT, но импульсов
+           step нет, так что счётчик от моргания не едет. */
+        if(c->active_state && c->state==HOMING_FAILED){
+            if(!anabiosisBlink){
+                anabiosisBlink = 1;
+                anabiosisDirLevel = 0;
+                anabiosisBlinkTick = xTaskGetTickCount();
+                gpio_set_level(stepper.dirPin, anabiosisDirLevel);
+            }else if((xTaskGetTickCount()-anabiosisBlinkTick) >= pdMS_TO_TICKS(ANABIOSIS_BLINK_MS)){
+                anabiosisBlinkTick = xTaskGetTickCount();
+                anabiosisDirLevel = !anabiosisDirLevel;
+                gpio_set_level(stepper.dirPin, anabiosisDirLevel);
+            }
+        }else if(anabiosisBlink){
+            anabiosisBlink = 0;
+            stepper_restoreDirPin(&stepper);
+        }
+
         if(c->active_state && c->state==GOING_HOME){
             if(homingProcedureState==HOMING_WAITING){
                 stdreport_s(c->homeReport, "homing");
@@ -629,17 +687,18 @@ void stepper_task(void *arg){
                 }
             }else if(c->homingTimeout>0 &&
                      (xTaskGetTickCount()-homingStartTick) > pdMS_TO_TICKS(c->homingTimeout*1000)){
-                // датчик не найден за отведенное время - прекращаем базирование,
-                // остаёмся в ожидании повторной команды goHome. Отложенные команды
+                // Датчик не найден за отведённое время - уходим в анабиоз: step
+                // молчит (stepper_stop гасит mcpwm), любые команды кроме goHome
+                // игнорируются, DIR моргает как индикация. Отложенные команды
                 // сбрасываем: ехать по накопленным координатам на небазированной оси нельзя.
                 stepper_stop(&stepper);
                 stepper.maxSpeed = c->maxSpeed;
                 stepper.accel = c->accel;
-                c->state = NOT_HOMED;
+                c->state = HOMING_FAILED;
                 homingProcedureState = HOMING_WAITING;
                 deferredCount = 0;
                 stdreport_s(c->homeReport, "homingTimeout");
-                ESP_LOGW(TAG, "[stepper_%d] homing timeout", slot_num);
+                ESP_LOGW(TAG, "[stepper_%d] homing timeout, anabiosis - waiting for goHome", slot_num);
             }else if(homingProcedureState == HOMING_OUT_SENSOR){
                 if(c->homingSensorState==0){
                     ESP_LOGD(TAG, "[stepper_%d] sensor reseted, homing again", slot_num);
@@ -679,7 +738,10 @@ void stepper_task(void *arg){
         stepper_getCurrentPos(&stepper);
         //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
 
-        if (c->active_state) {
+        /* В анабиозе профиль скорости не считаем вовсе: единственный владелец
+           таймера mcpwm на ходу - speedUpdate, и пока его нет, генерация step
+           гарантированно не возобновится. */
+        if (c->active_state && c->state!=HOMING_FAILED) {
             stepper_speedUpdate(&stepper, c->refreshPeriod);
         }
 

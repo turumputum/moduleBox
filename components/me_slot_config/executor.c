@@ -218,27 +218,46 @@ void executer_task(void * param){
 		if (xQueueReceive(me_state.executor_queue, &msg, portMAX_DELAY) == pdPASS){
 			//ESP_LOGD(TAG, "incoming cmd:%s", msg.str);
 			int sum=0;
-			if(strstr(msg.str, "system/getFreeRAM")!=NULL){
+
+			/* Системные команды приходят как <deviceName>/system/action/<name>
+			   (Конституция §2-3). Исторический вид <deviceName>/system/<name>
+			   тоже принимаем, чтобы не ломать старые конфиги и интеграции.
+			   Имя вычленяем один раз и сравниваем целиком - strstr по всей
+			   строке ловил бы команду в чужом payload. */
+			char sysName[32] = {0};
+			char *sysCmd = strstr(msg.str, "system/");
+			if(sysCmd != NULL){
+				sysCmd += strlen("system/");
+				if(strncmp(sysCmd, "action/", strlen("action/")) == 0){
+					sysCmd += strlen("action/");
+				}
+				strncpy(sysName, sysCmd, sizeof(sysName)-1);
+				/* payload приходит через ':' - в имени команды он не нужен */
+				char *sep = strchr(sysName, ':');
+				if(sep != NULL) *sep = '\0';
+			}
+
+			if(!strcmp(sysName, "getFreeRAM")){
 				ESP_LOGD(TAG, "Get RAM status");
 				reportFreeRAM();
 				sum++;
-			}else if(strstr(msg.str, "system/getNETstatus")!=NULL){
+			}else if(!strcmp(sysName, "getNETstatus")){
 				ESP_LOGD(TAG, "getNETstatus");
 				reportNETstatus();
 				sum++;
-			}else if(strstr(msg.str, "system/getTaskList")!=NULL){
+			}else if(!strcmp(sysName, "getTaskList")){
 				ESP_LOGD(TAG, "getTaskList");
 				reportTaskList();
 				sum++;
-			}else if(strstr(msg.str, "system/getVersion")!=NULL){
+			}else if(!strcmp(sysName, "getVersion")){
 				ESP_LOGD(TAG, "getVersion");
 				reportVersion();
 				sum++;
-			}else if(strstr(msg.str, "system/getFreeDisk")!=NULL){
+			}else if(!strcmp(sysName, "getFreeDisk")){
 				ESP_LOGD(TAG, "getFreeDisk");
 				reportFreeDisk();
 				sum++;
-			}else if(strstr(msg.str, "system/restart")!=NULL){
+			}else if(!strcmp(sysName, "restart")){
 				ESP_LOGD(TAG, "restart");
 				safeRestart();
 				sum++;

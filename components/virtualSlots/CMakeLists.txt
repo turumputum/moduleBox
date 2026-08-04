@@ -5,6 +5,7 @@ file(GLOB_RECURSE MODULE_FILES "startup.c"
                             "flywheel.c"
 
                             "whitelist.c"
+                            "listOfActions.c"
                             "collector.c"
                             "scaler.c"
 

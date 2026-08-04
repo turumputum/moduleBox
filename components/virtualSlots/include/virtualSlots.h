@@ -34,6 +34,9 @@ void start_watchdog_task(int slot_num);
 // Whitelist module
 void start_whitelist_task(int slot_num);
 
+// List Of Actions module
+void start_listOfActions_task(int slot_num);
+
 // Collector module
 void start_collector_task(int slot_num);
 
