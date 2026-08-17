@@ -159,7 +159,7 @@ int init_slots(void){
 		}else if(!strcmp(mode, "tachometer")){
 			start_tachometer_task(i);	// W, NOC
 		}else if(!strcmp(mode, "analog")){
-			start_adc1_task(i); // W, C
+			start_analog_task(i); // W, C
 		}else if(!strcmp(mode, "stepper")){
 			start_stepper_task(i);		// W, C
 		}else if(!strcmp(mode, "testsd")){
