@@ -23,8 +23,9 @@ idf_component_register(SRCS
                         encoders
                         lidars
                         accel 
-                        servoDev 
-                        dwin 
+                        servoDev
+                        servos
+                        dwin
                         PPM 
                         virtualSlots 
                         3n_MOSFET 

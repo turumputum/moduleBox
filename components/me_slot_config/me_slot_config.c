@@ -37,6 +37,7 @@
 #include "mb_oneWire.h"
 #include "accel.h"
 #include "servoDev.h"
+#include "servos.h"
 #include "steadywin.h"
 #include "ticketDispenser.h"
 #include "VESC.h"
@@ -212,6 +213,8 @@ int init_slots(void){
 			start_CAN_VESC_task(i);		// ???
 		}else if(!strcmp(mode, "PPM")){
 			start_ppm_generator_task(i);// W, NOC
+		}else if(!strcmp(mode, "PPMservo")){
+			start_PPMservo_task(i);		// W, C
 		}else if(!strcmp(mode, "tankControl")){
 			start_tankControl_task(i);	// W, NOC
 		}else if(!strcmp(mode, "furbyEye")){
