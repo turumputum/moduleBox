@@ -44,6 +44,7 @@
 #include "PPM.h"
 #include "CRSF.h"
 #include "artNet.h"
+#include "pwmGen.h"
 #include <stdarg.h>
 #include <rgbHsv.h>
 #include <stdreport.h>
@@ -122,6 +123,8 @@ int init_slots(void){
 			start_audioLAN_task(i); 		// W, C
 		}else if(!strcmp(mode, "opusLAN")){
 			start_opusLAN_task(i); 		// W, C (Opus codec)
+		}else if(!strcmp(mode, "PWMgenerator")){
+			start_PWMgenerator_task(i);
 		}else if(!strcmp(mode, "artNetCrosslink")){
 			start_artNetCrosslink_task(i);
 		}else if(!strcmp(mode, "button_ledRing")){

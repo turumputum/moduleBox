@@ -1,5 +1,5 @@
 file(GLOB_RECURSE MODULE_FILES
-    "mb_oneWire.c"
+    "PWMgenerator.c"
 )
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)

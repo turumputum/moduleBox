@@ -33,6 +33,7 @@ idf_component_register(SRCS
                         phoneDialer
                         adc
                         artNet
+                        pwmGen
 )
 
 
