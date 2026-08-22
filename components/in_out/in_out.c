@@ -66,6 +66,8 @@ typedef struct {
     int delay;
     int impulse;
     int out_state;
+    int impulseRest;        // уровень, на который вернуться по спаду импульса
+    int impulsing;          // импульс сейчас активен
 } in_out_context_t;
 
 // --- button_led ---
@@ -88,19 +90,29 @@ typedef enum
     .defaultState = 0, \
     .delay = 0, \
     .impulse = 0, \
-    .out_state = 0 \
+    .out_state = 0, \
+    .impulseRest = 0, \
+    .impulsing = 0 \
 }
+/* Работаем по указателю, а не по копии структуры: out_state должен остаться
+   записанным в контексте задачи. Раньше функция брала контекст ПО ЗНАЧЕНИЮ и
+   правила поле в своей копии, поэтому спад импульса гасил пин, но контекст
+   продолжал считать выход включённым - следующий импульс инвертировал не ту
+   сторону, и команда работала через раз, как тогл. */
 void set_out_level(void* arg, int level){
-    in_out_context_t ctx = *(in_out_context_t*)arg;
-    ctx.out_state = level;
-    gpio_set_level(ctx.out_pin_num, ctx.inverse_out ? !ctx.out_state : ctx.out_state);
-    //ESP_LOGD(TAG, "Set level: %ld for slot: %d", cmd.level, cmd.slot_num);
+    in_out_context_t *ctx = (in_out_context_t*)arg;
+    ctx->out_state = level;
+    gpio_set_level(ctx->out_pin_num, ctx->inverse_out ? !ctx->out_state : ctx->out_state);
+    //ESP_LOGD(TAG, "Set level: %d for pin: %d", level, ctx->out_pin_num);
 }
 
+/* Спад импульса выставляет ЗАПОМНЕННЫЙ уровень покоя, а не инвертирует
+   текущий: инверсия врёт, если за время импульса состояние успели поменять
+   командой setVal или повторным импульсом. */
 void impulse_fall(void* arg){
-	in_out_context_t ctx = *(in_out_context_t*)arg;
-	set_out_level(arg, !ctx.out_state);
-	//ESP_LOGD(TAG, "Set level: %ld for slot: %d", cmd.level, cmd.slot_num);
+	in_out_context_t *ctx = (in_out_context_t*)arg;
+	ctx->impulsing = 0;
+	set_out_level(ctx, ctx->impulseRest);
 }
 
 
@@ -377,9 +389,22 @@ static void in_out_task(void *arg) {
             case OUT_CMD_impulse:
                 if (!active_state) break;
                 int length = params.p[0].i;
-                ctx.out_state = !ctx.out_state;
-                set_out_level(&ctx, ctx.out_state);
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (length) * 1000));
+                /* Повторный импульс до истечения прошлого: таймер уже запущен,
+                   esp_timer_start_once вернул бы ESP_ERR_INVALID_STATE, а
+                   ESP_ERROR_CHECK уронил бы устройство в панику. Останавливаем
+                   и отсчитываем заново; уровень покоя запоминаем только на
+                   первом импульсе, иначе второй увёл бы выход в инверсию. */
+                esp_timer_stop(impulse_timer);
+                if (!ctx.impulsing) {
+                    ctx.impulseRest = ctx.out_state;
+                    ctx.impulsing = 1;
+                }
+                set_out_level(&ctx, !ctx.impulseRest);
+                if (esp_timer_start_once(impulse_timer, (length) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: impulse timer start failed", slot_num);
+                    ctx.impulsing = 0;
+                    set_out_level(&ctx, ctx.impulseRest);
+                }
                 break;
 
             default:

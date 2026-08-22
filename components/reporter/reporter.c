@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "reporter.h"
+#include "crosslink_expr.h"
 #include "esp_log.h"
 #include "myCDC.h"
 #include "stateConfig.h"
@@ -136,6 +137,7 @@ void crosslinker_(char* 	str,
 			char *trigerVal=NULL;
 			char *action=NULL;
 			char *actionVal=NULL;
+			char valBuf[24];
 
 			char memForCopy[strlen(crosslink)+1];
 			strcpy(memForCopy, crosslink);
@@ -237,9 +239,29 @@ void crosslinker_(char* 	str,
 					
 
 					//ESP_LOGD(TAG, "Lets work whith bolean operator.  eventVal:%d  threshold:%d  operator:%c", val, threshold, operator);
-				}else{
+				}else if ((actionVal != NULL) && (strchr(actionVal, '@') != NULL)){
+					/* Значение действия - выражение над значением события:
+					   '@', '@*2.4', '@*3.8+1000'. Раньше здесь стояло
+					   actionVal = eventVal, то есть текст выражения молча
+					   выбрасывался и множитель не работал. */
+					xl_expr_t expr;
+					int rc = xl_expr_parse(actionVal, &expr);
+
+					if (rc < 0){
+						ESP_LOGE(TAG, "crosslink: bad expression '%s' (err %d), passing event value as is", actionVal, rc);
+						actionVal = eventVal;
+					}else if (xl_expr_is_passthrough(&expr)){
+						actionVal = eventVal;
+					}else{
+						actionVal = xl_expr_format(xl_expr_eval(&expr, eventVal ? atof(eventVal) : 0.0f),
+												   valBuf, sizeof(valBuf));
+					}
+				}else if (actionVal == NULL){
+					/* Действие без значения - переносим значение события. */
 					actionVal = eventVal;
 				}
+				/* Иначе в позиции действия литерал (число или строка вроде
+				   'flash') - отдаём его как написано, без подстановки. */
 				//ESP_LOGD(TAG, "Lets transfer event payload to action.  event:%s  payload:%s", event, payload);
 			}
 			//action = action + 1;// cut ":" at begin

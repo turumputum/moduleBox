@@ -45,6 +45,8 @@ typedef struct {
     int inverseMass[3];
     int defaultStateMass[3];
     int stateMass[3];
+    int impulseRestMass[3];     // уровень возврата по спаду импульса
+    int impulsingMass[3];       // импульс по каналу сейчас активен
     int numOfCh;
     int active_state;
 } out_context_t;
@@ -75,19 +77,22 @@ void _set_out_level(void* arg, int level, int index){
 
 void _impulse_fall_0(void* arg){
 	out_context_t *ctx = (out_context_t*)arg;
-	_set_out_level(ctx, !ctx->stateMass[0], 0);
+	ctx->impulsingMass[0] = 0;
+	_set_out_level(ctx, ctx->impulseRestMass[0], 0);
 	// ESP_LOGD(TAG, "impulse fall ch_0: Set level: %d ", ctx->stateMass[0]);
 }
 
 void _impulse_fall_1(void* arg){
 	out_context_t *ctx = (out_context_t*)arg;
-	_set_out_level(ctx, !ctx->stateMass[1], 1);
+	ctx->impulsingMass[1] = 0;
+	_set_out_level(ctx, ctx->impulseRestMass[1], 1);
 	// ESP_LOGD(TAG, "impulse fall ch_1: Set level: %d ", ctx->stateMass[1]);
 }
 
 void _impulse_fall_2(void* arg){
 	out_context_t *ctx = (out_context_t*)arg;
-	_set_out_level(ctx, !ctx->stateMass[2], 2);
+	ctx->impulsingMass[2] = 0;
+	_set_out_level(ctx, ctx->impulseRestMass[2], 2);
 	// ESP_LOGD(TAG, "impulse fall ch_2: Set level: %d ", ctx->stateMass[2]);
 }
 
@@ -127,7 +132,10 @@ void configure_out_2ch(out_context_t *ctx, int slot_num) {
         char t_str[strlen(me_config.deviceName) + strlen("/out_0") + 3];
         sprintf(t_str, "%s/out_%d", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
-        ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
+        /* Без trigger_topic_list репортер публикует события от базы none -
+           событий модуля наружу фактически нет. Заполняем обе таблицы. */
+        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standard topic:%s", me_state.action_topic_list[slot_num]);
     }
 
     // Register commands
@@ -264,15 +272,41 @@ static void out_2ch_task(void *arg) {
 
             case OUT_CMD_ch_0_impulse:
                 int length_0 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[0], 0);
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_0, (length_0) * 1000));
+                /* Таймер мог остаться запущенным от предыдущего импульса:
+                   ESP_ERROR_CHECK на ESP_ERR_INVALID_STATE ронял устройство
+                   в панику. Уровень покоя запоминаем только на первом
+                   импульсе - иначе повторный увёл бы выход в инверсию. */
+                esp_timer_stop(impulse_timer_0);
+                if (!ctx.impulsingMass[0]) {
+                    ctx.impulseRestMass[0] = ctx.stateMass[0];
+                    ctx.impulsingMass[0] = 1;
+                }
+                _set_out_level(&ctx, !ctx.impulseRestMass[0], 0);
+                if (esp_timer_start_once(impulse_timer_0, (length_0) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: impulse timer ch_0 start failed", slot_num);
+                    ctx.impulsingMass[0] = 0;
+                    _set_out_level(&ctx, ctx.impulseRestMass[0], 0);
+                }
                 // ESP_LOGD(TAG, "Started impulse_timer_0 for %d ms", length_0);
                 break;
 
             case OUT_CMD_ch_1_impulse:
                 int length_1 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[1], 1);
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_1, (length_1) * 1000));
+                /* Таймер мог остаться запущенным от предыдущего импульса:
+                   ESP_ERROR_CHECK на ESP_ERR_INVALID_STATE ронял устройство
+                   в панику. Уровень покоя запоминаем только на первом
+                   импульсе - иначе повторный увёл бы выход в инверсию. */
+                esp_timer_stop(impulse_timer_1);
+                if (!ctx.impulsingMass[1]) {
+                    ctx.impulseRestMass[1] = ctx.stateMass[1];
+                    ctx.impulsingMass[1] = 1;
+                }
+                _set_out_level(&ctx, !ctx.impulseRestMass[1], 1);
+                if (esp_timer_start_once(impulse_timer_1, (length_1) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: impulse timer ch_1 start failed", slot_num);
+                    ctx.impulsingMass[1] = 0;
+                    _set_out_level(&ctx, ctx.impulseRestMass[1], 1);
+                }
                 break;
 
             default:
@@ -345,7 +379,10 @@ void configure_out_3ch(out_context_t *ctx, int slot_num) {
         char t_str[strlen(me_config.deviceName) + strlen("/out_0") + 3];
         sprintf(t_str, "%s/out_%d", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
-        ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
+        /* Без trigger_topic_list репортер публикует события от базы none -
+           событий модуля наружу фактически нет. Заполняем обе таблицы. */
+        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standard topic:%s", me_state.action_topic_list[slot_num]);
     }
 
     // Register commands
@@ -490,20 +527,59 @@ static void out_3ch_task(void *arg) {
 
             case OUT_CMD_ch_0_impulse:
                 int length_0 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[0], 0); 
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_0, (length_0) * 1000));
+                /* Таймер мог остаться запущенным от предыдущего импульса:
+                   ESP_ERROR_CHECK на ESP_ERR_INVALID_STATE ронял устройство
+                   в панику. Уровень покоя запоминаем только на первом
+                   импульсе - иначе повторный увёл бы выход в инверсию. */
+                esp_timer_stop(impulse_timer_0);
+                if (!ctx.impulsingMass[0]) {
+                    ctx.impulseRestMass[0] = ctx.stateMass[0];
+                    ctx.impulsingMass[0] = 1;
+                }
+                _set_out_level(&ctx, !ctx.impulseRestMass[0], 0);
+                if (esp_timer_start_once(impulse_timer_0, (length_0) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: impulse timer ch_0 start failed", slot_num);
+                    ctx.impulsingMass[0] = 0;
+                    _set_out_level(&ctx, ctx.impulseRestMass[0], 0);
+                }
                 break; 
 
             case OUT_CMD_ch_1_impulse:
                 int length_1 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[1], 1); 
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_1, (length_1) * 1000));
+                /* Таймер мог остаться запущенным от предыдущего импульса:
+                   ESP_ERROR_CHECK на ESP_ERR_INVALID_STATE ронял устройство
+                   в панику. Уровень покоя запоминаем только на первом
+                   импульсе - иначе повторный увёл бы выход в инверсию. */
+                esp_timer_stop(impulse_timer_1);
+                if (!ctx.impulsingMass[1]) {
+                    ctx.impulseRestMass[1] = ctx.stateMass[1];
+                    ctx.impulsingMass[1] = 1;
+                }
+                _set_out_level(&ctx, !ctx.impulseRestMass[1], 1);
+                if (esp_timer_start_once(impulse_timer_1, (length_1) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: impulse timer ch_1 start failed", slot_num);
+                    ctx.impulsingMass[1] = 0;
+                    _set_out_level(&ctx, ctx.impulseRestMass[1], 1);
+                }
                 break;
 
             case OUT_CMD_ch_2_impulse:
                 int length_2 = params.p[0].i;
-                _set_out_level(&ctx, !ctx.stateMass[2], 2); 
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer_2, (length_2) * 1000));
+                /* Таймер мог остаться запущенным от предыдущего импульса:
+                   ESP_ERROR_CHECK на ESP_ERR_INVALID_STATE ронял устройство
+                   в панику. Уровень покоя запоминаем только на первом
+                   импульсе - иначе повторный увёл бы выход в инверсию. */
+                esp_timer_stop(impulse_timer_2);
+                if (!ctx.impulsingMass[2]) {
+                    ctx.impulseRestMass[2] = ctx.stateMass[2];
+                    ctx.impulsingMass[2] = 1;
+                }
+                _set_out_level(&ctx, !ctx.impulseRestMass[2], 2);
+                if (esp_timer_start_once(impulse_timer_2, (length_2) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: impulse timer ch_2 start failed", slot_num);
+                    ctx.impulsingMass[2] = 0;
+                    _set_out_level(&ctx, ctx.impulseRestMass[2], 2);
+                }
                 break;
 
             default:
@@ -533,6 +609,8 @@ typedef struct {
     int inverse;
     int defaultState;
     int state;
+    int impulseRest;        // уровень, на который вернуться по спаду импульса
+    int impulsing;          // импульс сейчас активен
     int active_state;
 } relay_context_t;
 
@@ -542,9 +620,12 @@ typedef enum {
     RELAY_CMD_impulse,
 } RELAY_CMD;
 
+/* Спад импульса возвращает ЗАПОМНЕННЫЙ уровень покоя, а не инвертирует
+   текущий: инверсия врёт, если состояние успели поменять за время импульса. */
 static void _relay_impulse_fall(void* arg) {
     relay_context_t *ctx = (relay_context_t*)arg;
-    ctx->state = !ctx->state;
+    ctx->impulsing = 0;
+    ctx->state = ctx->impulseRest;
     gpio_set_level(ctx->out_pin, ctx->inverse ? !ctx->state : ctx->state);
 }
 
@@ -582,7 +663,10 @@ void configure_relay(relay_context_t *ctx, int slot_num) {
         char t_str[strlen(me_config.deviceName) + strlen("/relay_0") + 3];
         sprintf(t_str, "%s/relay_%d", me_config.deviceName, slot_num);
         me_state.action_topic_list[slot_num] = strdup(t_str);
-        ESP_LOGD(TAG, "Standard action_topic:%s", me_state.action_topic_list[slot_num]);
+        /* Без trigger_topic_list репортер публикует события от базы none -
+           событий модуля наружу фактически нет. Заполняем обе таблицы. */
+        me_state.trigger_topic_list[slot_num] = strdup(t_str);
+        ESP_LOGD(TAG, "Standard topic:%s", me_state.action_topic_list[slot_num]);
     }
 
     // Register commands
@@ -666,9 +750,22 @@ static void relay_task(void *arg) {
 
             case RELAY_CMD_impulse: {
                 int length = params.p[0].i;
-                ctx.state = !ctx.state;
+                /* Таймер мог остаться запущенным от предыдущего импульса:
+                   esp_timer_start_once вернёт ESP_ERR_INVALID_STATE, а
+                   ESP_ERROR_CHECK уронил бы устройство в панику. */
+                esp_timer_stop(impulse_timer);
+                if (!ctx.impulsing) {
+                    ctx.impulseRest = ctx.state;
+                    ctx.impulsing = 1;
+                }
+                ctx.state = !ctx.impulseRest;
                 gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
-                ESP_ERROR_CHECK(esp_timer_start_once(impulse_timer, (length) * 1000));
+                if (esp_timer_start_once(impulse_timer, (length) * 1000) != ESP_OK) {
+                    ESP_LOGE(TAG, "Slot_%d: relay impulse timer start failed", slot_num);
+                    ctx.impulsing = 0;
+                    ctx.state = ctx.impulseRest;
+                    gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
+                }
                 break;
             }
 

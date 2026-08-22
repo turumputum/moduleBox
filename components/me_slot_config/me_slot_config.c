@@ -43,6 +43,7 @@
 #include "VESC.h"
 #include "PPM.h"
 #include "CRSF.h"
+#include "artNet.h"
 #include <stdarg.h>
 #include <rgbHsv.h>
 #include <stdreport.h>
@@ -121,6 +122,8 @@ int init_slots(void){
 			start_audioLAN_task(i); 		// W, C
 		}else if(!strcmp(mode, "opusLAN")){
 			start_opusLAN_task(i); 		// W, C (Opus codec)
+		}else if(!strcmp(mode, "artNetCrosslink")){
+			start_artNetCrosslink_task(i);
 		}else if(!strcmp(mode, "button_ledRing")){
 			start_button_ledRing_task(i);
 		}else if(!strcmp(mode, "button_runFire")){
@@ -137,8 +140,12 @@ int init_slots(void){
 			start_in_out_task(i);
 		}else if(!strcmp(mode, "in_2ch")){
 			start_in_2ch_task(i);	// W, NOC
+		}else if(!strcmp(mode, "in_3ch")){
+			start_in_3ch_task(i);	// W, NOC
 		}else if(!strcmp(mode, "out_2ch")){
 			start_out_2ch_task(i);		// W, NOC
+		}else if(!strcmp(mode, "out_3ch")){
+			start_out_3ch_task(i);		// W, NOC
 		}else if(!strcmp(mode, "relay")){
 			start_relay_task(i);		// W, NOC
 		}else if(!strcmp(mode, "pwmLeds")){

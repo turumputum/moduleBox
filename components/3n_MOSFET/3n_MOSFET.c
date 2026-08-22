@@ -37,6 +37,7 @@ typedef struct __tag_MOSFETCONFIG
     uint16_t                refreshPeriod;
     uint16_t                fadeTime;
     RgbColor                targetRGB;
+    RgbColor                defaultRGB;     // цвет из опции RGBcolor, для пробуждения
     uint8_t                 ledMode;
     int                     active_state;
     STDCOMMANDS             cmds;
@@ -158,12 +159,25 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
     else
         ESP_LOGD(TAG, "Set color:%d %d %d for slot:%d", c->targetRGB.r, c->targetRGB.g, c->targetRGB.b, slot_num);
 
+    /* Копия настроенного цвета: targetRGB по ходу работы затирают setRGB и
+       ch_N/setBright, а пробуждение обязано вернуть модуль к известному виду. */
+    c->defaultRGB = c->targetRGB;
+
     /* Задаёт режим анимации: default - постоянное свечение целевым цветом. flash   - мигание между min и max яркостью. rainbow - циклический перебор оттенков HSV
     */
-    if ((c->ledMode = get_option_enum_val(slot_num, "ledMode", "default", "flash", "rainbow", NULL)) < 0)
+    /* Через int: ledMode - uint8_t, и проверка (... < 0) прямо на нём всегда
+       ложна. Опечатка в значении давала ledMode = 255, ни одна ветка режима
+       в цикле не совпадала, и модуль молча не трогал ШИМ вообще. */
     {
-        ESP_LOGE(TAG, "ledMode: unricognized value");
-        c->ledMode = PWM_MODE_DEFAULT;
+        int mode = get_option_enum_val(slot_num, "ledMode", "default", "flash", "rainbow", NULL);
+
+        if (mode < 0)
+        {
+            ESP_LOGE(TAG, "ledMode: unricognized value, fallback to default");
+            mode = PWM_MODE_DEFAULT;
+        }
+
+        c->ledMode = (uint8_t)mode;
     }
 
 	/* Топик по умолчанию: <deviceName>/pwmLeds_<slot_num>.
@@ -177,7 +191,7 @@ void configure_pwmLeds(PMOSFETCONFIG c, int slot_num)
 
     /* === COMMANDS === */
 
-    /* Включить-выключить модуль. Значение 0-1. По умолчанию 1. Флаг disableOnStart выключает модуль при старте. */
+    /* Включить-выключить модуль. Значение 0-1. По умолчанию 1. Пробуждение возвращает цвет из опции RGBcolor. Флаг disableOnStart выключает модуль при старте. */
     stdcommand_register(&c->cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* Установить новый целевой цвет. Цвет задаётся десятичными значениями R G B через пробел. Пример, 255 0 0 - красный.
@@ -310,7 +324,18 @@ void pwmLeds_task(void *arg){
                     int newState = params.p[0].i ? 1 : 0;
                     if (newState != c.active_state) {
                         c.active_state = newState;
-                        ESP_LOGD(TAG, "enable:%d slot:%d", c.active_state, slot_num);
+
+                        /* Пробуждение возвращает цвет из конфигурации. Одной
+                           яркости мало: targetRGB мог быть уведён в чёрный
+                           командой setRGB или кросслинком на ch_N/setBright
+                           (типичный случай - фейдер Art-Net ушёл в ноль), и
+                           тогда enable 1 поднимал яркость поверх чёрного. */
+                        if (c.active_state) {
+                            c.targetRGB = c.defaultRGB;
+                        }
+
+                        ESP_LOGD(TAG, "enable:%d slot:%d color:%d %d %d", c.active_state, slot_num,
+                                 c.targetRGB.r, c.targetRGB.g, c.targetRGB.b);
                         /* event/enable публикуем явно - авто-рассылки нет */
                         stdreport_enable(slot_num, c.active_state);
                     }

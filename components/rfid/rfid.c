@@ -61,6 +61,9 @@ void pn532Uart_task(void* arg) {
 		char t_str[strlen(me_config.deviceName)+strlen("/rfid_0")+3];
 		sprintf(t_str, "%s/rfid_%d",me_config.deviceName, slot_num);
 		me_state.trigger_topic_list[slot_num]=strdup(t_str);
+		/* Без action_topic_list executor не находит адресата, и
+		   action/enable до модуля не доходит вообще. */
+		me_state.action_topic_list[slot_num]=strdup(t_str);
 		ESP_LOGD(TAG, "Standart rfid_topic:%s", me_state.trigger_topic_list[slot_num]);
 	}
 

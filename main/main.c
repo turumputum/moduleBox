@@ -51,6 +51,7 @@
 #include "audioPlayer.h"
 
 #include "LAN.h"
+#include "artNet.h"
 #include "inttypes.h"
 #include "WIFI.h"
 
@@ -238,6 +239,8 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("REPORTER", level);
 	esp_log_level_set("LAN", level);
 	esp_log_level_set("[UDP]", level);
+	esp_log_level_set("artNet", level);
+	esp_log_level_set("ARTNET_XL", level);
 	esp_log_level_set("3n_MOSFET", level);
 	esp_log_level_set("RFID", level);
 	esp_log_level_set("ENCODERS", level);
@@ -339,6 +342,7 @@ extern int network_get_active_interfaces();
 			}
 
 			start_udp_receive_task(); 	// OK
+			start_artNet_task();		// OK
 			start_osc_recive_task(); 	// OK
 			start_ftp_task(); 			// OK
 			start_mdns_task();			// OK
@@ -370,9 +374,10 @@ void makeStatusReport(bool spread)
 	char topic [ 64 ];
 	char str [ 256 ];
 
-	snprintf(str, sizeof(str) - 1, "Heap %d, %s, %s\n", 
+	snprintf(str, sizeof(str) - 1, "Heap %d, %s, %s, %s\n", 
 			xPortGetFreeHeapSize(),
 			networkGetStatusString(),
+			artnetGetStatusString(),
 			usbGetStatusString()
 			);
 
@@ -529,6 +534,11 @@ void app_main(void)
 	set_usb_debug();
 
 	ESP_LOGD(TAG, "Free SPIRAM: %d bytes",heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+	/* Реестр Art-Net поднимается ДО слотов: слот-модули подписываются на
+	   юниверсы в момент старта задачи. Сокет откроется позже, вместе с
+	   остальными сетевыми сервисами. */
+	init_artNet();
 
 	me_state.slot_init_res = init_slots();
 

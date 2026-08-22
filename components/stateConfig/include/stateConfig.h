@@ -12,7 +12,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION "3.70"
+#define VERSION "3.71"
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -142,6 +142,17 @@ typedef struct {
 	uint16_t oscMyPort;
 
 	uint8_t MDNS_enable;
+
+	/* Art-Net: устройство работает только как приёмник (Art-Net node,
+	   output port). Имена ниже пульт показывает в списке найденных нод. */
+	uint8_t  artNet_enable;
+	uint8_t  artNet_pollReply;    // отвечать на ArtPoll
+	uint8_t  artNet_dmxLog;       // печатать в лог первые каналы принятых кадров
+	uint16_t artNet_timeout;      // мс тишины, после которых поток считается пропавшим
+	uint16_t artNet_oem;          // OEM-код Art-Net, 0x00FF - неизвестный производитель
+	uint16_t artNet_estaMan;      // код производителя ESTA
+	char *   artNet_shortName;    // до 17 символов, пусто - deviceName
+	char *   artNet_longName;     // до 63 символов, пусто - "moduleBox <deviceName>"
 
 	char *mqttBrokerAdress;
 	char *mqttLogin;

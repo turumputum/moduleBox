@@ -187,6 +187,27 @@ static int handler(void *user, const char *section, const char *name, const char
 		pconfig->oscServerPort = atoi(value);
 	} else if (MATCH("OSC", "oscMyPort")) {
 		pconfig->oscMyPort = atoi(value);
+	} else if (MATCH("ARTNET", "enable")) {//-----------------------------------------------
+		pconfig->artNet_enable = _yesno(value);
+	} else if (MATCH("ARTNET", "pollReply")) {
+		pconfig->artNet_pollReply = _yesno(value);
+	} else if (MATCH("ARTNET", "shortName")) {
+		free(pconfig->artNet_shortName);
+		pconfig->artNet_shortName = strdup(value);
+	} else if (MATCH("ARTNET", "longName")) {
+		free(pconfig->artNet_longName);
+		pconfig->artNet_longName = strdup(value);
+	} else if (MATCH("ARTNET", "timeout")) {
+		int v = atoi(value);
+		if (v < 100) v = 100;			// меньше трёх кадров - ложные срабатывания
+		if (v > 60000) v = 60000;
+		pconfig->artNet_timeout = v;
+	} else if (MATCH("ARTNET", "oem")) {
+		pconfig->artNet_oem = strtol(value, NULL, 0);
+	} else if (MATCH("ARTNET", "estaMan")) {
+		pconfig->artNet_estaMan = strtol(value, NULL, 0);
+	} else if (MATCH("ARTNET", "dmxLog")) {
+		pconfig->artNet_dmxLog = _yesno(value);
 	} else if (MATCH("MQTT", "mqttBrokerAdress")) {//-----------------------------------------------
 		pconfig->mqttBrokerAdress = strdup(value);
 	} else if (MATCH("MQTT", "mqttLogin")) {
@@ -288,6 +309,17 @@ void load_Default_Config(void) {
     me_state.UDP_init_res = ESP_FAIL;
 
 	
+	/* Art-Net выключен по умолчанию: приёмник держит порт 6454 и разбирает
+	   весь широковещательный трафик сегмента - платить за это без нужды незачем. */
+	me_config.artNet_enable = 0;
+	me_config.artNet_pollReply = 1;
+	me_config.artNet_dmxLog = 0;
+	me_config.artNet_timeout = 3000;
+	me_config.artNet_oem = 0x00FF;		// OemUnknown
+	me_config.artNet_estaMan = 0x7FF0;	// диапазон прототипов ESTA
+	me_config.artNet_shortName = strdup("");
+	me_config.artNet_longName = strdup("");
+
 	me_config.oscServerAdress = strdup("");
 	me_config.oscServerPort = 0;
 	me_config.oscMyPort = 0;
