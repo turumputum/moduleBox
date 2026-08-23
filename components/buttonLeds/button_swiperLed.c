@@ -311,6 +311,9 @@ void button_swiperLed_task(void *arg)
     uint8_t prevState = 0;
     int prev_button_state = -1;
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     // Публикуем стартовый уровень кнопки: event/press - это уровень 0-1, и

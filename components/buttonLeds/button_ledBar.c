@@ -331,6 +331,9 @@ void button_ledBar_task(void *arg)
     int targetPos = 0;
     uint8_t prevState = 255; // force recalc on first cycle
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     // Публикуем стартовый уровень кнопки: event/press - это уровень 0-1, и

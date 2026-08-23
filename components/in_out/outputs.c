@@ -192,9 +192,8 @@ static void out_2ch_task(void *arg) {
         gpio_set_direction(ctx.out_pinMass[i], GPIO_MODE_OUTPUT);
         ESP_LOGD(TAG, "SETUP OUT_pin_%d Slot:%d", ctx.out_pinMass[i], slot_num);
     }
-    esp_rom_gpio_pad_select_gpio(SLOTS_PIN_MAP[slot_num][2]);
-    gpio_set_direction(SLOTS_PIN_MAP[slot_num][2], GPIO_MODE_OUTPUT);
-    gpio_set_level(SLOTS_PIN_MAP[slot_num][2], 1);// для модулей out_2ch пин nsleep
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
 
     // Set default states
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -712,6 +711,9 @@ static void relay_task(void *arg) {
         .name = "relay_impulse"
     };
     esp_timer_create(&impulse_timer_args, &impulse_timer);
+
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
 
     waitForWorkPermit(slot_num);
     bool active_state = ctx.active_state;

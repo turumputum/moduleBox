@@ -65,6 +65,22 @@ int                 stdreport_register          (RPTT               output_type,
 
 
 
+/**
+ * @brief Сменить тип значения у уже зарегистрированного отчёта.
+ *
+ *        Нужен модулям, у которых формат выбирается конфигурацией: манифест
+ *        видит один топик с типом по умолчанию, а фактический формат задаёт
+ *        опция. Регистрация при этом остаётся одна - manifesto не должен
+ *        видеть два конкурирующих объявления одного и того же топика.
+ *
+ * @param reportRegId  Идентификатор от stdreport_register
+ * @param output_type  Новый тип значения
+ * @return 0 при успехе, -1 если идентификатор не годится
+ */
+int                 stdreport_setType           (int                reportRegId,
+                                                 RPTT               output_type);
+
+
 void                stdreport_i                 (int                reportRegId,
                                                  int                value);
 

@@ -455,9 +455,8 @@ void stepper_task(void *arg){
 		vTaskDelete(NULL);
 	}
 
-    esp_rom_gpio_pad_select_gpio(SLOTS_PIN_MAP[slot_num][2]);
-    gpio_set_direction(SLOTS_PIN_MAP[slot_num][2], GPIO_MODE_OUTPUT);
-    gpio_set_level(SLOTS_PIN_MAP[slot_num][2], 1);// для модулей out_2ch пин nsleep
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
     
     int32_t prevPos=0;
     int32_t prevSpeed=0;

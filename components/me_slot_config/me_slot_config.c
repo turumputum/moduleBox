@@ -499,6 +499,38 @@ int get_next_ledc_channel(void)
 	return me_state.ledc_chennelCounter++;
 }
 
+/* Третья ножка слота (индекс 2) - вход nSLEEP микросхемы драйвера выходов.
+   Пока она не поднята, драйвер держит выход в высоком импедансе и модуль
+   молча ничего не выдаёт наружу, сколько бы правильно он ни дёргал свои
+   сигнальные пины.
+
+   Поднимать её обязан КАЖДЫЙ модуль, который выдаёт сигнал наружу и сам эту
+   ножку не использует. Модули, у которых индекс 2 занят под собственный
+   сигнал (pwmLeds, out_3ch, in_3ch, distanceSens, wavPlayer и подобные),
+   эту функцию не зовут - там драйвером распоряжается сама схема слота.
+
+   Виртуальные слоты 6-9 в карте пинов нулевые: ноль означает отсутствие
+   ножки, а не GPIO0, поэтому такой слот молча пропускаем. */
+void enableSlotDriver(int slot_num)
+{
+	if ((slot_num < 0) || (slot_num >= NUM_OF_SLOTS))
+		return;
+
+	uint8_t pin = SLOTS_PIN_MAP[slot_num][2];
+
+	if (pin == 0)
+	{
+		ESP_LOGD(TAG, "slot %d has no driver enable pin", slot_num);
+		return;
+	}
+
+	esp_rom_gpio_pad_select_gpio(pin);
+	gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(pin, 1);
+
+	ESP_LOGD(TAG, "slot %d driver enabled, nSLEEP pin %d high", slot_num, pin);
+}
+
 // char* get_option_string_val(int slot_num, char* option, char* custom_topic){
 // 	char* resault;
 

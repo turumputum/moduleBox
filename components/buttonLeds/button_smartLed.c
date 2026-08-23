@@ -289,6 +289,9 @@ void button_smartLed_task(void *arg)
 
     update_led_smart(&ctx->led, pixels, &rmt_heap, slot_num, &currentRGB, &currentBright, &targetBright);
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     // Публикуем стартовый уровень кнопки: event/press - это уровень 0-1, и

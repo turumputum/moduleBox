@@ -125,13 +125,29 @@ static void _render_ratio(PSTDREPORTRATIO r, char * tmpString, float f_res)
 
     sprintf(tmpString,"%s%f", *r->rpt.topic ? r->rpt.topic : "", f_res);
 }
+int stdreport_setType(int                reportRegId,
+                      RPTT               output_type)
+{
+    if ((reportRegId < 0) || (reportRegId >= MAX_NUM_OF_STDREPORTS) || !reports[reportRegId])
+        return -1;
+
+    /* RPTT_ratio хранится в расширенной структуре с min и max - подменять тип
+       на него и с него нельзя, память под запись выделена другого размера. */
+    if ((output_type == RPTT_ratio) || (reports[reportRegId]->outType == RPTT_ratio))
+        return -1;
+
+    reports[reportRegId]->outType = output_type;
+
+    return 0;
+}
+
 void stdreport_i(int                reportRegId,
                  int                value)
 {
-    PSTDREPORT      p           = reports[reportRegId];
+    PSTDREPORT      p           = (reportRegId >= 0) ? reports[reportRegId] : NULL;
 	char            tmpString   [255];
 
-    if ((reportRegId < MAX_NUM_OF_STDREPORTS) && p)
+    if ((reportRegId >= 0) && (reportRegId < MAX_NUM_OF_STDREPORTS) && p)
     {
         switch (p->outType)
         {
@@ -156,10 +172,10 @@ void stdreport_i(int                reportRegId,
 void stdreport_f(int                reportRegId,
                  float              value)
 {
-    PSTDREPORT      p           = reports[reportRegId];
+    PSTDREPORT      p           = (reportRegId >= 0) ? reports[reportRegId] : NULL;
 	char            tmpString   [255];
 
-    if ((reportRegId < MAX_NUM_OF_STDREPORTS) && p)
+    if ((reportRegId >= 0) && (reportRegId < MAX_NUM_OF_STDREPORTS) && p)
     {
         switch (p->outType)
         {
@@ -182,10 +198,10 @@ void stdreport_f(int                reportRegId,
 void stdreport_s(int                reportRegId,
                  char *             value)
 {
-    PSTDREPORT      p           = reports[reportRegId];
+    PSTDREPORT      p           = (reportRegId >= 0) ? reports[reportRegId] : NULL;
 	char            tmpString   [255];
 
-    if ((reportRegId < MAX_NUM_OF_STDREPORTS) && p)
+    if ((reportRegId >= 0) && (reportRegId < MAX_NUM_OF_STDREPORTS) && p)
     {
         switch (p->outType)
         {

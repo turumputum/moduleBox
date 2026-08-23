@@ -19,3 +19,8 @@ int get_option_color_val(RgbColor * output, int slot_num, char* string, char * d
 //void get_option_string_val(int num_of_slot, char* option, char* custom_topic);
 
 int get_next_ledc_channel(void);
+
+/* Поднять nSLEEP драйвера выходов слота - третья ножка (индекс 2).
+   Зовут все модули, которые выдают сигнал наружу и сами эту ножку не
+   занимают; без этого выход остаётся в высоком импедансе. */
+void enableSlotDriver(int slot_num);

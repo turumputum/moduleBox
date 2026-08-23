@@ -348,6 +348,9 @@ void button_ledRing_task(void *arg)
     float targetPos = 0;
     uint8_t prevState = 255;
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     // Публикуем стартовый уровень кнопки: event/press - это уровень 0-1, и

@@ -299,6 +299,9 @@ static void in_out_task(void *arg) {
     // Create command queue for output
     me_state.command_queue[slot_num] = xQueueCreate(5, sizeof(command_message_t));
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     bool active_state = ctx.active_state;

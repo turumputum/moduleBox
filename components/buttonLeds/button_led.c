@@ -230,6 +230,9 @@ void button_led_task(void *arg)
     int16_t targetBright = ctx->led.state ? ctx->led.maxBright : ctx->led.minBright;
     bool brightnessCompletedLogged = false;
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     // Публикуем стартовый уровень кнопки: event/press - это уровень 0-1, и

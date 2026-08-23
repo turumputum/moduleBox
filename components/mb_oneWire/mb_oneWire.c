@@ -56,7 +56,7 @@ typedef struct {
     ds18b20_device_handle_t dev;
     uint64_t                address;
 
-    float                   lastSent;       /* последняя опубликованная       */
+    int32_t                 lastSent;       /* последняя опубликованная, мС   */
     uint8_t                 primed;         /* lastSent заполнена             */
 
     int8_t                  state;          /* состояние порога, -1 неизвестно */
@@ -68,8 +68,9 @@ typedef struct {
 typedef struct {
     STDCOMMANDS             cmds;
 
-    float                   deadBand;       /* градусы                        */
-    float                   threshold;      /* градусы, 0 - порог выключен    */
+    int32_t                 deadBand;       /* милиградусы                    */
+    int32_t                 threshold;      /* милиградусы                    */
+    uint8_t                 useThreshold;
     uint8_t                 inverse;
     uint8_t                 silent;
     uint32_t                periodic;       /* секунды, 0 - только по факту   */
@@ -106,16 +107,19 @@ void configure_ds18b20(ds_ctx_t *c, int slot_num)
 
     /* === OPTIONS === */
 
-    /* Минимальное изменение температуры для публикации в градусах, По умолчанию одна десятая градуса
+    /* Минимальное изменение для публикации в милиградусах, 100 это одна десятая градуса, По умолчанию 100
     */
-    c->deadBand = get_option_float_val(slot_num, "deadBand", 0.1);
-    if (c->deadBand < 0) c->deadBand = -c->deadBand;
-    ESP_LOGD(TAG, "[temp_%d] deadBand:%.2f", slot_num, c->deadBand);
+    c->deadBand = get_option_int_val(slot_num, "deadBand", "mC", 100, 0, 100000);
+    ESP_LOGD(TAG, "[temp_%d] deadBand:%ld mC", slot_num, (long)c->deadBand);
 
-    /* Порог срабатывания в градусах, 0 - порог выключен, По умолчанию 0
+    /* Порог срабатывания в милиградусах, 25000 это 25 градусов, По умолчанию порог выключен
     */
-    c->threshold = get_option_float_val(slot_num, "threshold", 0.0);
-    ESP_LOGD(TAG, "[temp_%d] threshold:%.2f", slot_num, c->threshold);
+    c->threshold = get_option_int_val(slot_num, "threshold", "mC", -273000, -273000, 125000);
+
+    /* Ноль это законные ноль градусов, поэтому выключенный порог опознаём по
+       значению ниже абсолютного нуля - такого измерения быть не может. */
+    c->useThreshold = (c->threshold > -273000);
+    ESP_LOGD(TAG, "[temp_%d] threshold:%ld mC, enabled:%d", slot_num, (long)c->threshold, c->useThreshold);
 
     /* Инверсия состояния порога, По умолчанию выключена
     */
@@ -168,33 +172,33 @@ void configure_ds18b20(ds_ctx_t *c, int slot_num)
     */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 
-    /* Температура датчика 0 в градусах Цельсия
+    /* Температура датчика 0 в милиградусах Цельсия - 24500 это 24-5 градуса
     */
-    c->sensor[0].tempReport   = stdreport_register(RPTT_float, slot_num, "C", "event/ch_0/temperature");
+    c->sensor[0].tempReport   = stdreport_register(RPTT_int, slot_num, "mC", "event/ch_0/temperature");
 
     /* Порог по датчику 0 пройден - 1 выше порога, 0 ниже
     */
     c->sensor[0].threshReport = stdreport_register(RPTT_int, slot_num, "", "event/ch_0/threshold");
 
-    /* Температура датчика 1 в градусах Цельсия
+    /* Температура датчика 1 в милиградусах Цельсия - 24500 это 24-5 градуса
     */
-    c->sensor[1].tempReport   = stdreport_register(RPTT_float, slot_num, "C", "event/ch_1/temperature");
+    c->sensor[1].tempReport   = stdreport_register(RPTT_int, slot_num, "mC", "event/ch_1/temperature");
 
     /* Порог по датчику 1 пройден - 1 выше порога, 0 ниже
     */
     c->sensor[1].threshReport = stdreport_register(RPTT_int, slot_num, "", "event/ch_1/threshold");
 
-    /* Температура датчика 2 в градусах Цельсия
+    /* Температура датчика 2 в милиградусах Цельсия - 24500 это 24-5 градуса
     */
-    c->sensor[2].tempReport   = stdreport_register(RPTT_float, slot_num, "C", "event/ch_2/temperature");
+    c->sensor[2].tempReport   = stdreport_register(RPTT_int, slot_num, "mC", "event/ch_2/temperature");
 
     /* Порог по датчику 2 пройден - 1 выше порога, 0 ниже
     */
     c->sensor[2].threshReport = stdreport_register(RPTT_int, slot_num, "", "event/ch_2/threshold");
 
-    /* Температура датчика 3 в градусах Цельсия
+    /* Температура датчика 3 в милиградусах Цельсия - 24500 это 24-5 градуса
     */
-    c->sensor[3].tempReport   = stdreport_register(RPTT_float, slot_num, "C", "event/ch_3/temperature");
+    c->sensor[3].tempReport   = stdreport_register(RPTT_int, slot_num, "mC", "event/ch_3/temperature");
 
     /* Порог по датчику 3 пройден - 1 выше порога, 0 ниже
     */
@@ -263,7 +267,7 @@ static int ds_discover(ds_ctx_t *c, onewire_bus_handle_t bus, int slot_num)
 // --------------------------------- REPORT ----------------------------------
 // -----|-------------------|-------------------------------------------------
 
-static void ds_handleValue(ds_ctx_t *c, int idx, float temperature, int forcePublish)
+static void ds_handleValue(ds_ctx_t *c, int idx, int32_t milliC, int forcePublish)
 {
     ds_sensor_t * s = &c->sensor[idx];
 
@@ -271,21 +275,24 @@ static void ds_handleValue(ds_ctx_t *c, int idx, float temperature, int forcePub
     {
         /* Дедбенд считается от последнего ОТПРАВЛЕННОГО значения, поэтому
            медленный дрейф не накапливается незамеченным. */
-        int changed = !s->primed || (fabsf(temperature - s->lastSent) >= c->deadBand);
+        int32_t delta   = milliC - s->lastSent;
+        if (delta < 0) delta = -delta;
+
+        int     changed = !s->primed || (delta >= c->deadBand);
 
         if (changed || forcePublish)
         {
-            s->lastSent = temperature;
+            s->lastSent = milliC;
             s->primed   = 1;
 
             if (s->tempReport >= 0)
-                stdreport_f(s->tempReport, temperature);
+                stdreport_i(s->tempReport, milliC);
         }
     }
 
-    if (c->threshold != 0.0f)
+    if (c->useThreshold)
     {
-        int8_t state = (temperature > c->threshold) ? !c->inverse : c->inverse;
+        int8_t state = (milliC > c->threshold) ? !c->inverse : c->inverse;
 
         if (state != s->state)
         {
@@ -345,8 +352,8 @@ void ds18b20_task(void* arg)
     for (int i = 0; i < c.count; i++)
         ds18b20_set_resolution(c.sensor[i].dev, c.resolution);
 
-    ESP_LOGI(TAG, "[temp_%d] ready: %d sensor(s), %d bit, deadBand %.2f C, periodic %lu s",
-             slot_num, c.count, c.resolution + 9, c.deadBand, (unsigned long)c.periodic);
+    ESP_LOGI(TAG, "[temp_%d] ready: %d sensor(s), %d bit, deadBand %ld mC, periodic %lu s",
+             slot_num, c.count, c.resolution + 9, (long)c.deadBand, (unsigned long)c.periodic);
 
     waitForWorkPermit(slot_num);
 
@@ -423,7 +430,11 @@ void ds18b20_task(void* arg)
                     continue;
                 }
 
-                ds_handleValue(&c, i, temperature, c.periodic > 0);
+                /* Единственное место, где в модуле появляется float - его
+                   отдаёт драйвер. Дальше всё в целых милиградусах. */
+                int32_t milliC = (int32_t)lroundf(temperature * 1000.0f);
+
+                ds_handleValue(&c, i, milliC, c.periodic > 0);
             }
         }
 

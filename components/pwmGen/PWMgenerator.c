@@ -292,6 +292,9 @@ void PWMgenerator_task(void *arg)
              slot_num, SLOTS_PIN_MAP[slot_num][1], (unsigned long)c.frequency,
              c.resBits, (unsigned long)c.dutyFull, c.inverse, (int)c.duty);
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     /* Стартовый рапорт состояния модуля (Конституция §6) */

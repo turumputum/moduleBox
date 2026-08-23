@@ -252,6 +252,9 @@ void PPMservo_task(void *arg)
     }
     ESP_LOGD(TAG, "[servo_%d] pin:%d ledc channel:%d", slot_num, SLOTS_PIN_MAP[slot_num][1], c.ledc_channel);
 
+    /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
+    enableSlotDriver(slot_num);
+
     waitForWorkPermit(slot_num);
 
     /* Стартовый рапорт состояния модуля (Конституция §6) */
