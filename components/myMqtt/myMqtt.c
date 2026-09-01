@@ -137,7 +137,11 @@ extern QueueHandle_t exec_mailbox;
 
 void mqtt_pub(const char *topic, const char *string){
     int msg_id = esp_mqtt_client_publish(client, topic, string, 0, me_config.mqttQOS, 0);
-    //ESP_LOGD(TAG, "sent publish successful, msg_id=%d", msg_id);
+    /* -1 - ошибка/нет соединения, -2 - переполнен outbox. Молча терять
+       публикации нельзя: именно так пропадали отчёты незаметно. */
+    if (msg_id < 0) {
+        ESP_LOGD(TAG, "Publish failed, topic:%s, err=%d", topic, msg_id);
+    }
 }
 
 void mqtt_diag_snapshot(mqtt_diag_t *out){
@@ -146,8 +150,147 @@ void mqtt_diag_snapshot(mqtt_diag_t *out){
 }
 
 void mqtt_sub(const char *topic){
-	esp_mqtt_client_subscribe(client, topic, me_config.mqttQOS);
-	ESP_LOGD(TAG, "Subcribed successful, topic:%s", topic);
+	int msg_id = esp_mqtt_client_subscribe_single(client, topic, me_config.mqttQOS);
+	if (msg_id < 0) {
+		ESP_LOGE(TAG, "Subscribe failed, topic:%s, err=%d", topic, msg_id);
+	} else {
+		ESP_LOGD(TAG, "Subcribed successful, topic:%s, msg_id=%d", topic, msg_id);
+	}
+}
+
+/* ---- стартовая подписка --------------------------------------------------
+   Раньше вся работа по MQTT_EVENT_CONNECTED делалась прямо в обработчике
+   события - то есть в задаче mqtt-клиента. Пока обработчик не вернётся,
+   клиент не читает сокет (SUBACK и входящие PUBLISH копятся), не шлёт
+   PINGREQ и не видит ошибок транспорта.
+   При 8 занятых слотах это 21 подписка, и каждая - отдельная запись в
+   сокет. При CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880 очередь отправки lwip
+   всего 8 сегментов (TCP_SND_QUEUELEN), а TCP_SNDLOWAT почти равен размеру
+   буфера - после восьмой записи каждая следующая ждала подтверждения всего
+   отправленного, по 1.5 с. Обработчик висел ~10 с, часть SUBSCRIBE вообще
+   не уходила, брокер рвал соединение (Connection reset by peer).
+   Теперь событие только будит задачу ниже, а она шлёт один пакет SUBSCRIBE
+   на все топики сразу. */
+static int append_json_topic(char *dst, size_t dst_size, const char *topic, int *count);
+
+#define MQTT_SUB_MAX_TOPICS   (NUM_OF_SLOTS * 2 + 1)
+/* Пакет SUBSCRIBE должен влезать в исходящий буфер клиента
+   (CONFIG_MQTT_BUFFER_SIZE, по умолчанию 1024 байта) - режем с запасом. */
+#define MQTT_SUB_CHUNK_BYTES  512
+
+static TaskHandle_t s_mqtt_setup_task = NULL;
+
+static bool mqtt_subscribe_all(void)
+{
+	esp_mqtt_topic_t topics[MQTT_SUB_MAX_TOPICS];
+	char *wildcards[MQTT_SUB_MAX_TOPICS];
+	char sysTopic[128];
+	int n = 0, nw = 0;
+
+	for (int i = 0; i < NUM_OF_SLOTS; i++) {
+		const char *action_topic = me_state.action_topic_list[i];
+		if (action_topic == NULL || strncmp(action_topic, "none", 4) == 0) continue;
+		if (n + 2 > MQTT_SUB_MAX_TOPICS) break;
+
+		size_t topic_len = strlen(action_topic);
+		char *wild = malloc(topic_len + 3);
+		if (wild == NULL) {
+			ESP_LOGE(TAG, "OOM while building MQTT subscribe topic");
+			continue;
+		}
+		snprintf(wild, topic_len + 3, "%s/#", action_topic);
+		wildcards[nw++] = wild;
+
+		topics[n].filter = action_topic; topics[n].qos = me_config.mqttQOS; n++;
+		topics[n].filter = wild;         topics[n].qos = me_config.mqttQOS; n++;
+	}
+
+	snprintf(sysTopic, sizeof(sysTopic), "%s/system/#", me_config.deviceName);
+	if (n < MQTT_SUB_MAX_TOPICS) {
+		topics[n].filter = sysTopic; topics[n].qos = me_config.mqttQOS; n++;
+	}
+
+	bool ok = true;
+	int sent = 0;
+	while (sent < n) {
+		int cnt = 0;
+		size_t bytes = 0;
+		while (sent + cnt < n) {
+			size_t need = strlen(topics[sent + cnt].filter) + 3;
+			if (cnt > 0 && bytes + need > MQTT_SUB_CHUNK_BYTES) break;
+			bytes += need;
+			cnt++;
+		}
+		int msg_id = esp_mqtt_client_subscribe_multiple(client, &topics[sent], cnt);
+		if (msg_id < 0) {
+			ESP_LOGE(TAG, "Subscribe failed: %d topics from '%s', err=%d",
+					 cnt, topics[sent].filter, msg_id);
+			ok = false;
+		} else {
+			ESP_LOGD(TAG, "Subcribed successful: %d topics, msg_id=%d, first:%s",
+					 cnt, msg_id, topics[sent].filter);
+		}
+		sent += cnt;
+	}
+
+	for (int i = 0; i < nw; i++) free(wildcards[i]);
+	return ok;
+}
+
+static void mqtt_publish_presence(void)
+{
+	char topic_list[1024] = { 0 };
+	char topicList_topic[255];
+	int count;
+
+	snprintf(willTopic, sizeof(willTopic), "clients/%s/state", me_config.deviceName);
+	mqtt_pub(willTopic, "1");
+
+	snprintf(topic_list, sizeof(topic_list), "{ \"triggers\":[ ");
+	count = 0;
+	for (int i = 0; i < NUM_OF_SLOTS; i++) {
+		const char *trigger_topic = me_state.trigger_topic_list[i];
+		if (trigger_topic && strncmp(trigger_topic, "none", 4) != 0) {
+			if (append_json_topic(topic_list, sizeof(topic_list), trigger_topic, &count) != 0) {
+				ESP_LOGW(TAG, "Topic list truncated while appending trigger topics");
+				break;
+			}
+		}
+	}
+	snprintf(topic_list + strlen(topic_list), sizeof(topic_list) - strlen(topic_list), " ], \"actions\":[ ");
+	count = 0;
+	for (int i = 0; i < NUM_OF_SLOTS; i++) {
+		const char *action_topic = me_state.action_topic_list[i];
+		if (action_topic && strncmp(action_topic, "none", 4) != 0) {
+			if (append_json_topic(topic_list, sizeof(topic_list), action_topic, &count) != 0) {
+				ESP_LOGW(TAG, "Topic list truncated while appending action topics");
+				break;
+			}
+		}
+	}
+	snprintf(topic_list + strlen(topic_list), sizeof(topic_list) - strlen(topic_list), " ] }");
+
+	snprintf(topicList_topic, sizeof(topicList_topic), "clients/%s/topics", me_config.deviceName);
+	ESP_LOGD(TAG, "Topic list:%s", topic_list);
+	mqtt_pub(topicList_topic, topic_list);
+}
+
+static void mqtt_setup_task(void *arg)
+{
+	for (;;) {
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		/* Пока ждали кванта, соединение могло уже отвалиться - тогда просто
+		   пропускаем: новая подписка приедет со следующим CONNECTED. */
+		if (!s_mqtt_diag.is_connected) continue;
+		/* Неудачная подписка оставила бы плату глухой до следующего
+		   reconnect - пробуем ещё пару раз, пока соединение живо. */
+		for (int attempt = 0; attempt < 3; attempt++) {
+			if (mqtt_subscribe_all()) break;
+			vTaskDelay(pdMS_TO_TICKS(500));
+			if (!s_mqtt_diag.is_connected) break;
+		}
+		if (s_mqtt_diag.is_connected) mqtt_publish_presence();
+	}
 }
 
 static int append_json_topic(char *dst, size_t dst_size, const char *topic, int *count)
@@ -192,76 +335,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		s_mqtt_diag.is_connected = 1;
 		mqtt_watchdog_stop();
 
-		for (int i = 0; i < NUM_OF_SLOTS; i++) {
-			const char *action_topic = me_state.action_topic_list[i];
-			if (action_topic && strncmp(action_topic, "none", 4) != 0) {
-				size_t topic_len = strlen(action_topic);
-				char *tmpS = malloc(topic_len + 3);
-				if (tmpS == NULL) {
-					ESP_LOGE(TAG, "OOM while building MQTT subscribe topic");
-					continue;
-				}
-				snprintf(tmpS, topic_len + 3, "%s/#", action_topic);
-				mqtt_sub(action_topic);
-				mqtt_sub(tmpS);
-				free(tmpS);
-			}	
+		/* Ничего тяжёлого здесь: обработчик крутится в задаче mqtt-клиента,
+		   и пока он не вернётся, клиент не читает сокет и не шлёт PINGREQ.
+		   Подписки и стартовые публикации делает mqtt_setup_task. */
+		if (s_mqtt_setup_task != NULL) {
+			xTaskNotifyGive(s_mqtt_setup_task);
+		} else {
+			ESP_LOGE(TAG, "mqtt_setup_task is not running, no subscriptions");
 		}
-
-		char tmpSB[255];
-		snprintf(tmpSB, sizeof(tmpSB), "%s/system/#", me_config.deviceName);
-		mqtt_sub(tmpSB);
-
-		snprintf(willTopic, sizeof(willTopic), "clients/%s/state", me_config.deviceName);
-		mqtt_pub(willTopic, "1");
-
-		//----------topic list generate-----------------
-		//---calc size
-		// int topic_list_size = strlen("{\n\"triggers\":[\n")+strlen("\n],\n\"actions\":[\n")+strlen("\n]\n}");
-		// for(int i=0; i<NUM_OF_SLOTS; i++){
-		// 	if(memcmp(me_state.action_topic_list[i],"none", 4)!=0){
-		// 		topic_list_size += strlen("\"\",\n");
-		// 		topic_list_size+=strlen(me_state.action_topic_list[i]);
-		// 	}
-		// 	if(memcmp(me_state.trigger_topic_list[i],"none", 4)!=0){
-		// 		topic_list_size += strlen("\"\",\n");
-		// 		topic_list_size+=strlen(me_state.trigger_topic_list[i]);
-		// 	}
-		// }
-		//---print to arrray
-		char topic_list[1024] = { 0 };
-		int count;
-
-		snprintf(topic_list, sizeof(topic_list), "{ \"triggers\":[ ");
-		count = 0;
-		for (int i = 0; i < NUM_OF_SLOTS; i++) {
-			const char *trigger_topic = me_state.trigger_topic_list[i];
-			if (trigger_topic && strncmp(trigger_topic, "none", 4) != 0) {
-				if (append_json_topic(topic_list, sizeof(topic_list), trigger_topic, &count) != 0) {
-					ESP_LOGW(TAG, "Topic list truncated while appending trigger topics");
-					break;
-				}
-			}
-		}
-		snprintf(topic_list + strlen(topic_list), sizeof(topic_list) - strlen(topic_list), " ], \"actions\":[ ");
-		count = 0;
-		for (int i = 0; i < NUM_OF_SLOTS; i++) {
-			const char *action_topic = me_state.action_topic_list[i];
-			if (action_topic && strncmp(action_topic, "none", 4) != 0) {
-				if (append_json_topic(topic_list, sizeof(topic_list), action_topic, &count) != 0) {
-					ESP_LOGW(TAG, "Topic list truncated while appending action topics");
-					break;
-				}
-			}
-		}
-		snprintf(topic_list + strlen(topic_list), sizeof(topic_list) - strlen(topic_list), " ] }");
-
-		char topicList_topic[255];
-		snprintf(topicList_topic, sizeof(topicList_topic), "clients/%s/topics", me_config.deviceName);
-
-		ESP_LOGD(TAG, "Topic list:%s", topic_list);
-		mqtt_pub(topicList_topic, topic_list);
-		//---declare action list to brocker
 
 		break;
 	case MQTT_EVENT_DISCONNECTED:
@@ -408,6 +489,11 @@ int mqtt_app_start(void)
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     //ESP_ERROR_CHECK(esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL));
     //ESP_ERROR_CHECK(esp_mqtt_client_start(client));
+
+	/* Задача поднимается ДО старта клиента: первый MQTT_EVENT_CONNECTED
+	   может прийти сразу и должен застать её готовой. */
+	xTaskCreatePinnedToCore(mqtt_setup_task, "mqtt_setup", 1024 * 6, NULL,
+	                        configMAX_PRIORITIES - 20, &s_mqtt_setup_task, 0);
 
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
 	esp_mqtt_client_start(client);

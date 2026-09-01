@@ -98,12 +98,12 @@ void configure_encoderInc(PINCCONFIG c, int slot_num)
     c->zeroShift = get_option_int_val(slot_num, "zeroShift", "", 0, INT16_MIN, INT16_MAX);
     ESP_LOGD(TAG, "[encoder_%d] zeroShift:%d", slot_num, c->zeroShift);
 
-    /* Минимальное значение позиции - По умолчанию 0 */
-    c->minVal = get_option_int_val(slot_num, "minVal", "", 0, INT32_MIN, INT32_MAX);
+    /* Минимальное значение позиции - По умолчанию INT32_MIN */
+    c->minVal = get_option_int_val(slot_num, "minVal", "", INT32_MIN, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "[encoder_%d] minVal:%ld", slot_num, c->minVal);
 
-    /* Максимальное значение позиции - По умолчанию 4096 */
-    c->maxVal = get_option_int_val(slot_num, "maxVal", "", 4096, INT32_MIN, INT32_MAX);
+    /* Максимальное значение позиции - По умолчанию  */
+    c->maxVal = get_option_int_val(slot_num, "maxVal", "", INT32_MAX, INT32_MIN, INT32_MAX);
     ESP_LOGD(TAG, "[encoder_%d] maxVal:%ld", slot_num, c->maxVal);
 
     /* Период опроса значений в Гц - По умолчанию 20, максимум 100 */

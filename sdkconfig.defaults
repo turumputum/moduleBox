@@ -12,7 +12,15 @@ CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
 CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
 
 # Smaller TCP windows + UDP mailbox (64 was anomalously high).
-CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
+# Send buffer 3*MSS, not 2: при 2880 очередь отправки lwip
+# (TCP_SND_QUEUELEN = 4*SND_BUF/MSS) была всего 8 сегментов, а TCP_SNDLOWAT
+# упирался в 2879 из 2880 - девятая подряд мелкая запись в сокет вставала на
+# ~1.5 с, пока не подтвердится вообще всё отправленное. Это роняло MQTT.
+# 4320 даёт 12 сегментов и разблокировку с ~1.4 КБ данных в полёте.
+# SND_BUF - это лимит очереди, а не преаллокация: статической DRAM не стоит,
+# pbuf'ы берутся из кучи (и с SPIRAM_TRY_ALLOCATE_WIFI_LWIP уходят в PSRAM).
+# WND трогать не стали - вот он буферизует приём и стоит реальной памяти.
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=4320
 CONFIG_LWIP_TCP_WND_DEFAULT=2880
 CONFIG_LWIP_UDP_RECVMBOX_SIZE=16
 
