@@ -17,6 +17,7 @@
 #include "esp_freertos_hooks.h"
 
 #include "esp_log.h"
+#include "esp_system.h"
 #include "nvs_flash.h"
 
 #include "esp_peripherals.h"
@@ -400,6 +401,25 @@ void makeStatusReport(bool spread)
 	mblog(I, str);
 }
 
+/* Причина последнего сброса - текстом. Нужна для расследования порчи FAT: если
+   том бьётся в момент panic-brownout-watchdog посреди записи, это видно только
+   отсюда, обычный лог до ребута ничего не успевает записать. */
+static const char * resetReasonStr(esp_reset_reason_t r){
+	switch(r){
+		case ESP_RST_POWERON:   return "POWERON";
+		case ESP_RST_EXT:       return "EXT";
+		case ESP_RST_SW:        return "SW";
+		case ESP_RST_PANIC:     return "PANIC";
+		case ESP_RST_INT_WDT:   return "INT_WDT";
+		case ESP_RST_TASK_WDT:  return "TASK_WDT";
+		case ESP_RST_WDT:       return "WDT";
+		case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+		case ESP_RST_BROWNOUT:  return "BROWNOUT";
+		case ESP_RST_SDIO:      return "SDIO";
+		default:                return "UNKNOWN";
+	}
+}
+
 void setVolumeLabel()
 {
 	char label[11] = "           ";
@@ -529,7 +549,13 @@ void app_main(void)
 
 	setVolumeLabel();
 
-	mblog(I, "Log session begin");
+	{
+		esp_reset_reason_t rr = esp_reset_reason();
+		/* PANIC-BROWNOUT-WDT - аварийный ребут, пишем как ошибку, чтобы попало в лог
+		   при любом logLevel и сразу бросалось в глаза при grep. */
+		mblog((rr == ESP_RST_POWERON || rr == ESP_RST_SW || rr == ESP_RST_EXT) ? I : E,
+		      "Log session begin. Reset reason: %s (%d)", resetReasonStr(rr), (int)rr);
+	}
 	
 	set_usb_debug();
 

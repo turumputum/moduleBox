@@ -130,14 +130,22 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 // Защищает таймер mcpwm от слишком высокой частоты при большом currentSpeed.
 #define STEPPER_MIN_PERIOD 5
 
-// Допуск парковки, шагов.
-// Раньше единственным условием останова было ТОЧНОЕ равенство currentPos==targetPos.
-// Стоит промахнуться хотя бы на шаг - равенство не наступит никогда: мотор не
-// паркуется, таймер продолжает импульсы, checkDir разворачивает направление, и
-// система уходит в автоколебания вокруг цели (дребезг dir в логе).
-// PCNT считает НАШИ ЖЕ импульсы (io_loop_back), а не энкодер, поэтому ошибка
-// позиции не физическая - догонять последние шаги бессмысленно, надо парковаться.
-#define STEPPER_POS_TOLERANCE 2
+// Парковка - только по ТОЧНОМУ равенству currentPos==targetPos.
+// Раньше стоял допуск в 2 шага: программный тик ловил остаток <=2 и парковал
+// мотор, не дожидаясь аппаратной watch-точки PCNT - moveTo:10000 заканчивался
+// на 9998. PCNT считает импульсы, реально ушедшие в драйвер (io_loop_back), так
+// что недоезд физический. Допуск был костылём от автоколебаний старой логики,
+// когда таймер на нулевой скорости продолжал пульсировать на полу minSpeed;
+// теперь генерация на нуле гасится (pulsesPaused), а перелёт в пару шагов
+// исправляется разворотом на минимальной скорости до аппаратной остановки.
+// От разноса защищает STEPPER_CORR_MAX ниже.
+
+// Защита от разноса при доводке: сколько разворотов ВБЛИЗИ цели (остаток не
+// больше STEPPER_CORR_WINDOW шагов) допускаем на один ход. Если ось столько раз
+// перелетела и вернулась, значит цель недостижима (DIR/dirInverse врут, счётчик
+// теряет шаги) - паркуемся там, где стоим, вместо бесконечных качаний.
+#define STEPPER_CORR_WINDOW 16
+#define STEPPER_CORR_MAX    3
 
 // Выдержка DIR перед возобновлением импульсов step, мкс. С запасом перекрывает
 // требования типовых драйверов (A4988 ~200нс, DRV8825 ~650нс, TMC - больше).
@@ -147,9 +155,7 @@ void speedStepper_setDirection(speedStepper_t *stepper, int8_t clockwise) {
 // Зовётся в том числе из ISR (pcnt_on_target_reached, IRAM_ATTR), поэтому без
 // llabs и прочих вызовов, которые могут оказаться во flash: только инлайн-арифметика.
 static inline int stepper_atTarget(stepper_t *stepper){
-    int64_t err = (int64_t)stepper->targetPos - (int64_t)stepper->currentPos;
-    if(err < 0) err = -err;
-    return (err <= STEPPER_POS_TOLERANCE);
+    return (stepper->targetPos == stepper->currentPos);
 }
 
 void stepper_getCurrentPos(stepper_t *stepper){
@@ -180,7 +186,9 @@ void stepper_stop(stepper_t *stepper) {
     stepper->runSpeedFlag = 0;
     stepper->currentSpeed = 0;
     stepper->targetSpeed = 0;
-    ESP_ERROR_CHECK(mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL));
+    // Без ESP_ERROR_CHECK: функция зовётся из ISR (pcnt_on_target_reached), а
+    // abort из прерывания - это panic и ребут посреди записи на SD-карту.
+    mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL);
     stepper->state=STOP;
     stepper->pulsesPaused = 0;
     //ESP_LOGD(TAG, "stopped");
@@ -197,14 +205,19 @@ void stepper_break(stepper_t *stepper) {
     ESP_LOGD(TAG, "break_distance: %f stopPoint: %lld", accel_distance, target);
 }
 
+// ВНИМАНИЕ: колбэк зовёт stepper_getCurrentPos и stepper_stop -> mcpwm_timer_start_stop,
+// которые лежат во flash. Поэтому CONFIG_PCNT_ISR_IRAM_SAFE должен быть ВЫКЛЮЧЕН
+// (см. sdkconfig.defaults): иначе прерывание придёт при отключённом кэше flash и
+// прошивка упадёт с "Cache disabled but cached memory region accessed".
 static bool IRAM_ATTR pcnt_on_target_reached(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_data) {
     stepper_t* stepper = (stepper_t*) user_data;
     stepper_getCurrentPos(stepper);
     //ESP_LOGD(TAG, "currentPos: %ld", stepper->currentPos);
     // pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->currentPos);
     //stepper->state++;
-    // Допуск, а не точное равенство: при перелёте на шаг равенство не наступит
-    // никогда и мотор не припаркуется (см. STEPPER_POS_TOLERANCE).
+    // Watch-точка стоит ровно на цели, поэтому здесь останавливаем по точному
+    // равенству. Сюда же приходят события границ аккумуляции +-32767 - для них
+    // равенства нет, и мотор едет дальше.
     if(stepper_atTarget(stepper)){
         // Останавливаем двигатель
         stepper_stop(stepper);
@@ -287,8 +300,22 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
         .period_ticks = 100,      // 1KHz
         .count_mode = MCPWM_TIMER_COUNT_MODE_UP,
         .flags.update_period_on_empty = true,
-    }; 
-    ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config, &stepper->mcpwmTimer));
+    };
+    // В группе MCPWM три таймера и три оператора - четвёртый stepper их не
+    // получит. Раньше здесь стоял ESP_ERROR_CHECK, и лишний мотор в конфиге
+    // ронял прошивку в abort и бесконечную перезагрузку. Теперь освобождаем
+    // уже занятый PCNT и возвращаем ESP_FAIL - вызывающий сообщит пользователю.
+    esp_err_t mcpwm_err = mcpwm_new_timer(&timer_config, &stepper->mcpwmTimer);
+    if (mcpwm_err != ESP_OK) {
+        ESP_LOGE(TAG, "mcpwm_new_timer failed err:%d - no free MCPWM timer (max 3 steppers)", mcpwm_err);
+        pcnt_unit_stop(stepper->pcntUnit);
+        pcnt_unit_disable(stepper->pcntUnit);
+        pcnt_del_channel(stepper->pcntChan);
+        pcnt_del_unit(stepper->pcntUnit);
+        stepper->pcntUnit = NULL;
+        stepper->pcntChan = NULL;
+        return ESP_FAIL;
+    }
 
     mcpwm_operator_config_t operator_config = {
         .group_id = 0,
@@ -388,6 +415,20 @@ void stepper_checkDir(stepper_t *stepper){
                 mcpwm_timer_start_stop(stepper->mcpwmTimer, MCPWM_TIMER_STOP_FULL);
             }
 
+            /* Разворот вблизи цели - это доводка после перелёта. Считаем их:
+               больше STEPPER_CORR_MAX на один ход - паркуемся (см. define). */
+            int64_t dist = llabs((int64_t)stepper->targetPos - (int64_t)stepper->currentPos);
+            if(dist <= STEPPER_CORR_WINDOW){
+                if(++stepper->corrCount > STEPPER_CORR_MAX){
+                    ESP_LOGW(TAG, "target unreachable: %d reversals within %d steps, parking at %ld (target %ld)",
+                             stepper->corrCount, STEPPER_CORR_WINDOW, stepper->currentPos, stepper->targetPos);
+                    stepper_stop(stepper);
+                    return;
+                }
+            }else{
+                stepper->corrCount = 0;
+            }
+
             stepper->dir=dir;
             gpio_set_level(stepper->dirPin, dir==DIR_UP ? !stepper->dirInverse : stepper->dirInverse);
             esp_rom_delay_us(STEPPER_DIR_SETUP_US);
@@ -408,7 +449,6 @@ void stepper_checkDir(stepper_t *stepper){
             // Порядок клампов важен: сначала пол minSpeed, потом потолок maxSpeed -
             // потолок должен побеждать, иначе runSpeed:0 (maxSpeed==0) уполз бы
             // на minSpeed вместо остановки.
-            int64_t dist = llabs((int64_t)stepper->targetPos - (int64_t)stepper->currentPos);
             int64_t v    = (int64_t)sqrt(2.0 * (double)stepper->accel * (double)dist);
 
             if(v < stepper->minSpeed) v = stepper->minSpeed;
@@ -421,19 +461,32 @@ void stepper_checkDir(stepper_t *stepper){
 }
 
 void stepper_moveTo(stepper_t *stepper, int32_t pos){
-    stepper_getCurrentPos(stepper);
     stepper->targetPos = pos;
     stepper->targetSpeed = stepper->maxSpeed;
-    
-    int64_t distance = stepper->targetPos - stepper->currentPos;
-    if(distance==0){
-        return;
-    }
-   
+    stepper->corrCount = 0;
+
     pcnt_unit_remove_watch_point(stepper->pcntUnit, stepper->pcnt_watchPoint);
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MAX);
     pcnt_unit_remove_watch_point(stepper->pcntUnit, INT16_MIN);
-    // ВАЖНО: считаем в int64. distance может превышать INT32_MAX (диапазон позиции
+
+    /* Позицию читаем и счётчик обнуляем вплотную друг к другу: импульсы,
+       проскочившие между чтением и обнулением, теряются для currentPos. Раньше
+       между ними стояли снятие watch-точек и checkDir - при команде на ходу
+       это стоило шаг-другой на каждый moveTo. */
+    stepper_getCurrentPos(stepper);
+    pcnt_unit_clear_count(stepper->pcntUnit);
+    stepper->pcnt_prevPos = 0;
+
+    int64_t distance = (int64_t)stepper->targetPos - (int64_t)stepper->currentPos;
+    if(distance==0){
+        // Стоим на цели: watch-точки уже сняты, взводим только границы
+        // аккумуляции, чтобы счётчик не потерялся до следующего хода.
+        pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX);
+        pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
+        if(stepper->state != STOP) stepper_stop(stepper);
+        return;
+    }
+// ВАЖНО: считаем в int64. distance может превышать INT32_MAX (диапазон позиции
     // INT32_MIN..INT32_MAX), и усечение в int32 ДО свертки ломало бы модуль 32767.
     // Асимметрия 32767/32768 - не ошибка: это периоды аккумуляции HW PCNT для
     // high_limit (INT16_MAX) и low_limit (INT16_MIN) соответственно.
@@ -472,10 +525,8 @@ void stepper_moveTo(stepper_t *stepper, int32_t pos){
     pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MAX);
     pcnt_unit_add_watch_point(stepper->pcntUnit, INT16_MIN);
     //ESP_LOGD(TAG, "add watch point %d", stepper->pcnt_watchPoint);
-    ESP_ERROR_CHECK(pcnt_unit_clear_count(stepper->pcntUnit));
-    stepper->pcnt_prevPos = 0;
-    
-    
+
+
     /* Профиль скорости больше НЕ планируется здесь заранее: stepper_speedUpdate
        каждый тик пересчитывает потолок скорости от остатка пути. Прежний расчёт
        reachableSpeed отсюда убран - он мог перебить обнулённый checkDir'ом
@@ -517,9 +568,10 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
         }
     }
 
-    // Цель достигнута (в пределах допуска) - паркуемся и выходим. Это и рвёт
-    // предельный цикл: stepper_stop гасит таймер и подтягивает targetPos к
-    // currentPos, поэтому checkDir дальше не разворачивает направление.
+    // Цель достигнута ТОЧНО - паркуемся и выходим (обычно это уже сделала
+    // watch-точка PCNT в ISR, здесь - страховка). Перелёт на шаг-два сюда не
+    // попадает: ниже checkDir развернёт ось и доведёт на минимальной скорости,
+    // а остановит её аппаратная watch-точка ровно на цели.
     // В режиме runSpeed сюда не попадаем - хак выше держит остаток хода большим.
     if(stepper_atTarget(stepper)){
         if(stepper->state != STOP){
@@ -533,6 +585,8 @@ void stepper_speedUpdate(stepper_t *stepper, int32_t period){
     /* Разворот, если цель осталась позади: checkDir гасит targetSpeed, а по
        достижении нулевой скорости меняет DIR и назначает скорость возврата. */
     stepper_checkDir(stepper);
+    // checkDir мог припарковать ось (лимит разворотов при доводке) - дальше не считаем
+    if(stepper->state == STOP) return;
 
     int8_t needDir = (stepper->targetPos > stepper->currentPos) ? DIR_UP : DIR_DOWN;
 

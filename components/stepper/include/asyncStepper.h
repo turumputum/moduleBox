@@ -108,6 +108,7 @@ typedef struct {
   int8_t runSpeedFlag;
   int8_t state;
   int8_t pulsesPaused;   // генерация step приостановлена на нулевой скорости (ждём разворота), state при этом остаётся RUN
+  int8_t corrCount;      // разворотов вблизи цели за текущий ход - защита от разноса при доводке
 
 }stepper_t;
 
@@ -145,8 +146,13 @@ typedef struct {
   .runSpeedFlag = 0,\
   .state = STOP,\
   .pulsesPaused = 0,\
+  .corrCount = 0,\
 }
 
+/* Инициализация PCNT (счёт позиции) и MCPWM (генерация step).
+   Возвращает: ESP_OK; код драйвера PCNT (ESP_ERR_NOT_FOUND - нет свободного
+   юнита, их 4 на encoderInc + tachometer + stepper); ESP_FAIL - нет свободного
+   MCPWM-таймера (3 в группе, не больше трёх моторов), PCNT при этом освобождён. */
 esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_pin, uint8_t pulseWidth);
 void stepper_setPeriod(stepper_t *stepper, uint32_t period);
 void stepper_getCurrentPos(stepper_t *stepper);

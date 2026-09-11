@@ -371,6 +371,9 @@ static void in_out_task(void *arg) {
                     ESP_LOGD(TAG, "enable:%d slot:%d", active_state, slot_num);
                     if (!active_state) {
                         // reset output to default state on disable
+                        /* Недоигранный импульс гасим - иначе его спад перебьёт default */
+                        esp_timer_stop(impulse_timer);
+                        ctx.impulsing = 0;
                         ctx.out_state = ctx.defaultState;
                         set_out_level(&ctx, ctx.out_state);
                     }

@@ -182,7 +182,7 @@ static void out_2ch_task(void *arg) {
     
     int slot_num =  (int)(intptr_t)arg;
 
-    out_context_t ctx;
+    out_context_t ctx = {0};   /* impulsing/impulseRest со стека были мусором - импульс с первого раза шёл наоборот */
     configure_out_2ch(&ctx, slot_num);
 
     // Configure all GPIO pins
@@ -243,8 +243,12 @@ static void out_2ch_task(void *arg) {
                     ESP_LOGD(TAG, "[out_2ch_%d] enable:%d", slot_num, active_state);
                     stdreport_enable(slot_num, active_state);
                     if (!active_state) {
-                        /* На выключении сбрасываем выходы в default-состояние */
+                        /* На выключении сбрасываем выходы в default-состояние,
+                           недоигранный импульс гасим - иначе его спад перебьёт default */
+                        esp_timer_stop(impulse_timer_0);
+                        esp_timer_stop(impulse_timer_1);
                         for (int i = 0; i < ctx.numOfCh; i++) {
+                            ctx.impulsingMass[i] = 0;
                             _set_out_level(&ctx, ctx.defaultStateMass[i], i);
                         }
                     }
@@ -426,7 +430,7 @@ static void out_3ch_task(void *arg) {
     
     int slot_num = (int)(intptr_t)arg;
 
-    out_context_t ctx;
+    out_context_t ctx = {0};   /* impulsing/impulseRest со стека были мусором - импульс с первого раза шёл наоборот */
     configure_out_3ch(&ctx, slot_num);
 
     // Configure all GPIO pins
@@ -493,7 +497,12 @@ static void out_3ch_task(void *arg) {
                     ESP_LOGD(TAG, "[out_3ch_%d] enable:%d", slot_num, active_state);
                     stdreport_enable(slot_num, active_state);
                     if (!active_state) {
+                        /* Недоигранный импульс гасим - иначе его спад перебьёт default */
+                        esp_timer_stop(impulse_timer_0);
+                        esp_timer_stop(impulse_timer_1);
+                        esp_timer_stop(impulse_timer_2);
                         for (int i = 0; i < ctx.numOfCh; i++) {
+                            ctx.impulsingMass[i] = 0;
                             _set_out_level(&ctx, ctx.defaultStateMass[i], i);
                         }
                     }
@@ -686,7 +695,7 @@ static void relay_task(void *arg) {
 
     int slot_num = (int)(intptr_t)arg;
 
-    relay_context_t ctx;
+    relay_context_t ctx = {0}; /* impulsing/impulseRest со стека были мусором - импульс с первого раза шёл наоборот */
     configure_relay(&ctx, slot_num);
 
     // Configure GPIO pin (pin index 1)
@@ -734,6 +743,9 @@ static void relay_task(void *arg) {
                     ESP_LOGD(TAG, "[relay_%d] enable:%d", slot_num, active_state);
                     stdreport_enable(slot_num, active_state);
                     if (!active_state) {
+                        /* Недоигранный импульс гасим - иначе его спад перебьёт default */
+                        esp_timer_stop(impulse_timer);
+                        ctx.impulsing = 0;
                         ctx.state = ctx.defaultState;
                         gpio_set_level(ctx.out_pin, ctx.inverse ? !ctx.state : ctx.state);
                     }

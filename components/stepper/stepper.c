@@ -52,6 +52,13 @@ static const char *TAG = "STEPPER";
 // Период смены уровня DIR в анабиозе, мс (два переключения в секунду).
 #define ANABIOSIS_BLINK_MS 500
 
+// Пауза перед автоматическим базированием (goHomeOnStart), мс. Слоты стартуют
+// одновременно, и датчик нуля с концевиками присылают своё состояние по
+// кросслинку уже после нашего старта - без паузы процедура начиналась бы по
+// картине "все датчики выключены" и, стоя на датчике, ехала бы не в ту сторону.
+// В паузе команды принимаются как обычно: движение откладывается в очередь.
+#define GO_HOME_ON_START_DELAY_MS 2000
+
 #define UP 1
 #define DOWN -1
 
@@ -79,6 +86,7 @@ typedef struct __tag_STEPPERCONFIG{
 	int 					stateReportFlag;
     int 					circularCounterFlag;
     int                     goHomeOnStart;
+    int                     allowUnhomed;    // разрешить движение без базирования (ось NOT_HOMED не блокирует команды)
     int                     active_state;
 
     STDCOMMANDS             cmds;
@@ -87,7 +95,29 @@ typedef struct __tag_STEPPERCONFIG{
 	int						speedReport;
 	int						stateReport;
 	int 					homeReport;
-} STEPPERCONFIG, * PSTEPPERCONFIG; 
+	int 					warningReport;
+
+    // Троттлинг event/warning: одинаковая причина не чаще раза в секунду, иначе
+    // кросслинк, льющий moveToAbs на небазированную ось, зафлудит брокер.
+    const char *            lastWarning;
+    TickType_t              lastWarningTick;
+} STEPPERCONFIG, * PSTEPPERCONFIG;
+
+// Минимальный интервал между одинаковыми предупреждениями, мс.
+#define WARNING_THROTTLE_MS 1000
+
+/* Сообщить наружу о проигнорированной команде или ошибке. reason - строковый
+   литерал: троттлинг сравнивает указатели, а не содержимое. */
+static void stepper_warn(PSTEPPERCONFIG c, const char *reason, int slot_num){
+    TickType_t now = xTaskGetTickCount();
+    if(c->lastWarning == reason && (now - c->lastWarningTick) < pdMS_TO_TICKS(WARNING_THROTTLE_MS)){
+        return;
+    }
+    c->lastWarning = reason;
+    c->lastWarningTick = now;
+    ESP_LOGW(TAG, "[stepper_%d] warning: %s", slot_num, reason);
+    stdreport_s(c->warningReport, (char *)reason);
+}
 
 typedef enum
 {
@@ -112,8 +142,10 @@ static int64_t stepper_wrapmod(int64_t a, int64_t m){
 }
 
 /*
-    Управление шаговым двигателем сигналами step-dir через PCNT
+    Управление шаговым двигателем сигналами step-dir через MCPWM и PCNT
+    MCPWM-таймеров всего 3 - не больше трёх моторов одновременно
     PCNT периферии всего 4 на encoderInc + tachometer + stepper
+    Если периферии не хватило - модуль не стартует и сообщает в event/warning
     slots: 0-5
 */
 void configure_stepper(PSTEPPERCONFIG c, int slot_num){
@@ -145,10 +177,20 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
     }
 
     /* Базировать сразу при старте - иначе ждать команду goHome. Флаг.
+       Процедура стартует через 2 секунды после запуска - за это время по кросслинку
+       приходят актуальные состояния датчика нуля и концевиков
 	*/
 	c->goHomeOnStart = get_option_flag_val(slot_num, "goHomeOnStart");
 	if(c->goHomeOnStart){
         ESP_LOGD(TAG, "[stepper_%d] goHomeOnStart enable", slot_num);
+    }
+
+    /* Разрешить движение без базирования - команды движения исполняются даже если
+       ноль не найден, координаты отсчитываются от положения при включении - Флаг
+	*/
+	c->allowUnhomed = get_option_flag_val(slot_num, "allowUnhomed");
+	if(c->allowUnhomed){
+        ESP_LOGD(TAG, "[stepper_%d] allowUnhomed enable", slot_num);
     }
 
     /* Включить рапорты скорости. Флаг.
@@ -208,7 +250,7 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	c->refreshPeriod =  1000/get_option_int_val(slot_num, "refreshRate", "fps", 20, 1, 100);
     ESP_LOGD(TAG, "[stepper_%d] refreshPeriod:%d", slot_num, c->refreshPeriod);
 
-    /* Скорость базирования в шаг-сек. Int 1..2147483647, По умолчанию maxSpeed-4. 
+    /* Скорость базирования в шаг-сек. Int 1..2147483647, По умолчанию четверть от maxSpeed
 	*/
 	c->homingSpeed =  get_option_int_val(slot_num, "homingSpeed", "step/sek", c->maxSpeed / 4, 1, INT32_MAX);
     ESP_LOGD(TAG, "[stepper_%d] homingSpeed:%ld", slot_num, c->homingSpeed);
@@ -266,7 +308,12 @@ void configure_stepper(PSTEPPERCONFIG c, int slot_num){
 	*/
 	c->homeReport = stdreport_register(RPTT_string, slot_num, "", "event/homingState");
 
-    /* Запустить базирование. Без параметров. 
+    /* Предупреждение - текст причины: команда проигнорирована (ось не базирована,
+       базирование не удалось) или модуль не запустился (нет свободного PCNT или MCPWM)
+	*/
+	c->warningReport = stdreport_register(RPTT_string, slot_num, "", "event/warning");
+
+    /* Запустить базирование. Без параметров.
     */
     stdcommand_register(&c->cmds, stepCMD_goHome, "action/goHome", PARAMT_none);
 
@@ -450,8 +497,18 @@ void stepper_task(void *arg){
 
 	esp_err_t step_err = stepper_init(&stepper, stepper.stepPin, stepper.dirPin, c->pulseWidth);
 	if (step_err != ESP_OK) {
-		ESP_LOGW(TAG, "PCNT unit limit reached (slot:%d), task terminated. err:%d",
-		         slot_num, step_err);
+        /* Периферии не хватило: PCNT (4 на encoderInc + tachometer + stepper) или
+           MCPWM-таймеров (3 в группе - не больше трёх моторов). Модуль не стартует.
+           Сообщаем пользователю всеми доступными способами: консоль, лог на SD и
+           event/warning - последний ждёт разрешения на работу, иначе уйдёт до
+           подключения к брокеру и никто его не увидит. */
+        const char *reason = (step_err == ESP_FAIL)
+                             ? "init failed, no free MCPWM timer (max 3 steppers)"
+                             : "init failed, no free PCNT unit (4 total for encoderInc, tachometer, stepper)";
+		ESP_LOGE(TAG, "[stepper_%d] %s err:%d - task terminated", slot_num, reason, step_err);
+        mblog(ESP_LOG_ERROR, "stepper_%d: %s", slot_num, reason);
+        waitForWorkPermit(slot_num);
+        stepper_warn(c, reason, slot_num);
 		vTaskDelete(NULL);
 	}
 
@@ -464,6 +521,8 @@ void stepper_task(void *arg){
 
     int homingProcedureState = HOMING_WAITING;
     TickType_t homingStartTick = 0;
+    // Тик, раньше которого процедуру базирования не начинаем (0 - без задержки).
+    TickType_t homingNotBeforeTick = 0;
 
     // Очередь команд, отложенных на время базирования (FIFO).
     stepper_deferred_t deferred[STEPPER_DEFERRED_MAX];
@@ -483,6 +542,8 @@ void stepper_task(void *arg){
     }else{
         if(c->goHomeOnStart){
             c->state=GOING_HOME;
+            homingNotBeforeTick = xTaskGetTickCount() + pdMS_TO_TICKS(GO_HOME_ON_START_DELAY_MS);
+            ESP_LOGD(TAG, "[stepper_%d] goHomeOnStart: waiting %d ms for sensor states", slot_num, GO_HOME_ON_START_DELAY_MS);
         }else{
             stdreport_s(c->homeReport, "waitingCommand");
         }
@@ -533,6 +594,11 @@ void stepper_task(void *arg){
             cmd != stepCMD_setHomingSensor &&
             cmd != stepCMD_setUpLimit && cmd != stepCMD_setDownLimit) {
             ESP_LOGD(TAG, "[stepper_%d] anabiosis, ignoring cmd:%d", slot_num, cmd);
+            // Наружу сообщаем только о командах движения: stop-break в анабиозе и
+            // так ничего бы не сделали, шуметь о них незачем.
+            if (stepper_is_motion_cmd(cmd)) {
+                stepper_warn(c, "command ignored, homing timeout, send goHome", slot_num);
+            }
             cmd = -1;
         }
 
@@ -552,6 +618,7 @@ void stepper_task(void *arg){
                 ESP_LOGD(TAG, "[stepper_%d] homing, deferring cmd:%d (queued:%d)", slot_num, cmd, deferredCount);
             } else {
                 ESP_LOGW(TAG, "[stepper_%d] deferred queue full, dropping cmd:%d", slot_num, cmd);
+                stepper_warn(c, "command ignored, homing in progress, deferred queue full", slot_num);
             }
             cmd = -1;
             isMotion = 0;
@@ -561,9 +628,14 @@ void stepper_task(void *arg){
            командой stop-break-enable): команды движения игнорируем - ехать по координатам
            на ненайденном нуле нельзя. НЕ откладываем: процедуры нет, копить не для
            чего. Ждём новую goHome; управляющие команды (goHome, stop, break,
-           setHomingSensor, лимиты, enable) проходят через switch. */
-        if (c->state==NOT_HOMED && isMotion) {
+           setHomingSensor, лимиты, enable) проходят через switch.
+           Флаг allowUnhomed снимает запрет: пользователь сам отвечает за то, что
+           координаты отсчитываются от положения при включении. О каждой
+           проигнорированной команде сообщаем в event/warning - иначе снаружи
+           не отличить "не базирован" от "команда не дошла". */
+        if (c->state==NOT_HOMED && isMotion && !c->allowUnhomed) {
             ESP_LOGD(TAG, "[stepper_%d] not homed, ignoring cmd:%d", slot_num, cmd);
+            stepper_warn(c, "command ignored, motor is not homed", slot_num);
             cmd = -1;
             isMotion = 0;
         }
@@ -669,7 +741,11 @@ void stepper_task(void *arg){
         }
 
         if(c->active_state && c->state==GOING_HOME){
-            if(homingProcedureState==HOMING_WAITING){
+            if(homingProcedureState==HOMING_WAITING &&
+               homingNotBeforeTick && (int32_t)(xTaskGetTickCount() - homingNotBeforeTick) < 0){
+                // Пауза goHomeOnStart ещё идёт - копим состояния датчиков, мотор стоит.
+            }else if(homingProcedureState==HOMING_WAITING){
+                homingNotBeforeTick = 0;
                 stdreport_s(c->homeReport, "homing");
                 homingStartTick = xTaskGetTickCount();
                 stepper.maxSpeed = c->homingSpeed;
@@ -693,11 +769,18 @@ void stepper_task(void *arg){
                 stepper_stop(&stepper);
                 stepper.maxSpeed = c->maxSpeed;
                 stepper.accel = c->accel;
-                c->state = HOMING_FAILED;
                 homingProcedureState = HOMING_WAITING;
                 deferredCount = 0;
                 stdreport_s(c->homeReport, "homingTimeout");
-                ESP_LOGW(TAG, "[stepper_%d] homing timeout, anabiosis - waiting for goHome", slot_num);
+                if(c->allowUnhomed){
+                    // Пользователь разрешил ход без базирования - в анабиоз не
+                    // уходим, ось просто остаётся небазированной и принимает команды.
+                    c->state = NOT_HOMED;
+                    ESP_LOGW(TAG, "[stepper_%d] homing timeout, allowUnhomed - motion allowed", slot_num);
+                }else{
+                    c->state = HOMING_FAILED;
+                    ESP_LOGW(TAG, "[stepper_%d] homing timeout, anabiosis - waiting for goHome", slot_num);
+                }
             }else if(homingProcedureState == HOMING_OUT_SENSOR){
                 if(c->homingSensorState==0){
                     ESP_LOGD(TAG, "[stepper_%d] sensor reseted, homing again", slot_num);
@@ -733,7 +816,7 @@ void stepper_task(void *arg){
         /* Позицию читаем ДО расчёта профиля. Раньше getCurrentPos стоял ПОСЛЕ
            speedUpdate, и все решения (приехали-ли, пора-ли тормозить, не нужен-ли
            разворот) принимались по координате, устаревшей на целый тик - при
-           10000 шаг-с и 20 мс это 200 шагов слепоты при допуске парковки в 2 шага. */
+           10000 шаг-с и 20 мс это 200 шагов слепоты. */
         stepper_getCurrentPos(&stepper);
         //ESP_LOGD(TAG, "currentPos: %ld prevPos:%ld dir:%d", stepper.currentPos,  stepper.pcnt_prevPos,  stepper.dir);
 

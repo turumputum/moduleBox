@@ -15,6 +15,7 @@
 #include <lwip/sockets.h>
 //#include <netinet/in.h>
 #include "esp_timer.h"
+#include "esp_system.h"
 #include "myMqtt.h"
 #include "LAN.h"
 #include "udplink.h"
@@ -735,9 +736,16 @@ static int count_open_sockets(void){
 	return count;
 }
 
+/* Счётчик сбоев обмена с SD (main/sd_card.c). Прототип объявлен здесь, как
+   sdcard_is_host_dirty в stateConfig.c: main - не компонент, его заголовок
+   отсюда не виден. */
+uint32_t sdcard_io_errors(void);
+
 void reportSystemDiag(void){
 	/* Пишем диагностический snapshot в SD-лог через mblog (не в MQTT).
-	   Один JSON-объект, удобно грепать в /sdcard/log.txt. */
+	   Один JSON-объект, удобно грепать в /sdcard/log.txt.
+	   sd_io_err - сколько раз sdmmc_read-write_sectors вернул ошибку (до
+	   ретраев). Рост счётчика на работающем моторе = помеха-питание карты. */
 	const int bufSize = 640;
 	char *tmpStr = heap_caps_malloc(bufSize, MALLOC_CAP_8BIT);
 	if(!tmpStr) return;
@@ -768,6 +776,7 @@ void reportSystemDiag(void){
 		"\"heap_free\":%lu,\"heap_min\":%lu,\"heap_largest\":%lu,"
 		"\"heap_internal\":%lu,\"spiram_free\":%lu,"
 		"\"socks\":%d,\"tasks\":%u,"
+		"\"sd_io_err\":%lu,\"rst\":%d,"
 		"\"mqtt\":{"
 			"\"up\":%u,"
 			"\"conn\":%lu,\"disc\":%lu,\"pub\":%lu,\"data\":%lu,\"err\":%lu,"
@@ -779,6 +788,7 @@ void reportSystemDiag(void){
 		(unsigned long)heap_free, (unsigned long)heap_min, (unsigned long)heap_largest,
 		(unsigned long)heap_internal, (unsigned long)spiram_free,
 		socks, (unsigned)tasks,
+		(unsigned long)sdcard_io_errors(), (int)esp_reset_reason(),
 		md.is_connected,
 		(unsigned long)md.connected, (unsigned long)md.disconnected,
 		(unsigned long)md.published, (unsigned long)md.data, (unsigned long)md.errors,
