@@ -1,10 +1,21 @@
 # Name,   Type, SubType, Offset,  Size, Flags
 # Note: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
+#
+# Схема загрузки (см. bootloader_components/main/bootloader_start.c и bootldsd/readme.txt):
+#   bootldsd (ota_0, 0x10000) - загрузчик обновлений: берёт /int/UPDATE.FW из раздела storage,
+#                               пишет его в program и перезагружается. Карта памяти ему не нужна.
+#   program  (factory, 0x50000) - основная прошивка moduleBox. Именно factory, чтобы idf.py
+#                               build/flash основного проекта сами целились в 0x50000.
+# Кастомный bootloader: SW-сброс -> program, power-on/EN/brownout или RTC-подсказка -> bootldsd.
+# Эту же таблицу использует проект загрузчика bootldsd/loader (CONFIG_PARTITION_TABLE_CUSTOM_FILENAME).
 nvs,      data, nvs,     0x9000,  0x6000,
 phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory,   0x50000, 3M,
+bootldsd, app,  ota_0,   0x10000, 0x40000,
+program,  app,  factory, 0x50000, 3M,
 # cfgbak: невидимый раздел под резервную копию config.ini (сырой blob magic|len|crc32|bytes).
-# Стоит ПЕРЕД storage, в существующей дыре после factory - тогда storage остаётся
+# Стоит ПЕРЕД storage, в существующей дыре после program - тогда storage остаётся
 # последним и может расти в хвост flash без перемещения бэкапа.
 cfgbak,   data, 0x40,    0x350000, 0x10000,
-storage,  data, spiffs,  0x450000,3M
+# storage: FAT поверх wear levelling. Прошивка монтирует его как /int (перенос UPDATE.FW)
+# и как /sdcard, если карты нет. Загрузчик bootldsd читает отсюда UPDATE.FW.
+storage,  data, fat,     0x450000, 3M

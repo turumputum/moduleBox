@@ -1767,7 +1767,8 @@ int32_t ftp_get_maxstack (void) {
 }
 #endif
 
-extern void moveUpdateToTheInternalStorage();
+/* main/main.c: переносит /sdcard/UPDATE.FW в /int и просит bootloader запустить bootldsd */
+extern int moveUpdateToTheInternalStorage(void);
 
 //-------------------------------
 void ftp_task(void *pvParameters) {

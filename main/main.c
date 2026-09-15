@@ -34,6 +34,9 @@
 #include <stdlib.h>
 #include "esp_task_wdt.h"
 #include "esp_vfs_fat.h"
+#include "esp_heap_caps.h"
+#include "esp_private/system_internal.h"   /* esp_reset_reason_set_hint */
+#include "../bootloader_components/main/bootldsd_hint.h"
 #include "esp_spiffs.h"
 // #include "sdmmc_cmd.h"
 // #include "driver/sdmmc_host.h"
@@ -798,7 +801,20 @@ uint32_t xQueueReceiveLast(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTic
 	return result;
 }
 
-int moveUpdateToTheInternalStorage()
+/* ---------------- Обновление прошивки через загрузчик bootldsd ----------------
+   Цепочка: FTP кладёт UPDATE.FW на карту -> moveUpdateToTheInternalStorage() переносит
+   его в /int (раздел storage во flash) -> requestFirmwareLoader() ставит RTC-подсказку ->
+   safeRestart() -> bootloader видит подсказку и запускает bootldsd (0x10000) -> тот
+   пишет образ в program и перезапускается в него. Карта загрузчику не нужна.
+   Формат подсказки и bootloader: bootloader_components/main/. */
+
+void requestFirmwareLoader(void)
+{
+	esp_reset_reason_set_hint((esp_reset_reason_t)BOOTLDSD_RESET_HINT);
+	ESP_LOGI(TAG, "MOVE UPDATE: bootldsd requested on next restart");
+}
+
+int moveUpdateToTheInternalStorage(void)
 {
 	int 			result 		= -1;
 	const char * 	inFname 	= "/sdcard/UPDATE.FW";
@@ -807,81 +823,97 @@ int moveUpdateToTheInternalStorage()
 	FILE * 			fout;
 	int 			rd;
 	int 			wr;
-	unsigned char 	buff 		[ 64 ];
+	/* Крупными кусками: FATFS на IDF 5.5.4 портит большие файлы при потоке мелких
+	   write() (см. manifest.c), да и 2 МБ по 64 байта копировались бы минуту. */
+	const size_t	chunk		= 32 * 1024;
+	unsigned char *	buff;
 	
-	if (ESP_OK == me_state.sd_init_res)
+	if (ESP_OK != me_state.sd_init_res)
 	{
-		if ((fin = fopen(inFname, "rb")) != NULL)
+		ESP_LOGI(TAG, "MOVE UPDATE: SD is not currently mounted, no moving needed");
+		return result;
+	}
+
+	if ((fin = fopen(inFname, "rb")) == NULL)
+	{
+		ESP_LOGI(TAG, "MOVE UPDATE: update file %s not found", inFname);
+		spisd_umount_fs();
+		return result;
+	}
+
+	ESP_LOGI(TAG, "MOVE UPDATE: update file is exists on SD, trying to move to internal storage...");
+
+	if ((buff = heap_caps_malloc(chunk, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) == NULL &&
+	    (buff = malloc(chunk)) == NULL)
+	{
+		ESP_LOGE(TAG, "MOVE UPDATE: no memory for copy buffer");
+		fclose(fin);
+		spisd_umount_fs();
+		return result;
+	}
+
+	const char *base_path = "/int";
+	const esp_vfs_fat_mount_config_t mount_config = {
+			.max_files = 3,
+			.format_if_mount_failed = true,
+			.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
+	};
+	esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(base_path, "storage", &mount_config, &s_wl_handle);
+	
+	if (ESP_OK == err) 
+	{
+		if ((fout = fopen(outFname, "w+b")) != NULL)
 		{
-			ESP_LOGI(TAG, "MOVE UPDATE: update file is exists on SD, trying to move to internal storage...");
+			result = 0;
 
-			const char *base_path = "/int";
-			const esp_vfs_fat_mount_config_t mount_config = {
-					.max_files = 3,
-					.format_if_mount_failed = true,
-					.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-			};
-			esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(base_path, "storage", &mount_config, &s_wl_handle);
-			
-			if (ESP_OK == err) 
+			while ((rd = fread(buff, 1, chunk, fin)) > 0)
 			{
-				if ((fout = fopen(outFname, "w+b")) != NULL)
+				wr = fwrite(buff, 1, rd, fout);
+
+				if (wr != rd)
 				{
-					result = 0;
-
-					while (!result && ((rd = fread(buff, 1, sizeof(buff), fin)) > 0))
-					{
-						wr = fwrite(buff, 1, rd, fout);
-
-						if (wr != rd)
-						{
-							ESP_LOGE(TAG, "MOVE UPDATE: error writting target file: %s", esp_err_to_name(err));
-
-							result = 0;
-						}
-					}
-
-					fclose(fout);
-
-					if (!result)
-					{
-						ESP_LOGI(TAG, "MOVE UPDATE: succesfully moved '%s' to '%s'", inFname, outFname);
-					}
-					else
-					{
-						ESP_LOGE(TAG, "MOVE UPDATE: failed moved '%s' to '%s'", inFname, outFname);
-
-						remove(outFname);
-					}
+					ESP_LOGE(TAG, "MOVE UPDATE: error writting target file (%d of %d)", wr, rd);
+					result = -1;
+					break;
 				}
-				else
-				{
-					ESP_LOGE(TAG, "MOVE UPDATE: failed to create target file '%s' on internal storage", outFname);
-				}
+			}
 
-				esp_vfs_fat_spiflash_unmount_rw_wl(base_path, s_wl_handle);
+			fclose(fout);
+
+			if (!result)
+			{
+				ESP_LOGI(TAG, "MOVE UPDATE: succesfully moved '%s' to '%s'", inFname, outFname);
 			}
 			else
 			{
-				ESP_LOGE(TAG, "MOVE UPDATE: failed to mount internal storage FATFS: %s", esp_err_to_name(err));
+				ESP_LOGE(TAG, "MOVE UPDATE: failed moved '%s' to '%s'", inFname, outFname);
+
+				remove(outFname);
 			}
-
-			fclose(fin);
-
-			if (!result)
-				remove(inFname);
 		}
-		else 
+		else
 		{
-			ESP_LOGI(TAG, "MOVE UPDATE: update file %s not found", inFname);
+			ESP_LOGE(TAG, "MOVE UPDATE: failed to create target file '%s' on internal storage", outFname);
 		}
 
-		spisd_umount_fs();		
+		esp_vfs_fat_spiflash_unmount_rw_wl(base_path, s_wl_handle);
+		s_wl_handle = WL_INVALID_HANDLE;
 	}
 	else
 	{
-		ESP_LOGI(TAG, "MOVE UPDATE: SD is not currently mounted, no moving needed");
+		ESP_LOGE(TAG, "MOVE UPDATE: failed to mount internal storage FATFS: %s", esp_err_to_name(err));
 	}
+
+	fclose(fin);
+	free(buff);
+
+	if (!result)
+	{
+		remove(inFname);
+		requestFirmwareLoader();
+	}
+
+	spisd_umount_fs();		
 
 	return result;
 }

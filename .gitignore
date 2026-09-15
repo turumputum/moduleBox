@@ -18,3 +18,8 @@ script.env
 managed_components/
 Manifest.json
 dependencies.lock
+
+# bootldsd/loader project: sdkconfig is generated from sdkconfig.defaults
+bootldsd/loader/sdkconfig
+bootldsd/loader/sdkconfig.old
+bootldsd/loader/dependencies.lock

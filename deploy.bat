@@ -36,6 +36,28 @@ if errorlevel 1 (
 )
 cd ..
 
+echo Копирую bootloader и таблицу разделов из build...
+copy /y "build\bootloader\bootloader.bin" "bootldsd\bootloader.bin" >nul
+copy /y "build\partition_table\partition-table.bin" "bootldsd\partition-table.bin" >nul
+if errorlevel 1 (
+    echo ОШИБКА: нет build\bootloader\bootloader.bin или build\partition_table\partition-table.bin
+    pause
+    exit /b 1
+)
+
+echo Собираю единый образ для производства moduleBox_full.bin (шьётся в 0x0)...
+set "PY=C:\Espressif\tools\python\v5.5.4\venv\Scripts\python.exe"
+if not exist "%PY%" set "PY=python"
+cd bootldsd
+"%PY%" -m esptool --chip esp32s3 merge_bin --flash_mode dio --flash_size 8MB --flash_freq 80m -o moduleBox_full.bin 0x0 bootloader.bin 0x8000 partition-table.bin 0x10000 bootldsd.bin 0x50000 moduleBox.bin
+if errorlevel 1 (
+    echo ОШИБКА: esptool merge_bin завершился с ошибкой
+    cd ..
+    pause
+    exit /b 1
+)
+cd ..
+
 echo Git add...
 git add .
 

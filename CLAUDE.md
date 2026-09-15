@@ -12,7 +12,9 @@ The Russian comments and docs are intentional — the project's primary maintain
 
 The build is a standard ESP-IDF/ADF CMake project but with a custom **manifesto** preprocessor step. `IDF_PATH` and `ADF_PATH` must be exported (Windows VS Code extension config in [.vscode/settings.json](.vscode/settings.json) hard-codes `C:\Users\user\esp\v5.3.3\esp-idf` and `C:\Users\user\.espressif\esp-adf`).
 
-Target chip: **esp32s3**. Partition table: [partitions.csv](partitions.csv) — factory app at `0x50000` (3M), SPIFFS storage at `0x450000` (3M).
+Target chip: **esp32s3**. Partition table: [partitions.csv](partitions.csv) — `bootldsd` (ota_0, update loader) at `0x10000` (256K), `program` (factory, the app) at `0x50000` (3M), `cfgbak` at `0x350000`, FAT+WL `storage` at `0x450000` (3M). The same CSV is used by the loader project.
+
+**Firmware update mechanism** (see [bootldsd/readme.txt](bootldsd/readme.txt)): the app receives `UPDATE.FW` via FTP, moves it to `/int` (the `storage` partition), sets an RTC hint (`main/main.c requestFirmwareLoader`) and restarts. The custom second-stage bootloader ([bootloader_components/main/bootloader_start.c](bootloader_components/main/bootloader_start.c)) boots `bootldsd` on that hint or on any hard reset, and `program` on software resets. The loader ([bootldsd/loader/](bootldsd/loader/), separate IDF project, `idf.py build` → copy `build/bootldsd.bin` to `bootldsd/`) verifies CRC and flashes `program`. It never touches the SD card. `idf.py flash` in the root flashes bootloader + table + `bootldsd/bootldsd.bin` + app; `bootldsd/flash_kit.cmd COMx` does the same from prebuilt binaries. Never make the loader a `factory` partition: with the stock IDF bootloader that would boot-loop, and the build would pick `0x10000` as the app offset.
 
 Common entry points:
 - `idf.py set-target esp32s3 && idf.py build` — standard full build

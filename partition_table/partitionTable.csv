@@ -1,6 +1,9 @@
 # ESP-IDF Partition Table
+# Копия partitions.csv для справки - сборка использует partitions.csv в корне (sdkconfig).
 # Name, Type, SubType, Offset, Size, Flags
 nvs,data,nvs,0x9000,24K,
 phy_init,data,phy,0xf000,4K,
-factory,app,factory,0x50000,3M,
-storage,data,spiffs,0x450000,3M,
+bootldsd,app,ota_0,0x10000,256K,
+program,app,factory,0x50000,3M,
+cfgbak,data,0x40,0x350000,64K,
+storage,data,fat,0x450000,3M,

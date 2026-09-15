@@ -14,6 +14,12 @@ string(REPLACE " " "_" ProjectId ${ProjectId})
 project(${ProjectId})
 #spiffs_create_partition_image(storage font FLASH_IN_PROJECT)
 
+# Загрузчик обновлений bootldsd (раздел ota_0 @ 0x10000, собирается в bootldsd/loader,
+# готовый бинарник лежит в bootldsd/). idf.py flash шьёт его вместе с bootloader'ом,
+# таблицей и прошивкой - полный комплект одной командой. Сам bootloader кастомный:
+# bootloader_components/main/bootloader_start.c.
+esptool_py_flash_to_partition(flash "bootldsd" "${CMAKE_CURRENT_LIST_DIR}/bootldsd/bootldsd.bin")
+
 #execute_process(COMMAND sbin/wichbranch.sh OUTPUT_VARIABLE BRANCH)
 #execute_process(COMMAND git branch OUTPUT_VARIABLE REPO_TAGS)
 #string (REGEX MATCH "^\\*\\s+\\K\\S+$" BRANCH ${REPO_TAGS})
