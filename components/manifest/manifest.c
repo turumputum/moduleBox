@@ -76,7 +76,7 @@ static const char * configDescription =
 "                    { \"key\" : \"boardVersion\",\n"
 "                      \"description\" : \"Версия платы\",\n"
 "                      \"valueType\" : \"int\",\n"
-"                      \"valueDefault\" : \"3\" },\n"
+"                      \"valueDefault\" : \"4\" },\n"
 "                    { \"key\" : \"USB_debug\",\n"
 "                      \"description\" : \"Вывод отладки в USB-CDC\",\n"
 "                      \"valueType\" : \"flag\",\n"

@@ -12,7 +12,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION "3.75"
+#define VERSION "3.76"
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -46,6 +46,14 @@ typedef struct {
 	char * wifiApClientString;
 
 	int8_t sd_init_res;
+	/* Где физически сидит SD карта - заполняет spisd_init() ДО разбора config.ini.
+	   sd_board_version: 3 или 4 по набору пинов, на котором карта примонтировалась,
+	   0 - неизвестно (карты нет или сборка V6). Это истина о железе, и init_slots
+	   доверяет ей больше, чем boardVersion из конфига: карта v3-платы на пинах
+	   v4 не заведётся, а неверная карта пинов рвёт линии SD под nSLEEP и кнопки.
+	   sd_pins: clk, cmd, d0 (0 - не задан). */
+	int8_t sd_board_version;
+	uint8_t sd_pins[3];
 	int8_t config_init_res;
 	int8_t content_search_res;
 	int8_t slot_init_res;

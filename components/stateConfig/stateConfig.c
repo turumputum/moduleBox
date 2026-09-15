@@ -262,7 +262,7 @@ void load_Default_Config(void) {
 	me_config.statusAllChannels = true;
 	me_config.USB_debug = 0;
 	me_config.crossLink_debug = 0;
-	me_config.boardVersion = 3;
+	me_config.boardVersion = 4;
 	
 	
 	me_config.WIFI_enable = 0; // disable

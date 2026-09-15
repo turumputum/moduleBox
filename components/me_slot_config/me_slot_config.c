@@ -84,6 +84,23 @@ adc_channel_t SLOT_ADC_MAP[6]={
 };
 
 
+/* Ножка занята SD картой (clk/cmd/d0 - заполняет spisd_init). 0 - ножки нет. */
+static int isSdPin(uint8_t pin)
+{
+	if (pin == 0) return 0;
+	for (int k = 0; k < 3; k++)
+		if (me_state.sd_pins[k] == pin) return 1;
+	return 0;
+}
+
+/* Хоть одна ножка слота уходит на линии SD карты (слот, в котором сидит сама карта). */
+static int slotUsesSdPins(int slot_num)
+{
+	for (int k = 0; k < 4; k++)
+		if (isSdPin(SLOTS_PIN_MAP[slot_num][k])) return 1;
+	return 0;
+}
+
 int init_slots(void){
 	uint32_t startTick = xTaskGetTickCount();
 	uint32_t heapBefore = xPortGetFreeHeapSize();
@@ -92,6 +109,16 @@ int init_slots(void){
 #ifdef BOARD_PINOUT_V6
 	memcpy(SLOTS_PIN_MAP, PIN_MAP_v6, sizeof(PIN_MAP_v6));
 #else
+	/* Ревизию платы берём по факту, а не по config.ini: карта примонтировалась
+	   на пинах v4 - значит плата v4, что бы ни стояло в boardVersion. Карта v3
+	   на плате v4 отдаёт SD-линии слотам 3-4: nSLEEP слота 4 садится на CLK (41),
+	   кнопка слота 3 - на D0 (3), и после старта модулей любой обмен с картой
+	   уходит в таймаут 0x107 (ловится при первом чтении по USB MSC). */
+	if((me_state.sd_board_version != 0) && (me_state.sd_board_version != me_config.boardVersion)){
+		ESP_LOGW(TAG, "config boardVersion=%d, but SD card is mounted on v%d pins - using v%d pin map",
+				 me_config.boardVersion, me_state.sd_board_version, me_state.sd_board_version);
+		me_config.boardVersion = me_state.sd_board_version;
+	}
 	if(me_config.boardVersion==4){
 		memcpy(SLOTS_PIN_MAP, PIN_MAP_v4, sizeof(PIN_MAP_v4));
 	}else{
@@ -115,6 +142,13 @@ int init_slots(void){
 
 		if(!strlen(mode) || !strcmp(mode, "empty") || !strcmp(mode, "SD_card")){
 			// empty
+		}else if(slotUsesSdPins(i)){
+			/* Модуль на линиях карты не заработает сам и оторвёт карту у всех:
+			   первое же переключение ножки в выход (nSLEEP, LED) - и SDMMC
+			   уходит в таймаут до перезагрузки. Слот не стартуем. */
+			ESP_LOGE(TAG, "[%d] mode '%s' NOT started: slot pins %d/%d/%d overlap SD card lines (clk=%d cmd=%d d0=%d)",
+					 i, mode, SLOTS_PIN_MAP[i][0], SLOTS_PIN_MAP[i][1], SLOTS_PIN_MAP[i][2],
+					 me_state.sd_pins[0], me_state.sd_pins[1], me_state.sd_pins[2]);
 		}else if(!strcmp(mode, "mp3Player")){
 			audioInit(i);
 		}else if(!strcmp(mode, "wavPlayer")){
@@ -521,6 +555,14 @@ void enableSlotDriver(int slot_num)
 	if (pin == 0)
 	{
 		ESP_LOGD(TAG, "slot %d has no driver enable pin", slot_num);
+		return;
+	}
+
+	/* Последний рубеж: перевод SD-линии в выход отрывает карту от SDMMC
+	   (таймаут 0x107 на каждом секторе до перезагрузки). */
+	if (isSdPin(pin))
+	{
+		ESP_LOGE(TAG, "slot %d nSLEEP pin %d is an SD card line, not touching it", slot_num, pin);
 		return;
 	}
 

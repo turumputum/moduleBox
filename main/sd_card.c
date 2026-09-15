@@ -11,6 +11,7 @@
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
 #include <dirent.h>
+#include <string.h>
 #include <sys/stat.h>
 #include "freertos/semphr.h"
 #include "stateConfig.h"
@@ -250,6 +251,10 @@ int spisd_init() {
 	extern configuration me_config;
 	uint8_t clk_pin, cmd_pin, d0_pin, led_pin;
 
+	extern stateStruct me_state;
+	me_state.sd_board_version = 0;
+	memset(me_state.sd_pins, 0, sizeof(me_state.sd_pins));
+
 #ifdef BOARD_PINOUT_V6
 	clk_pin = 8; cmd_pin = 9; d0_pin = 7; led_pin = 0;
 #else
@@ -268,8 +273,10 @@ int spisd_init() {
 	}
 
 	int found = 0;
+	int idx_found = 0;
 	for(int s = 0; s < 2; s++){
 		int idx = set_order[s];
+		idx_found = idx;
 		clk_pin = pin_sets[idx][0];
 		cmd_pin = pin_sets[idx][1];
 		d0_pin  = pin_sets[idx][2];
@@ -294,7 +301,14 @@ int spisd_init() {
 		ESP_LOGW(TAG, "SD card module notFound(");
 		return ESP_FAIL;
 	}
+	// Набор пинов однозначно говорит о ревизии платы: на v3 линии 41/40/3 уходят
+	// в слоты 3-4, карты там нет, и наоборот. Версию подтверждаем ниже, после
+	// успешного монтирования - реального обмена с картой по этим линиям.
+	int boardVersionBySdPins = (idx_found == 1) ? 4 : 3;
 #endif
+	me_state.sd_pins[0] = clk_pin;
+	me_state.sd_pins[1] = cmd_pin;
+	me_state.sd_pins[2] = d0_pin;
 
 	gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
@@ -321,6 +335,10 @@ int spisd_init() {
 
 	if(res==ESP_OK){
 		gpio_set_level(led_pin, 0);
+#ifndef BOARD_PINOUT_V6
+		me_state.sd_board_version = boardVersionBySdPins;
+		ESP_LOGI(TAG, "SD card on v%d pins (clk=%d cmd=%d d0=%d)", boardVersionBySdPins, clk_pin, cmd_pin, d0_pin);
+#endif
 	}
 	return res;
 }
