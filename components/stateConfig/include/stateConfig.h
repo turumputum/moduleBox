@@ -12,7 +12,7 @@
 
 #define NUM_OF_SLOTS 10
 
-#define VERSION "3.78"
+#define VERSION "3.79"
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE

@@ -28,15 +28,12 @@ extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
 
-static void IRAM_ATTR button_isr_handler(ISRCFG * cfg)
-{
-  	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  	xQueueSendFromISR(me_state.interrupt_queue[cfg->slot_num], &cfg->msg, &xHigherPriorityTaskWoken);
-  	if (xHigherPriorityTaskWoken == pdTRUE) {
-    	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  	}
-}
-
+/* Кнопка опрашивается в цикле задачи (button_logic_debounce по gpio_get_level),
+   прерывание по фронтам ей не нужно и опасно: висящий или шумящий вход (например,
+   рядом с линией данных WS2812) даёт шторм фронтов, GPIO ISR не отпускает ядро и
+   срабатывает interrupt WDT - устройство падает целиком (ловилось на button_ledRing,
+   слот 2 платы v4, GPIO 6). Очередь interrupt_queue оставлена: модули её вычитывают
+   вхолостую, а очереди могут ждать соседние механизмы по номеру слота. */
 void setup_button_hw(int slot_num, PMODULE_CONTEXT ctx)
 {
     uint8_t pin_num = SLOTS_PIN_MAP[slot_num][0];
@@ -50,14 +47,12 @@ void setup_button_hw(int slot_num, PMODULE_CONTEXT ctx)
     gpio_reset_pin(pin_num);
     esp_rom_gpio_pad_select_gpio(pin_num);
     gpio_config_t in_conf = {
-        .intr_type = GPIO_INTR_ANYEDGE,
+        .intr_type = GPIO_INTR_DISABLE,
         .pin_bit_mask = (1ULL << pin_num),
         .pull_down_en = GPIO_PULLDOWN_ENABLE,
         .mode = GPIO_MODE_INPUT
     };
     gpio_config(&in_conf);
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(pin_num, (gpio_isr_t)button_isr_handler, (void*)&ctx->isrCfgs[0]);
 }
 
 static void _buttonStateChanged(BUTTONCONFIG *	c, 
