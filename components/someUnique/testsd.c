@@ -258,11 +258,17 @@ static esp_err_t format_sd_card(void)
 		goto fmt_cleanup;
 	}
 
-	const MKFS_PARM opt = { FM_FAT32, 0, 0, 0, 0 };
-	ESP_LOGI(TAG, "Formatting SD card as FAT32...");
+	/* FAT (FAT12/16), не FAT32: так карту ждут потребители. au_size 0 - FatFs сам
+	   наращивает кластер до 64K, чтобы уложиться в 65525 кластеров FAT16; карты
+	   больше ~4 ГБ в FAT16 не помещаются вовсе - f_mkfs вернёт FR_MKFS_ABORTED. */
+	const MKFS_PARM opt = { FM_FAT, 0, 0, 0, 0 };
+	ESP_LOGI(TAG, "Formatting SD card as FAT (FAT16)...");
 	fres = f_mkfs("1:", &opt, work_buf, workbuf_size);
 	if (fres != FR_OK) {
-		ESP_LOGE(TAG, "Format: f_mkfs failed (%d)", fres);
+		if (fres == FR_MKFS_ABORTED)
+			ESP_LOGE(TAG, "Format: card does not fit FAT16 (max ~4 GB with 64K clusters), f_mkfs aborted");
+		else
+			ESP_LOGE(TAG, "Format: f_mkfs failed (%d)", fres);
 		goto fmt_cleanup;
 	}
 
