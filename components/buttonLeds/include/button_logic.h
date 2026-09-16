@@ -35,6 +35,12 @@ typedef struct __tag_BUTTONCONFIG
 	int 					debounce_stable;
 	int64_t 				debounce_since_us;
 	bool 					debounce_inited;
+	/* switchModeButton: кнопка работает как переключатель - каждое нажатие
+	   инвертирует switch_state и рапортует event/switch, event/press не шлётся.
+	   Долгое и двойное нажатие работают как обычно. */
+	int 					switch_mode;
+	int 					switch_state;
+	int 					switchReport;
 	int 					stateReport;
 	int 					longReport;
 	int 					doubleReport;

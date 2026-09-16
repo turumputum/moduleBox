@@ -8,6 +8,22 @@
 
 static const char *TAG = "BUTTON_LEDS";
 
+/* Короткое событие: в режиме переключателя нажатие (1) инвертирует switch_state и
+   уходит как event/switch, отпускание (0) молчит; иначе - обычный event/press. */
+static void _reportShort(BUTTONCONFIG * c, int button_state)
+{
+	if (c->switch_mode)
+	{
+		if (button_state)
+		{
+			c->switch_state = !c->switch_state;
+			stdreport_i(c->switchReport, c->switch_state);
+		}
+	}
+	else
+		stdreport_i(c->stateReport, button_state);
+}
+
 extern uint8_t SLOTS_PIN_MAP[10][4];
 extern configuration me_config;
 extern stateStruct me_state;
@@ -86,7 +102,7 @@ static void _buttonStateChanged(BUTTONCONFIG *	c,
 	switch (type)
 	{
 		case BSTYPE_short:
-			stdreport_i(c->stateReport, button_state);
+			_reportShort(c, button_state);
 			break;
 			
 		case BSTYPE_long:
@@ -96,7 +112,7 @@ static void _buttonStateChanged(BUTTONCONFIG *	c,
 		case BSTYPE_double:
 			// Посылаем лишний короткий без фильтра
 			if (!c->event_filter)
-				stdreport_i(c->stateReport, button_state);
+				_reportShort(c, button_state);
 
 			stdreport_i(c->doubleReport, button_state);
 			break;
@@ -121,7 +137,15 @@ void button_logic_report_initial(PBUTTONCONFIG c, int pin_level, int *prev_state
 
 	/* Публикуем уровень напрямую, минуя _buttonStateChanged: та завязана на
 	   логику long-double и на старте (без предыдущего нажатия) исказила бы отчёт. */
-	stdreport_i(c->stateReport, pin_level);
+	/* В режиме переключателя уровень ножки не событие - публикуем стартовое
+	   положение переключателя (0), чтобы подписчик знал исходное состояние. */
+	if (c->switch_mode)
+	{
+		c->switch_state = 0;
+		stdreport_i(c->switchReport, c->switch_state);
+	}
+	else
+		stdreport_i(c->stateReport, pin_level);
 
 	ESP_LOGD(TAG, "Initial button level:%d reported", pin_level);
 }

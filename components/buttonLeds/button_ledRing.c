@@ -89,6 +89,10 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
        Выключен (0, по умолчанию) - короткие события шлются всегда
     */
     ctx->button.event_filter = get_option_flag_val(slot_num, "eventFilter");
+    /* Режим переключателя: каждое нажатие меняет состояние 0-1 и рапортует event/switch,
+       event/press при этом не шлётся. По умолчанию выключен
+    */
+    ctx->button.switch_mode = get_option_flag_val(slot_num, "switchModeButton");
 
     /* Период обновления потока кнопки в мс, по умолчанию 25 (40 Гц)
     */
@@ -111,6 +115,9 @@ void configure_button_ledRing(PMODULE_CONTEXT ctx, int slot_num)
 	/* Рапортует при регистрации двойного нажатия. 0-1.
 	*/
 	ctx->button.doubleReport = stdreport_register(RPTT_int, slot_num, "state", "event/doubleClick", 0, 1);
+	/* Рапортует положение переключателя при каждом нажатии в режиме switchModeButton. 0-1.
+	*/
+	ctx->button.switchReport = stdreport_register(RPTT_int, slot_num, "state", "event/switch", 0, 1);
 
     // --- LED Ring logic config ---
     /* Количество светодиодов в кольце. По умолчанию 24. 1-1024.

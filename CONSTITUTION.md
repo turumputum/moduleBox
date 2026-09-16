@@ -198,6 +198,7 @@ hall-panel/led_2/action/setMaxBright       payload: 200
 | `longPress` | event       | bool | Долгое нажатие (1) / отпускание (0) |
 | `click`     | event       | bool | Одиночный клик                   |
 | `doubleClick`| event      | bool | Двойной клик                     |
+| `switch`    | event       | bool | Положение переключателя (режим switchModeButton: нажатие инвертирует 0/1) |
 
 ### Значения / датчики
 | Имя        | Направление  | Тип       | Смысл                          |
