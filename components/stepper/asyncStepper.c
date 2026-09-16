@@ -320,7 +320,10 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
     mcpwm_operator_config_t operator_config = {
         .group_id = 0,
     };
-    ESP_ERROR_CHECK(mcpwm_new_operator(&operator_config, &stepper->mcpwmOper));
+    mcpwm_err = mcpwm_new_operator(&operator_config, &stepper->mcpwmOper);
+    if (mcpwm_err != ESP_OK) {
+        return mcpwm_err;
+    }
     ESP_ERROR_CHECK(mcpwm_operator_connect_timer(stepper->mcpwmOper, stepper->mcpwmTimer));
 
     mcpwm_comparator_config_t comparator_config = {
@@ -337,7 +340,10 @@ esp_err_t stepper_init(stepper_t *stepper, gpio_num_t step_pin, gpio_num_t dir_p
         .gen_gpio_num = stepper->stepPin,
         .flags.io_loop_back = true,
     };
-    ESP_ERROR_CHECK(mcpwm_new_generator(stepper->mcpwmOper, &generator_config, &stepper->mcpwmGenerator));
+    mcpwm_err = mcpwm_new_generator(stepper->mcpwmOper, &generator_config, &stepper->mcpwmGenerator);
+    if (mcpwm_err != ESP_OK) {
+        return mcpwm_err;
+    }
 
     // go high on counter empty
     ESP_ERROR_CHECK(mcpwm_generator_set_action_on_timer_event(stepper->mcpwmGenerator,MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH)));

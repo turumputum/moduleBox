@@ -210,7 +210,7 @@ void encoderAS5600_task(void *arg)
 
     int i2c_num = me_state.free_i2c_num;
     me_state.free_i2c_num++;
-    if (i2c_num == I2C_NUM_MAX) {
+    if (i2c_num >= I2C_NUM_MAX) {
         sprintf(tmpStr, "No free I2C driver for slot:%d task terminated", slot_num);
         ESP_LOGW(TAG, "%s", tmpStr);
         mblog(W, tmpStr);

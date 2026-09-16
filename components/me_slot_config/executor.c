@@ -56,8 +56,10 @@ void init_led(int slot_num) {
 
 	//---add action to topic list---
 	char *str = calloc(strlen(me_config.deviceName) + 16, sizeof(char));
-	sprintf(str, "%s/led_%d", me_config.deviceName, slot_num);
-	me_state.action_topic_list[slot_num] = str;
+	if (str != NULL) {
+		sprintf(str, "%s/led_%d", me_config.deviceName, slot_num);
+		me_state.action_topic_list[slot_num] = str;
+	}
 
 	ESP_LOGD(TAG, "Led inited for slot: %d Heap usage: %lu free heap:%u", slot_num, heapBefore - xPortGetFreeHeapSize(), xPortGetFreeHeapSize());
 }
@@ -200,6 +202,9 @@ void execute(char *action) {
 	exec_message_t msg;
 	strcpy(msg.str, action);
 
+	if (me_state.executor_queue == NULL) {
+		return;   // очередь не создалась (OOM) - тихо игнорируем, не ассертим
+	}
 	//ESP_LOGE(TAG, "execute >>");
 	if(xQueueSend(me_state.executor_queue, &msg, portMAX_DELAY)!= pdPASS) {
 		ESP_LOGE(TAG, "Send message FAIL");
@@ -211,6 +216,10 @@ void execute(char *action) {
 void executer_task(void * param){
 	exec_message_t msg;
 	me_state.executor_queue = xQueueCreate(150, sizeof(exec_message_t));
+	if (me_state.executor_queue == NULL) {
+		ESP_LOGE(TAG, "executor_queue create FAILED (OOM) - executor disabled");
+		vTaskDelete(NULL);
+	}
 
 	vTaskDelay(pdMS_TO_TICKS(2000));
 

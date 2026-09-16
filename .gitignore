@@ -23,3 +23,12 @@ dependencies.lock
 bootldsd/loader/sdkconfig
 bootldsd/loader/sdkconfig.old
 bootldsd/loader/dependencies.lock
+
+# pyTest run artifacts
+slot_test_run.out
+pyTest/slot_test_run.out
+pyTest/slot_test_logs/
+
+# python bytecode
+pyTest/__pycache__/
+__pycache__/

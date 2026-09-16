@@ -114,6 +114,17 @@ void configure_buttonMatrix(buttonMatrix_t *ctx, int slot_num) {
     }
     ESP_LOGD(TAG, "Slot:%d mapping:%s", slot_num, ctx->charMap);
 
+    /* Глубина антидребезга в сканах - сколько подряд сканов держать уровень для подтверждения
+    меньше значение - быстрее реакция, больше - устойчивее к дребезгу, По умолчанию 3
+    */
+    ctx->debounceCount = get_option_int_val(slot_num, "debounceCount", "", 3, 1, 64);
+    ESP_LOGD(TAG, "Slot:%d debounceCount:%d", slot_num, ctx->debounceCount);
+
+    /* Частота опроса матрицы в герцах - выше частота, быстрее реакция, По умолчанию 100
+    */
+    ctx->refreshPeriod = 1000 / get_option_int_val(slot_num, "refreshRate", "Hz", 100, 1, 100);
+    ESP_LOGD(TAG, "Slot:%d refreshPeriod:%d ms", slot_num, ctx->refreshPeriod);
+
     {
         char t_str[strlen(me_config.deviceName) + strlen("/buttonMatrix_0") + 3];
         sprintf(t_str, "%s/buttonMatrix_%d", me_config.deviceName, slot_num);
@@ -184,28 +195,25 @@ void buttonMatrix_task(void *arg) {
     memset(resMatrix, 0, sizeof(resMatrix));
     uint8_t prevResMatrix[rows][cols];
     memset(prevResMatrix, 0, sizeof(prevResMatrix));
-    const uint8_t maxCount = 6;
 
     waitForWorkPermit(slot_num);
 
     while (1) {
-        vTaskDelay(15 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(ctx.refreshPeriod));
 
         for (int r = 0; r < rows; r++) {
             gpio_set_level(ctx.out_pin[r], 1);
             vTaskDelay(1 / portTICK_PERIOD_MS);
             for (int c = 0; c < cols; c++) {
                 if (gpio_get_level(ctx.in_pin[c]) == 1) {
-                    countMatrix[r][c] += 1;
-                    if (countMatrix[r][c] > maxCount) countMatrix[r][c] = maxCount;
+                    if (countMatrix[r][c] < ctx.debounceCount) countMatrix[r][c] += 1;
                 } else {
-                    countMatrix[r][c] -= 1;
-                    if (countMatrix[r][c] < 0) countMatrix[r][c] = 0;
+                    if (countMatrix[r][c] > 0) countMatrix[r][c] -= 1;
                 }
 
-                if (countMatrix[r][c] > (maxCount / 2) + 1) {
+                if (countMatrix[r][c] >= ctx.debounceCount) {
                     resMatrix[r][c] = 1;
-                } else if (countMatrix[r][c] < (maxCount / 2) - 1) {
+                } else if (countMatrix[r][c] <= 0) {
                     resMatrix[r][c] = 0;
                 }
             }
