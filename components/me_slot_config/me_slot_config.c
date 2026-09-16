@@ -166,7 +166,9 @@ int init_slots(void){
 
 		if(!strlen(mode) || !strcmp(mode, "empty") || !strcmp(mode, "SD_card")){
 			// empty
-		}else if(slotUsesSdPins(i)){
+		}else if(strcmp(mode, "testsd") && slotUsesSdPins(i)){
+			/* testsd - единственный модуль, которому линии карты положены: он и есть
+			   тестер SD в слоте с разъёмом карты, для него исключение выше. */
 			/* Модуль на линиях карты не заработает сам и оторвёт карту у всех:
 			   первое же переключение ножки в выход (nSLEEP, LED) - и SDMMC
 			   уходит в таймаут до перезагрузки. Слот не стартуем. */
