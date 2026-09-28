@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -52,6 +53,7 @@ typedef struct __tag_LOA_CONFIG{
 /*
     Список действий - на одно событие вешается целый файл команд
     Строка файла это правая часть кросслинка без имени устройства
+    Спецслово delay_ms:<N> - пауза сценария на N миллисекунд
     Виртуальный слот, не взаимодействует с аппаратной частью
     slots: 0-9
 */
@@ -74,7 +76,8 @@ void configure_listOfActions(PLOA_CONFIG c, int slot_num){
 
     stdcommand_init(&c->cmds, slot_num);
 
-    /* Проиграть файл сценария - имя файла в корне SD, например lights,txt
+    /* Проиграть файл сценария - имя файла в корне SD, например lights.txt
+       Строка delay_ms:<N> в файле - пауза на N мс
     */
     stdcommand_register(&c->cmds, LOACMD_execute, "action/execute", PARAMT_string);
 
@@ -215,6 +218,20 @@ static void loa_play_file(PLOA_CONFIG c, const char * name, PSTDCOMMAND_PARAMS p
             action[--len] = '\0';
         }
 
+        /* Спецслово delay_ms:<N> - пауза сценария. Замораживает весь модуль:
+           команды, пришедшие за это время, разбираются после паузы (ниже, как
+           и после обычной строки), так что enable 0 оборвёт сценарий уже там. */
+        if(strncmp(action, "delay_ms:", 9) == 0){
+            int ms = atoi(action + 9);
+            if(ms < 0) ms = 0;
+            ESP_LOGD(TAG, "[listOfActions_%d] %s:%d delay %d ms", slot_num, name, lineNum, ms);
+            vTaskDelay(pdMS_TO_TICKS(ms));
+            if(loa_pump_commands(c, params, slot_num)){
+                ESP_LOGD(TAG, "[listOfActions_%d] playback aborted at %s:%d", slot_num, name, lineNum);
+                break;
+            }
+            continue;
+        }
         /* Собираем в буфер ровно на MAX_STRING_LENGTH: снаружи execute() сам
            обрезает длинную строку, но делает это по границе своего буфера -
            надёжнее не доводить до этого и обрезать здесь, с предупреждением. */

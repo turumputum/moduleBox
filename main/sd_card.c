@@ -50,16 +50,105 @@ void sdcard_unlock(void) {
 //    старые метаданные поверх новых - это и убивает том. Поэтому запись из
 //    прошивки запрещаем до перезагрузки (на eject устройство и так ребутится).
 
-#define SD_IO_RETRY 3
+// 3) Восстановление после сбоя: на таймауте данных драйвер IDF бросает
+//    транзакцию, но CMD12 не шлёт - карта остаётся в состоянии data/rcv и
+//    следующий CMD17/18 получает ILLEGAL_COMMAND. Поэтому перед повтором сами
+//    останавливаем передачу и ждём tran. Если карта так и не ответила -
+//    переинициализируем её (то, что раньше лечилось только перезагрузкой).
+
+#define SD_IO_RETRY        4
+#define SD_RETRY_DELAY_MS  20   // пауза перед повтором: карта может быть занята внутренней работой
+#define SD_TRAN_WAIT_MS    250  // сколько ждём возврата карты в tran после сбоя
+#define SD_STATE_DATA      5    // R1 current_state: карта отдаёт данные
+#define SD_STATE_RCV       6    // R1 current_state: карта принимает данные
+// do_transaction напрямую не подставляет таймаут (это делает sdmmc_send_cmd):
+// с timeout_ms=0 ответ не ждётся вовсе, а CMD_DONE приходит потом как
+// 'handle_idle_state_events unhandled: 00000004'.
+#define SD_STATUS_TIMEOUT_MS 100
+#define SD_STOP_TIMEOUT_MS   500  // CMD12 - R1b, ждём снятия busy
 
 extern sdmmc_card_t *card;   // определение ниже в файле
 
 static volatile int      s_host_dirty = 0;
 static volatile uint32_t s_io_err_cnt = 0;
+static volatile uint32_t s_reinit_cnt = 0;
 
 void sdcard_mark_host_dirty(void) { s_host_dirty = 1; }
 int sdcard_is_host_dirty(void)    { return s_host_dirty; }
 uint32_t sdcard_io_errors(void)   { return s_io_err_cnt; }
+uint32_t sdcard_reinits(void)     { return s_reinit_cnt; }
+
+static esp_err_t sd_send_status(uint32_t *status) {
+	sdmmc_command_t cmd = {
+		.opcode = MMC_SEND_STATUS,
+		.arg    = MMC_ARG_RCA(card->rca),
+		.flags  = SCF_CMD_AC | SCF_RSP_R1,
+		.timeout_ms = SD_STATUS_TIMEOUT_MS,
+	};
+	esp_err_t err = card->host.do_transaction(card->host.slot, &cmd);
+	if (err == ESP_OK) *status = MMC_R1(cmd.response);
+	return err;
+}
+
+static void sd_send_stop(void) {
+	sdmmc_command_t cmd = {
+		.opcode = MMC_STOP_TRANSMISSION,
+		.flags  = SCF_CMD_AC | SCF_RSP_R1B,
+		.timeout_ms = SD_STOP_TIMEOUT_MS,
+	};
+	card->host.do_transaction(card->host.slot, &cmd);
+}
+
+// Вернуть карту в tran после оборванной транзакции. Вызывать под мьютексом.
+static esp_err_t sd_recover_tran(void) {
+	TickType_t start = xTaskGetTickCount();
+	uint32_t status = 0;
+	int state = -1;
+	do {
+		if (sd_send_status(&status) == ESP_OK) {
+			state = MMC_R1_CURRENT_STATE_STATUS(status);
+			if (state == MMC_R1_CURRENT_STATE_TRAN && (status & MMC_R1_READY_FOR_DATA)) {
+				ESP_LOGW(TAG, "card back to tran in %lu ms",
+				         (unsigned long)((xTaskGetTickCount() - start) * portTICK_PERIOD_MS));
+				return ESP_OK;
+			}
+			if (state == SD_STATE_DATA || state == SD_STATE_RCV) {
+				sd_send_stop();
+				continue;
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(5));
+	} while ((xTaskGetTickCount() - start) < pdMS_TO_TICKS(SD_TRAN_WAIT_MS));
+	ESP_LOGW(TAG, "card not back to tran in %d ms (state:%d status:0x%lx)",
+	         SD_TRAN_WAIT_MS, state, (unsigned long)status);
+	return ESP_ERR_TIMEOUT;
+}
+
+// Повторная инициализация карты без перемонтирования FATFS: номера секторов
+// те же, структура card остаётся на месте. Вызывать под мьютексом.
+static esp_err_t sd_reinit_card(void) {
+	// sdmmc_card_init обнуляет card, а потом копирует в неё host - копия обязательна
+	sdmmc_host_t host_cfg = card->host;
+	esp_err_t err = sdmmc_card_init(&host_cfg, card);
+	s_reinit_cnt++;
+	if (err == ESP_OK) {
+		// mblog здесь нельзя: он пишет на эту же карту, а мы внутри diskio под мьютексом
+		ESP_LOGW(TAG, "card re-initialized (%lu)", (unsigned long)s_reinit_cnt);
+	} else {
+		ESP_LOGE(TAG, "card re-init failed (0x%x)", err);
+	}
+	return err;
+}
+
+// Подготовка карты к следующей попытке после сбоя. Вызывать под мьютексом.
+static void sd_prepare_retry(int attempt) {
+	vTaskDelay(pdMS_TO_TICKS(SD_RETRY_DELAY_MS));
+	if (sd_recover_tran() == ESP_OK) return;
+	// Карта не вернулась сама - на предпоследней попытке будим её полной инициализацией
+	if (attempt == SD_IO_RETRY - 2) {
+		sd_reinit_card();
+	}
+}
 
 static esp_err_t sd_read_retry(void *dst, uint32_t sector, uint32_t count) {
 	esp_err_t err = ESP_FAIL;
@@ -70,7 +159,7 @@ static esp_err_t sd_read_retry(void *dst, uint32_t sector, uint32_t count) {
 		s_io_err_cnt++;
 		ESP_LOGW(TAG, "read sect:%lu cnt:%lu failed (0x%x), attempt %d/%d",
 		         (unsigned long)sector, (unsigned long)count, err, attempt + 1, SD_IO_RETRY);
-		vTaskDelay(pdMS_TO_TICKS(5));
+		if (attempt < SD_IO_RETRY - 1) sd_prepare_retry(attempt);
 	}
 	sdcard_unlock();
 	if (err != ESP_OK) {
@@ -88,7 +177,7 @@ static esp_err_t sd_write_retry(const void *src, uint32_t sector, uint32_t count
 		s_io_err_cnt++;
 		ESP_LOGW(TAG, "write sect:%lu cnt:%lu failed (0x%x), attempt %d/%d",
 		         (unsigned long)sector, (unsigned long)count, err, attempt + 1, SD_IO_RETRY);
-		vTaskDelay(pdMS_TO_TICKS(5));
+		if (attempt < SD_IO_RETRY - 1) sd_prepare_retry(attempt);
 	}
 	sdcard_unlock();
 	if (err != ESP_OK) {

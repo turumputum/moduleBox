@@ -19,6 +19,7 @@
 #include "me_slot_config.h"
 #include "stdreport.h"
 #include "stdcommand.h"
+#include <mbdebug.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -84,6 +85,7 @@ typedef struct {
 
     int valReport;          // event/val
     int thresholdReport;    // event/threshold
+    int warningReport;      // event/warning
     STDCOMMANDS cmds;
 } tacho_context_t;
 
@@ -102,6 +104,7 @@ typedef struct {
     .pcnt_unit = NULL, \
     .valReport = -1, \
     .thresholdReport = -1, \
+    .warningReport = -1, \
 }
 
 // =============================================================================
@@ -110,6 +113,8 @@ typedef struct {
 
 /*
     Тахометр - измеритель частоты входного сигнала через PCNT. По умолчанию Гц.
+    PCNT всего 4 на encoderInc + tachometer + stepper - если свободного нет,
+    модуль не стартует и сообщает в event/warning
     slots: 0-5
 */
 static void configure_tachometer(tacho_context_t *ctx, int slot_num) {
@@ -206,6 +211,9 @@ static void configure_tachometer(tacho_context_t *ctx, int slot_num) {
 
     /* Состояние модуля - активен (1) или спит (0). Retained */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
+
+    /* Причина, по которой модуль не работает - например нет свободного PCNT */
+    ctx->warningReport = stdreport_register(RPTT_string, slot_num, "", "event/warning");
 }
 
 // =============================================================================
@@ -283,7 +291,14 @@ static void tachometer_task(void *arg) {
     configure_tachometer(&ctx, slot_num);
 
     if (tachometer_pcnt_setup(&ctx) != 0) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        /* Периферии не хватило: PCNT всего 4 на encoderInc + tachometer + stepper.
+           Модуль не стартует. Сообщаем везде: консоль, лог на SD и event/warning -
+           последний ждёт разрешения на работу, иначе уйдёт до подключения к брокеру. */
+        const char *reason = "init failed, no free PCNT unit (4 total for encoderInc, tachometer, stepper)";
+        ESP_LOGE(TAG, "[tachometer_%d] %s - task terminated", slot_num, reason);
+        mblog(ESP_LOG_ERROR, "tachometer_%d: %s", slot_num, reason);
+        waitForWorkPermit(slot_num);
+        stdreport_s(ctx.warningReport, (char *)reason);
         vTaskDelete(NULL);
         return;
     }

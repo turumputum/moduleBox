@@ -57,6 +57,7 @@ typedef struct __tag_INCCONFIG
     uint16_t                glitchFilter;
 
     int                     report;
+    int                     warningReport;
 
     STDCOMMANDS             cmds;
 } INCCONFIG, * PINCCONFIG;
@@ -64,7 +65,8 @@ typedef struct __tag_INCCONFIG
 /*
     Инкрементальный энкодер (обычно оптический) на периферии PCNT
     ESP32-S3 имеет всего 4 PCNT unit на encoderInc + tachometer + stepper
-    slots: 0-3
+    Если свободного PCNT нет - модуль не стартует и сообщает в event/warning
+    slots: 0-5
 */
 void configure_encoderInc(PINCCONFIG c, int slot_num)
 {
@@ -128,6 +130,9 @@ void configure_encoderInc(PINCCONFIG c, int slot_num)
     /* Состояние модуля - активен 1 или спит 0 */
     stdreport_register(RPTT_int, slot_num, "", "event/enable");
 
+    /* Причина, по которой модуль не работает - например нет свободного PCNT */
+    c->warningReport = stdreport_register(RPTT_string, slot_num, "", "event/warning");
+
     /* === COMMANDS === */
 
     /* Обнулить счетчик */
@@ -157,8 +162,14 @@ void encoder_inc_task(void *arg)
     pcnt_unit_handle_t pcnt_unit = NULL;
     esp_err_t err = pcnt_new_unit(&unit_config, &pcnt_unit);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "PCNT unit limit reached (slot:%d), task terminated. err:%d",
-                 slot_num, err);
+        /* Периферии не хватило: PCNT всего 4 на encoderInc + tachometer + stepper.
+           Модуль не стартует. Сообщаем везде: консоль, лог на SD и event/warning -
+           последний ждёт разрешения на работу, иначе уйдёт до подключения к брокеру. */
+        const char *reason = "init failed, no free PCNT unit (4 total for encoderInc, tachometer, stepper)";
+        ESP_LOGE(TAG, "[encoder_%d] %s err:%d - task terminated", slot_num, reason, err);
+        mblog(ESP_LOG_ERROR, "encoder_%d: %s", slot_num, reason);
+        waitForWorkPermit(slot_num);
+        stdreport_s(c.warningReport, (char *)reason);
         vTaskDelete(NULL);
     }
 

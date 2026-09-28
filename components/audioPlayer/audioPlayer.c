@@ -406,6 +406,10 @@ void audio_task(void *arg) {
 	audio_event_iface_msg_t msg;
 	esp_err_t ret;
 	audio_element_state_t el_state;
+	// Ошибка чтения файла с карты: элемент file встаёт в ERROR, а i2s так и
+	// остаётся RUNNING - конца трека не будет, play_to_end глушит новые play.
+	// Флаг выставляется по событию, разбирается ниже один раз.
+	int file_err = 0;
 
 	waitForWorkPermit(slot_num);
 	stdreport_enable(slot_num, c->active_state);
@@ -592,6 +596,15 @@ void audio_task(void *arg) {
 					stdreport_s(c->ETreport, reportStr);
 				}
 			}
+			if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT
+				&& msg.source == (void *) fatfs_stream_reader
+				&& msg.cmd == AEL_MSG_CMD_REPORT_STATUS)
+			{
+				int st = (int)(intptr_t)msg.data;
+				if (st >= AEL_STATUS_ERROR_OPEN && st <= AEL_STATUS_ERROR_UNKNOWN) {
+					file_err = st;
+				}
+			}
 			if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) 
 			{
 				if (msg.source == (void *) mp3_decoder && msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) 
@@ -610,6 +623,21 @@ void audio_task(void *arg) {
 					rsp_filter_set_src_info(rsp_handle, music_info.sample_rates, music_info.channels);
 				}
 			}
+		}
+
+		if (file_err) {
+			// Карта уже отработала свои ретраи и восстановление (sd_card.c), здесь
+			// только приводим конвейер в чистое состояние, чтобы следующий play сработал.
+			// Трек считаем завершённым: сценарии, ждущие endOfTrack, не зависнут.
+			ESP_LOGE(TAG, "File read error (status %d), stop track %d", file_err, me_state.currentTrack);
+			mblog(E, "mp3Player: file read error (status %d), track %d stopped", file_err, me_state.currentTrack);
+			file_err = 0;
+			att_flag = 0;
+			audioStop();
+			setVolume_num(c->volume);
+			audioSetIndicator(slot_num, 0);
+			sprintf(reportStr, "%d", me_state.currentTrack);
+			stdreport_s(c->ETreport, reportStr);
 		}
 	}
 }
