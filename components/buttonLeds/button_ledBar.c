@@ -55,8 +55,8 @@ typedef enum
     LEDBAR_setIncrement,
 } LEDBAR_CMD;
 
-// Верхняя граница increment: 100 светодиодов за цикл
-#define LEDBAR_MAX_INCREMENT    (255 * 100)
+// Верхняя граница increment: один светодиод за цикл
+#define LEDBAR_MAX_INCREMENT    255
 
 /* 
     Модуль кнопка со шкалой заполнения
@@ -193,7 +193,7 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     */
     stdcommand_register(&ctx->led.cmds, LEDBAR_setPos, "action/setPos", PARAMT_int);
 
-    /* Задаёт скорость заполнения шкалы - приращение яркости за цикл, 255 = один светодиод за цикл
+    /* Задаёт скорость заполнения шкалы - приращение яркости за цикл 1-255, 255 = один светодиод за цикл
     */
     stdcommand_register(&ctx->led.cmds, LEDBAR_setIncrement, "action/setIncrement", PARAMT_int);
 
@@ -264,7 +264,7 @@ void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass,
         if (needRecalc) {
             memset(target_bright_mass, c->minBright, c->num_of_led);
         }
-        int dec = (c->increment > 255) ? 255 : c->increment;
+        int dec = c->increment;
         for (int i = 0; i < c->num_of_led; i++) {
             if (current_bright_mass[i] > c->minBright) {
                 int b = current_bright_mass[i] - dec;
@@ -299,7 +299,7 @@ void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass,
 
     // Плавное изменение цвета
     if (memcmp(currentRGB, &c->targetRGB, sizeof(RgbColor))) {
-        uint8_t colorInc = (c->increment > 255) ? 255 : c->increment;
+        uint8_t colorInc = c->increment;
         currentRGB->r = colorChek(currentRGB->r, c->targetRGB.r, colorInc);
         currentRGB->g = colorChek(currentRGB->g, c->targetRGB.g, colorInc);
         currentRGB->b = colorChek(currentRGB->b, c->targetRGB.b, colorInc);

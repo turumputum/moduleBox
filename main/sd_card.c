@@ -346,6 +346,7 @@ int spisd_init() {
 
 #ifdef BOARD_PINOUT_V6
 	clk_pin = 8; cmd_pin = 9; d0_pin = 7; led_pin = 0;
+	ESP_LOGI(TAG, "SD card search: BOARD_PINOUT_V6 (clk=%d cmd=%d d0=%d)", clk_pin, cmd_pin, d0_pin);
 #else
 	// Два набора пинов: v3 (old), v4 (new)
 	const uint8_t pin_sets[][4] = {
@@ -353,13 +354,12 @@ int spisd_init() {
 		{47, 21, 40, 48},  // v3
 		{ 41, 40, 3, 48},  // v4
 	};
-	int set_order[2];
-
-	if(me_config.boardVersion == 4){
-		set_order[0] = 1; set_order[1] = 0;  // v4 → v3
-	}else{
-		set_order[0] = 0; set_order[1] = 1;  // v3 → v4
-	}
+	// Порядок перебора фиксирован: v4 → v3. boardVersion здесь не помогает -
+	// config.ini лежит на самой карте и ещё не прочитан, load_Default_Config()
+	// тоже вызывается позже, так что значение обычно 0
+	const int set_order[2] = {1, 0};
+	ESP_LOGI(TAG, "SD card search: boardVersion=%d, trying v4 pins first, then v3",
+	         me_config.boardVersion);
 
 	int found = 0;
 	int idx_found = 0;
