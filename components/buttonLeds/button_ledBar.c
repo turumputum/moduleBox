@@ -52,7 +52,11 @@ typedef enum
     LEDBAR_toggleLedState,
     LEDBAR_setRGB,
     LEDBAR_setPos,
+    LEDBAR_setIncrement,
 } LEDBAR_CMD;
+
+// Верхняя граница increment: 100 светодиодов за цикл
+#define LEDBAR_MAX_INCREMENT    (255 * 100)
 
 /* 
     Модуль кнопка со шкалой заполнения
@@ -121,21 +125,21 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->led.periodicUpdate = get_option_flag_val(slot_num, "periodicUpdate");
 
-    /* Величина приращения яркости за цикл. По умолчанию 255. 1-255.
+    /* Скорость заполнения шкалы - приращение яркости за цикл, 255 = один светодиод за цикл. По умолчанию 255
     */
-    ctx->led.increment = get_option_int_val(slot_num, "increment", "", 255, 0, 255);
+    ctx->led.increment = get_option_int_val(slot_num, "increment", "", 255, 1, 255);
     if(ctx->led.increment<1)ctx->led.increment=1;
-    if(ctx->led.increment>255)ctx->led.increment=255;
+    if(ctx->led.increment>LEDBAR_MAX_INCREMENT)ctx->led.increment=LEDBAR_MAX_INCREMENT;
 
     /* Максимальное свечение. По умолчанию 255. 0-255.
     */
-    ctx->led.maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 4095);
+    ctx->led.maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 255);
     if(ctx->led.maxBright>255)ctx->led.maxBright=255;
     if(ctx->led.maxBright<0)ctx->led.maxBright=0;
 
     /* Минимальное свечение. По умолчанию 0. 0-255.
     */
-    ctx->led.minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 4095);
+    ctx->led.minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 255);
     if(ctx->led.minBright<0)ctx->led.minBright=0;
     if(ctx->led.minBright>255)ctx->led.minBright=255;
 
@@ -143,9 +147,9 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     */
     ctx->led.refreshPeriod = 1000/(get_option_int_val(slot_num, "refreshRate", "", 1000/30, 1, 4096));
     ESP_LOGD(TAG, "Calculated refresh period: %d ms for slot %d", ctx->led.refreshPeriod, slot_num); 	
-    /* Количество позиций светового эффекта. По умолчанию равно числу светодиодов. 1-4096.
-    */        
-    ctx->led.numOfPos = get_option_int_val(slot_num, "numOfPos", "", ctx->led.num_of_led, 1, 4096);
+    /* Количество позиций светового эффекта. По умолчанию равно числу светодиодов. 1-65535.
+    */
+    ctx->led.numOfPos = get_option_int_val(slot_num, "numOfPos", "", ctx->led.num_of_led, 1, 65535);
 
     /* Состояние при запуске. По умолчанию 0 (выключено).
     */
@@ -174,7 +178,7 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
    
         /* === COMMANDS === */
 
-    /* Включить (1) или выключить (0) модуль. */
+    /* Включить (1) - шкала плавно заполняется до позиции, выключить (0) - все светодиоды плавно гаснут одновременно */
     stdcommand_register(&ctx->led.cmds, STDCMD_ENABLE, "action/enable", PARAMT_int);
 
     /* Команда меняет текущее состояние светодиода на противоположное. Без параметров.
@@ -188,6 +192,10 @@ void configure_button_ledBar(PMODULE_CONTEXT ctx, int slot_num)
     /* Команда задаёт положение светового эффекта. Один параметр - номер позиции.
     */
     stdcommand_register(&ctx->led.cmds, LEDBAR_setPos, "action/setPos", PARAMT_int);
+
+    /* Задаёт скорость заполнения шкалы - приращение яркости за цикл, 255 = один светодиод за цикл
+    */
+    stdcommand_register(&ctx->led.cmds, LEDBAR_setIncrement, "action/setIncrement", PARAMT_int);
 
 
 
@@ -203,12 +211,48 @@ static uint8_t colorChek(uint8_t currentColor, uint8_t targetColor, uint8_t incr
     }else return targetColor;
 }
 
-void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass, uint8_t *target_bright_mass, rmt_led_heap_t *rmt_heap, int slot_num, RgbColor *currentRGB, int *targetPos, uint8_t *prevState)
+// Шкала движется бегущим фронтом: за цикл раздаём increment единиц яркости
+// светодиодам по очереди. Растущие - от начала ленты, гаснущие - от конца;
+// следующий светодиод начинает меняться, только когда предыдущий дошёл до цели.
+static bool ledBarStep(PLEDCONFIG c, uint8_t *current_bright_mass, const uint8_t *target_bright_mass)
+{
+    bool changed = false;
+
+    int budget = c->increment;
+    for (int i = 0; i < c->num_of_led && budget > 0; i++) {
+        if (current_bright_mass[i] < target_bright_mass[i]) {
+            int step = target_bright_mass[i] - current_bright_mass[i];
+            if (step > budget) step = budget;
+            current_bright_mass[i] += step;
+            budget -= step;
+            changed = true;
+            if (current_bright_mass[i] != target_bright_mass[i]) break;
+        } else if (current_bright_mass[i] > target_bright_mass[i]) {
+            break; // этот светодиод ещё гаснет - фронт заполнения ждёт
+        }
+    }
+
+    budget = c->increment;
+    for (int i = c->num_of_led - 1; i >= 0 && budget > 0; i--) {
+        if (current_bright_mass[i] > target_bright_mass[i]) {
+            int step = current_bright_mass[i] - target_bright_mass[i];
+            if (step > budget) step = budget;
+            current_bright_mass[i] -= step;
+            budget -= step;
+            changed = true;
+            if (current_bright_mass[i] != target_bright_mass[i]) break;
+        } else if (current_bright_mass[i] < target_bright_mass[i]) {
+            break;
+        }
+    }
+    return changed;
+}
+
+void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass, uint8_t *target_bright_mass, rmt_led_heap_t *rmt_heap, int slot_num, RgbColor *currentRGB, int *targetPos, uint8_t *prevState, int *prevTargetPos)
 {
     bool flag_ledUpdate = false;
     bool needRecalc = false;
 
-    // Пересчёт target_bright_mass при изменении state или targetPos
     if (c->state != *prevState) {
         *prevState = c->state;
         needRecalc = true;
@@ -216,68 +260,50 @@ void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass,
     }
 
     if (c->state == 0) {
-        // state=0: все светодиоды на minBright
+        // state=0: вся лента плавно гаснет одновременно, без фронта
         if (needRecalc) {
-            for (int i = 0; i < c->num_of_led; i++) {
-                target_bright_mass[i] = c->minBright;
+            memset(target_bright_mass, c->minBright, c->num_of_led);
+        }
+        int dec = (c->increment > 255) ? 255 : c->increment;
+        for (int i = 0; i < c->num_of_led; i++) {
+            if (current_bright_mass[i] > c->minBright) {
+                int b = current_bright_mass[i] - dec;
+                current_bright_mass[i] = (b < c->minBright) ? c->minBright : b;
+                flag_ledUpdate = true;
+            } else if (current_bright_mass[i] < c->minBright) {
+                current_bright_mass[i] = c->minBright;
+                flag_ledUpdate = true;
             }
         }
     } else {
         // state=1: шкала заполнена от начала до targetPos
-        static int prevTargetPos[10] = {[0 ... 9] = -1};
-        if (needRecalc || *targetPos != prevTargetPos[slot_num]) {
-            prevTargetPos[slot_num] = *targetPos;
-            float ledToPosRatio = (float)c->num_of_led / c->numOfPos;
-            float ledPos = ledToPosRatio * (*targetPos);
+        if (needRecalc || *targetPos != *prevTargetPos) {
+            *prevTargetPos = *targetPos;
+            float ledPos = (float)c->num_of_led * (*targetPos) / c->numOfPos;
             ESP_LOGD(TAG, "slot%d recalc targetPos=%d ledPos=%.2f numLed=%d numPos=%d",
                      slot_num, *targetPos, ledPos, c->num_of_led, c->numOfPos);
             for (int i = 0; i < c->num_of_led; i++) {
                 if (i < (int)ledPos) {
                     target_bright_mass[i] = c->maxBright;
-                } else if (i == (int)ledPos && i > 0) {
-                    float ratio = ledPos - (int)ledPos;
-                    target_bright_mass[i] = (uint8_t)(c->maxBright * ratio);
-                    if (target_bright_mass[i] < c->minBright) target_bright_mass[i] = c->minBright;
+                } else if (i == (int)ledPos) {
+                    // частично заполненный светодиод на границе шкалы
+                    int b = (int)(c->maxBright * (ledPos - (int)ledPos));
+                    target_bright_mass[i] = (b < c->minBright) ? c->minBright : b;
                 } else {
                     target_bright_mass[i] = c->minBright;
                 }
             }
-            //ESP_LOG_BUFFER_HEX_LEVEL(TAG, target_bright_mass, c->num_of_led, ESP_LOG_DEBUG);
         }
+        if (ledBarStep(c, current_bright_mass, target_bright_mass)) flag_ledUpdate = true;
     }
 
     // Плавное изменение цвета
     if (memcmp(currentRGB, &c->targetRGB, sizeof(RgbColor))) {
-        currentRGB->r = colorChek(currentRGB->r, c->targetRGB.r, c->increment);
-        currentRGB->g = colorChek(currentRGB->g, c->targetRGB.g, c->increment);
-        currentRGB->b = colorChek(currentRGB->b, c->targetRGB.b, c->increment);
+        uint8_t colorInc = (c->increment > 255) ? 255 : c->increment;
+        currentRGB->r = colorChek(currentRGB->r, c->targetRGB.r, colorInc);
+        currentRGB->g = colorChek(currentRGB->g, c->targetRGB.g, colorInc);
+        currentRGB->b = colorChek(currentRGB->b, c->targetRGB.b, colorInc);
         flag_ledUpdate = true;
-    }
-
-    // Прямой проход: плавное нарастание яркости от начала к targetPos
-    for (int i = 0; i < c->num_of_led; i++) {
-        if (target_bright_mass[i] > current_bright_mass[i]) {
-            flag_ledUpdate = true;
-            if (i > 0 && current_bright_mass[i-1] != target_bright_mass[i-1]) break;
-            if (abs(target_bright_mass[i] - current_bright_mass[i]) < c->increment)
-                current_bright_mass[i] = target_bright_mass[i];
-            else
-                current_bright_mass[i] += c->increment;
-            break;
-        }
-    }
-
-    // Обратный проход: плавное уменьшение яркости от конца к targetPos
-    for (int i = c->num_of_led - 1; i >= 0; i--) {
-        if (target_bright_mass[i] < current_bright_mass[i]) {
-            flag_ledUpdate = true;
-            if (i < c->num_of_led - 1 && current_bright_mass[i+1] != target_bright_mass[i+1]) break;
-            if (abs(target_bright_mass[i] - current_bright_mass[i]) < c->increment)
-                current_bright_mass[i] = target_bright_mass[i];
-            else
-                current_bright_mass[i] -= c->increment;
-            break;
-        }
     }
 
     // Рендеринг пикселей с учётом offset и dirInverse
@@ -288,10 +314,11 @@ void update_led_bar(PLEDCONFIG c, uint8_t *pixels, uint8_t *current_bright_mass,
                 index = (c->num_of_led - 1 - i + c->offset) % c->num_of_led;
             else
                 index = (i + c->offset) % c->num_of_led;
-            float tmpBright = (float)current_bright_mass[i] / 255;
-            pixels[index * 3]     = gamma_8[(uint8_t)(currentRGB->r * tmpBright)];
-            pixels[index * 3 + 1] = gamma_8[(uint8_t)(currentRGB->g * tmpBright)];
-            pixels[index * 3 + 2] = gamma_8[(uint8_t)(currentRGB->b * tmpBright)];
+            int bright = current_bright_mass[i];
+            led_strip_set_pixel_gamma(pixels, index,
+                                      currentRGB->r * bright / 255,
+                                      currentRGB->g * bright / 255,
+                                      currentRGB->b * bright / 255);
         }
         rmt_createAndSend(rmt_heap, pixels, c->num_of_led * 3, slot_num);
     }
@@ -337,6 +364,7 @@ void button_ledBar_task(void *arg)
     RgbColor currentRGB = {0, 0, 0};
     int targetPos = 0;
     uint8_t prevState = 255; // force recalc on first cycle
+    int prevTargetPos = -1;
 
     /* nSLEEP драйвера выходов слота - без него выход в высоком импедансе */
     enableSlotDriver(slot_num);
@@ -377,6 +405,12 @@ void button_ledBar_task(void *arg)
                 if(targetPos < 0) targetPos = 0;
                 if(targetPos > ctx->led.numOfPos) targetPos = ctx->led.numOfPos;
                 break;
+            case LEDBAR_setIncrement:
+                ctx->led.increment = params.p[0].i;
+                if(ctx->led.increment < 1) ctx->led.increment = 1;
+                if(ctx->led.increment > LEDBAR_MAX_INCREMENT) ctx->led.increment = LEDBAR_MAX_INCREMENT;
+                ESP_LOGD(TAG, "[button_ledBar_%d] increment:%d", slot_num, ctx->led.increment);
+                break;
         }
 
         // Button is always polled - enable controls only the LED.
@@ -390,7 +424,7 @@ void button_ledBar_task(void *arg)
         int button_state = button_logic_debounce(&ctx->button, button_level);
         button_logic_update(&ctx->button, button_state, slot_num, &prev_button_state);
 
-        update_led_bar(&ctx->led, pixels, current_bright_mass, target_bright_mass, &rmt_heap, slot_num, &currentRGB, &targetPos, &prevState);
+        update_led_bar(&ctx->led, pixels, current_bright_mass, target_bright_mass, &rmt_heap, slot_num, &currentRGB, &targetPos, &prevState, &prevTargetPos);
 
         vTaskDelayUntil(&lastWakeTime, ctx->led.refreshPeriod);
     }

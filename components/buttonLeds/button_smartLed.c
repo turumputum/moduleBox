@@ -220,7 +220,7 @@ static void setAllLed_color(uint8_t *pixel_array, RgbColor color, int16_t bright
     uint8_t G = color.g*fbright;
     uint8_t B = color.b*fbright;
     for(int i=0; i<num_of_led; i++){
-        led_strip_set_pixel(pixel_array, i, R,G,B);
+        led_strip_set_pixel_gamma(pixel_array, i, R,G,B);
     }
 }
 

@@ -132,11 +132,11 @@ void configure_button_swiperLed(PMODULE_CONTEXT ctx, int slot_num)
 
     /* Максимальное свечение. По умолчанию 255. 0-255.
     */
-    ctx->led.maxBright = (float)get_option_int_val(slot_num, "maxBright", "", 255, 0, 255)/255;
+    ctx->led.maxBright = get_option_int_val(slot_num, "maxBright", "", 255, 0, 255);
 
     /* Минимальное свечение. По умолчанию 0. 0-255.
     */
-    ctx->led.minBright = (float)get_option_int_val(slot_num, "minBright", "", 0, 0, 255)/255;
+    ctx->led.minBright = get_option_int_val(slot_num, "minBright", "", 0, 0, 255);
 
     /* Период обновления состояния светодиода в мс, по умолчанию 25 Гц
     */
@@ -191,7 +191,7 @@ static void setMinBright(swiper_handle_t *swiperLed) {
 	swiperLed->HSV.v = 255*swiperLed->minBright;
 	RgbColor tmpRGB = HsvToRgb(swiperLed->HSV);
 	for (int i = 0; i < swiperLed->num_led; i++) {
-        led_strip_set_pixel(swiperLed->pixelBuffer, i, tmpRGB.r, tmpRGB.g, tmpRGB.b);
+        led_strip_set_pixel_gamma(swiperLed->pixelBuffer, i, tmpRGB.r, tmpRGB.g, tmpRGB.b);
 	}
 }
 
@@ -233,7 +233,7 @@ static void processLedEffect(swiper_handle_t *swiperLed) {
 		for (int i = 0; i < swiperLed->num_led; i++) {
 			swiperLed->HSV.v = swiperLed->ledBrightMass[i];
 			RgbColor tmpRGB = HsvToRgb(swiperLed->HSV);
-            led_strip_set_pixel(swiperLed->pixelBuffer, i, tmpRGB.r, tmpRGB.g, tmpRGB.b);
+            led_strip_set_pixel_gamma(swiperLed->pixelBuffer, i, tmpRGB.r, tmpRGB.g, tmpRGB.b);
 		}
 	}
 }
@@ -247,7 +247,7 @@ void update_led_swiper(PLEDCONFIG c, swiper_handle_t *swiper, rmt_led_heap_t *rm
             swiper->HSV.v = 255 * swiper->maxBright;
             RgbColor tmpRGB = HsvToRgb(swiper->HSV);
             for(int i=0; i<swiper->num_led; i++){
-                led_strip_set_pixel(swiper->pixelBuffer, i, tmpRGB.r, tmpRGB.g, tmpRGB.b);
+                led_strip_set_pixel_gamma(swiper->pixelBuffer, i, tmpRGB.r, tmpRGB.g, tmpRGB.b);
             }
             changed = true;
         }
@@ -298,8 +298,8 @@ void button_swiperLed_task(void *arg)
     swiper_handle_t swiper = {0};
     swiper.num_led = ctx->led.num_of_led;
     swiper.pixelBuffer = pixels;
-    swiper.maxBright = ctx->led.maxBright;
-    swiper.minBright = ctx->led.minBright;
+    swiper.maxBright = ctx->led.maxBright / 255.0f;
+    swiper.minBright = ctx->led.minBright / 255.0f;
     swiper.RGB = ctx->led.targetRGB;
     swiper.HSV = RgbToHsv(ctx->led.targetRGB);
     swiper.ledBrightMass = malloc(swiper.num_led);

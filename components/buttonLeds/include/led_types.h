@@ -68,6 +68,7 @@ typedef struct {
 
 // Function prototypes for LED types
 void led_strip_set_pixel(uint8_t *pixel_array, int pos, int r, int g, int b);
+void led_strip_set_pixel_gamma(uint8_t *pixel_array, int pos, uint8_t r, uint8_t g, uint8_t b);
 esp_err_t rmt_new_led_strip_encoder(const led_strip_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder);
 uint8_t rmt_createAndSend(rmt_led_heap_t *rmt_slot_heap, uint8_t *led_strip_pixels, uint16_t size, uint8_t slot_num);
 

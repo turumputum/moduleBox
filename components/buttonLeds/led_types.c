@@ -22,6 +22,11 @@ void led_strip_set_pixel(uint8_t *pixel_array, int pos, int r, int g, int b){
     pixel_array[pos * 3 + 2]= (uint8_t)b;
 }
 
+// То же, но с гамма-коррекцией: r g b - линейная яркость 0-255
+void led_strip_set_pixel_gamma(uint8_t *pixel_array, int pos, uint8_t r, uint8_t g, uint8_t b){
+    led_strip_set_pixel(pixel_array, pos, gamma_8[r], gamma_8[g], gamma_8[b]);
+}
+
 static size_t rmt_encode_led_strip(rmt_encoder_t *encoder, rmt_channel_handle_t channel, const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state){
     rmt_led_strip_encoder_t *led_encoder = __containerof(encoder, rmt_led_strip_encoder_t, base);
     rmt_encoder_handle_t bytes_encoder = led_encoder->bytes_encoder;
