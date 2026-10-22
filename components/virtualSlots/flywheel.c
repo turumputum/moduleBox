@@ -51,7 +51,7 @@ void configure_flywheel(PFLYWHEEL_CONFIG ch, int slot_num)
     /* Значение декремента за один период
        По умолчанию 0,1
     */
-    ch->decrement = get_option_float_val(slot_num, "decrement", 0.1);
+    ch->decrement = get_option_float_val(slot_num, "decrement", 0.1f, 0.0f, 1000000.0f);
     ESP_LOGD(TAG, "Set decrement:%f for slot:%d", ch->decrement, slot_num);
 
     /* Период обновления в миллисекундах

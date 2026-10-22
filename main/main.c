@@ -277,6 +277,8 @@ void setLogLevel(uint8_t level){
 	esp_log_level_set("ONE_WIRE", level);
 	esp_log_level_set("ACCEL", level);
 	esp_log_level_set("STEADYWIN", level);
+	esp_log_level_set("RETRACTOR", level);
+	esp_log_level_set("RETRACTOR_CAN", level);
 	esp_log_level_set("VESC", level);
 	esp_log_level_set("PPM", level);
 	esp_log_level_set("CRSF", level);

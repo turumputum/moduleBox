@@ -39,6 +39,7 @@
 #include "servoDev.h"
 #include "servos.h"
 #include "steadywin.h"
+#include "retractor.h"
 #include "ticketDispenser.h"
 #include "VESC.h"
 #include "PPM.h"
@@ -277,6 +278,8 @@ int init_slots(void){
 			start_ds18b20_task(i);		// W, NOC
 		}else if(!strcmp(mode, "steadywinGIM")){
 			start_GIM_motor_task(i);	// W, NOC
+		}else if(!strcmp(mode, "retractor")){
+			start_retractor_task(i);	// W, C
 		}else if(!strcmp(mode, "CRSF")){
 			start_crsf_rx_task(i);		// W, NOC
 		}else if(!strcmp(mode, "VESC")){
@@ -356,7 +359,9 @@ int get_option_int_val(int slot_num, char* string, const char*  unit_name, int d
 	return result;
 }
 
-float get_option_float_val(int slot_num, char* string, float default_value)
+/* Порядок аргументов (default, min, max) - тот, что читает manifesto: границы
+   попадают в манифест как valueMin-valueMax. Единиц измерения у float-опции нет */
+float get_option_float_val(int slot_num, char* string, float default_value, float min_value, float max_value)
 {
 	float 		result	= default_value;
 	char *		begin;
@@ -377,7 +382,15 @@ float get_option_float_val(int slot_num, char* string, float default_value)
 		{
 			value++;
 
-			result = atof(value);
+			float parsed = atof(value);
+			if (parsed < min_value) {
+				ESP_LOGW(TAG, "Option '%s'=%f below min=%f, clamped", string, parsed, min_value);
+				parsed = min_value;
+			} else if (parsed > max_value) {
+				ESP_LOGW(TAG, "Option '%s'=%f above max=%f, clamped", string, parsed, max_value);
+				parsed = max_value;
+			}
+			result = parsed;
 		}
 		else
 		{

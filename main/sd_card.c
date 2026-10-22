@@ -324,81 +324,11 @@ int spisd_mount_fs() {
 	return result;
 }
 
-int spisd_init() {
-
-	if (!s_sdcard_mutex) {
-		s_sdcard_mutex = xSemaphoreCreateMutex();
-	}
-
-	uint32_t startTick = xTaskGetTickCount();
-	uint32_t heapBefore = xPortGetFreeHeapSize();
-	int result = -1;
-	esp_err_t ret;
-
-	ESP_LOGD(TAG, "Initializing SD card");
-
-	extern configuration me_config;
-	uint8_t clk_pin, cmd_pin, d0_pin, led_pin;
-
-	extern stateStruct me_state;
-	me_state.sd_board_version = 0;
-	memset(me_state.sd_pins, 0, sizeof(me_state.sd_pins));
-
-#ifdef BOARD_PINOUT_V6
-	clk_pin = 8; cmd_pin = 9; d0_pin = 7; led_pin = 0;
-	ESP_LOGI(TAG, "SD card search: BOARD_PINOUT_V6 (clk=%d cmd=%d d0=%d)", clk_pin, cmd_pin, d0_pin);
-#else
-	// Два набора пинов: v3 (old), v4 (new)
-	const uint8_t pin_sets[][4] = {
-		// {clk, cmd, d0, led}
-		{47, 21, 40, 48},  // v3
-		{ 41, 40, 3, 48},  // v4
-	};
-	// Порядок перебора фиксирован: v4 → v3. boardVersion здесь не помогает -
-	// config.ini лежит на самой карте и ещё не прочитан, load_Default_Config()
-	// тоже вызывается позже, так что значение обычно 0
-	const int set_order[2] = {1, 0};
-	ESP_LOGI(TAG, "SD card search: boardVersion=%d, trying v4 pins first, then v3",
-	         me_config.boardVersion);
-
-	int found = 0;
-	int idx_found = 0;
-	for(int s = 0; s < 2; s++){
-		int idx = set_order[s];
-		idx_found = idx;
-		clk_pin = pin_sets[idx][0];
-		cmd_pin = pin_sets[idx][1];
-		d0_pin  = pin_sets[idx][2];
-		led_pin = pin_sets[idx][3];
-
-		gpio_pad_select_gpio(clk_pin);
-		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
-		gpio_pad_select_gpio(cmd_pin);
-		gpio_set_direction(cmd_pin, GPIO_MODE_INPUT);
-		gpio_pad_select_gpio(d0_pin);
-		gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
-
-		if((gpio_get_level(clk_pin)==1)&&(gpio_get_level(d0_pin)==1)&&(gpio_get_level(cmd_pin)==1)){
-			ESP_LOGD(TAG, "SD card found on pin set %d (clk=%d cmd=%d d0=%d)", idx, clk_pin, cmd_pin, d0_pin);
-			found = 1;
-			break;
-		}
-		ESP_LOGD(TAG, "Pin set %d (clk=%d cmd=%d d0=%d) notFound", idx, clk_pin, cmd_pin, d0_pin);
-	}
-
-	if(!found){
-		ESP_LOGW(TAG, "SD card module notFound(");
-		return ESP_FAIL;
-	}
-	// Набор пинов однозначно говорит о ревизии платы: на v3 линии 41/40/3 уходят
-	// в слоты 3-4, карты там нет, и наоборот. Версию подтверждаем ниже, после
-	// успешного монтирования - реального обмена с картой по этим линиям.
-	int boardVersionBySdPins = (idx_found == 1) ? 4 : 3;
-#endif
-	me_state.sd_pins[0] = clk_pin;
-	me_state.sd_pins[1] = cmd_pin;
-	me_state.sd_pins[2] = d0_pin;
-
+// Пробуем примонтировать карту на заданных ножках. При неудаче ножки
+// возвращаются в исходное состояние: на чужой ревизии платы это линии слотов,
+// и модуль в слоте не должен получить их в режиме SDMMC с подтяжками.
+static int sd_try_mount_on_pins(uint8_t clk_pin, uint8_t cmd_pin, uint8_t d0_pin, uint8_t led_pin)
+{
 	gpio_pad_select_gpio(led_pin);
 	gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
 	gpio_set_level(led_pin, 1);
@@ -418,17 +348,105 @@ int spisd_init() {
 	// input_delay_phase работает только при HIGHSPEED/52M, при 20MHz не нужна.
 	host.max_freq_khz = SDMMC_FREQ_DEFAULT;
 
-	int res=spisd_mount_fs();
+	int res = spisd_mount_fs();
+	if (res == ESP_OK) {
+		gpio_set_level(led_pin, 0);
+	} else {
+		gpio_reset_pin(clk_pin);
+		gpio_reset_pin(cmd_pin);
+		gpio_reset_pin(d0_pin);
+		if (led_pin) gpio_reset_pin(led_pin);
+	}
+	return res;
+}
+
+int spisd_init() {
+
+	if (!s_sdcard_mutex) {
+		s_sdcard_mutex = xSemaphoreCreateMutex();
+	}
+
+	uint32_t startTick = xTaskGetTickCount();
+	uint32_t heapBefore = xPortGetFreeHeapSize();
+
+	ESP_LOGD(TAG, "Initializing SD card");
+
+	extern configuration me_config;
+	extern stateStruct me_state;
+	me_state.sd_board_version = 0;
+	memset(me_state.sd_pins, 0, sizeof(me_state.sd_pins));
+
+	int res = ESP_FAIL;
+	uint8_t clk_pin, cmd_pin, d0_pin, led_pin;
+
+#ifdef BOARD_PINOUT_V6
+	clk_pin = 8; cmd_pin = 9; d0_pin = 7; led_pin = 0;
+	ESP_LOGI(TAG, "SD card search: BOARD_PINOUT_V6 (clk=%d cmd=%d d0=%d)", clk_pin, cmd_pin, d0_pin);
+	res = sd_try_mount_on_pins(clk_pin, cmd_pin, d0_pin, led_pin);
+	if (res == ESP_OK) {
+		me_state.sd_pins[0] = clk_pin;
+		me_state.sd_pins[1] = cmd_pin;
+		me_state.sd_pins[2] = d0_pin;
+	}
+#else
+	// Два набора пинов: v3 (old), v4 (new)
+	const uint8_t pin_sets[][4] = {
+		// {clk, cmd, d0, led}
+		{47, 21, 40, 48},  // v3
+		{ 41, 40, 3, 48},  // v4
+	};
+	// Порядок перебора фиксирован: v4 → v3. boardVersion здесь не помогает -
+	// config.ini лежит на самой карте и ещё не прочитан, load_Default_Config()
+	// тоже вызывается позже, так что значение обычно 0
+	const int set_order[2] = {1, 0};
+	ESP_LOGI(TAG, "SD card search: boardVersion=%d, trying v4 pins first, then v3",
+	         me_config.boardVersion);
+
+	for(int s = 0; s < 2; s++){
+		int idx = set_order[s];
+		clk_pin = pin_sets[idx][0];
+		cmd_pin = pin_sets[idx][1];
+		d0_pin  = pin_sets[idx][2];
+		led_pin = pin_sets[idx][3];
+
+		gpio_pad_select_gpio(clk_pin);
+		gpio_set_direction(clk_pin, GPIO_MODE_INPUT);
+		gpio_pad_select_gpio(cmd_pin);
+		gpio_set_direction(cmd_pin, GPIO_MODE_INPUT);
+		gpio_pad_select_gpio(d0_pin);
+		gpio_set_direction(d0_pin, GPIO_MODE_INPUT);
+
+		if(!((gpio_get_level(clk_pin)==1)&&(gpio_get_level(d0_pin)==1)&&(gpio_get_level(cmd_pin)==1))){
+			ESP_LOGD(TAG, "Pin set %d (clk=%d cmd=%d d0=%d) notFound", idx, clk_pin, cmd_pin, d0_pin);
+			continue;
+		}
+
+		// Высокий уровень на линиях ещё не карта: на чужой ревизии платы это
+		// ножки слотов, и модуль в слоте может держать их в 1. Карту признаём
+		// только по успешному монтированию, иначе пробуем следующий набор.
+		ESP_LOGD(TAG, "Pin set %d (clk=%d cmd=%d d0=%d) lines high, mounting", idx, clk_pin, cmd_pin, d0_pin);
+		res = sd_try_mount_on_pins(clk_pin, cmd_pin, d0_pin, led_pin);
+		if(res == ESP_OK){
+			// Набор пинов однозначно говорит о ревизии платы: на v3 линии 41/40/3
+			// уходят в слоты 3-4, на v4 линии 47/21/40 - в слоты 0-2
+			int boardVersionBySdPins = (idx == 1) ? 4 : 3;
+			me_state.sd_board_version = boardVersionBySdPins;
+			me_state.sd_pins[0] = clk_pin;
+			me_state.sd_pins[1] = cmd_pin;
+			me_state.sd_pins[2] = d0_pin;
+			ESP_LOGI(TAG, "SD card on v%d pins (clk=%d cmd=%d d0=%d)", boardVersionBySdPins, clk_pin, cmd_pin, d0_pin);
+			break;
+		}
+		ESP_LOGW(TAG, "Pin set %d (clk=%d cmd=%d d0=%d): lines high but no card", idx, clk_pin, cmd_pin, d0_pin);
+	}
+
+	if(res != ESP_OK){
+		ESP_LOGW(TAG, "SD card module notFound(");
+	}
+#endif
+
 	ESP_LOGD(TAG, "SDcard init complite. Duration: %ld ms. Heap usage: %lu free Heap:%u", (xTaskGetTickCount() - startTick) * portTICK_PERIOD_MS, heapBefore - xPortGetFreeHeapSize(),
 				xPortGetFreeHeapSize());
-
-	if(res==ESP_OK){
-		gpio_set_level(led_pin, 0);
-#ifndef BOARD_PINOUT_V6
-		me_state.sd_board_version = boardVersionBySdPins;
-		ESP_LOGI(TAG, "SD card on v%d pins (clk=%d cmd=%d d0=%d)", boardVersionBySdPins, clk_pin, cmd_pin, d0_pin);
-#endif
-	}
 	return res;
 }
 

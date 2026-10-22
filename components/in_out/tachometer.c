@@ -165,7 +165,7 @@ static void configure_tachometer(tacho_context_t *ctx, int slot_num) {
     /* Коэффициент сглаживания от 0 до 1 - чем меньше тем сильнее сглаживание
        При значении 1 фильтр выключен
     */
-    ctx->k = get_option_float_val(slot_num, "filterK", 1.0f);
+    ctx->k = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
     ESP_LOGD(TAG, "Set filterK:%f for slot:%d", ctx->k, slot_num);
 
     /* Пороговое значение частоты - если задано (больше 0), модуль дополнительно

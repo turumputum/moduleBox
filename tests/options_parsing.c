@@ -64,7 +64,7 @@ int get_option_int_val(int slot_num, const char* string, const char*  unit_name,
 
 	return result;
 }
-float get_option_float_val(int slot_num, const char* string, float default_value)
+float get_option_float_val(int slot_num, const char* string, float default_value, float min_value, float max_value)
 {
 	float 		result	= default_value;
 	char *		begin;
@@ -86,6 +86,8 @@ float get_option_float_val(int slot_num, const char* string, float default_value
 			value++;
 
 			result = atof(value);
+			if (result < min_value) result = min_value;
+			if (result > max_value) result = max_value;
 		}
 		else
 		{
@@ -274,7 +276,7 @@ int main()
 	ESP_LOGD(TAG, "S:%d: Set inverse:%d", slot_num, inverse);
    
 	/* Коэфициент фильтрации */
-	float k = get_option_float_val(slot_num, "filterK", 1);
+	float k = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
 	ESP_LOGD(TAG, "S:%d: Set k filter:%f", slot_num, k);
     
 	/* Фильтрация дребезга - определяет порог срабатывания */

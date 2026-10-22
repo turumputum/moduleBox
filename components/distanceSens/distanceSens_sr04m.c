@@ -108,7 +108,7 @@ void configure_sr04m(distanceSens_t *distanceSens, uint8_t slot_num)
 
     /* Коэффициент фильтра сглаживания от 0 до 1 - при значении 1 фильтр отключен, По умолчанию 1 */
     if (strstr(me_config.slot_options[slot_num], "filterK") != NULL) {
-        distanceSens->k = get_option_float_val(slot_num, "filterK", 1);
+        distanceSens->k = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
         ESP_LOGD(TAG, "Set k filter:%f.  Slot:%d", distanceSens->k, slot_num);
     }
 

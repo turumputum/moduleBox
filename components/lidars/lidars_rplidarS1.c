@@ -165,7 +165,7 @@ static void configure_rplidarS1(lidars_t *lidar, uint8_t slot_num)
 
     /* Коэффициент сглаживания 0-1, при 1 фильтр выключен, По умолчанию 1
     */
-    lidar->filterK = get_option_float_val(slot_num, "filterK", 1.0f);
+    lidar->filterK = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
     ESP_LOGD(TAG, "filterK:%f slot:%d", lidar->filterK, slot_num);
 
     /* Флаг - рапортовать только дистанцию без угла

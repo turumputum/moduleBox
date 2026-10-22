@@ -712,6 +712,17 @@ int threshold = get_option_int_val(
     65535               // Максимум
 );
 
+// Дробное число с диапазоном. Порядок (default, min, max) и отсутствие единиц
+// измерения диктует manifesto - он читает именно этот формат. Значение вне
+// диапазона зажимается с предупреждением в лог
+float k = get_option_float_val(
+    slot_num,
+    "filterK",          // Имя опции
+    1.0f,               // Значение по умолчанию
+    0.0f,               // Минимум
+    1.0f                // Максимум
+);
+
 // Перечисление (enum)
 int mode = get_option_enum_val(
     slot_num,
@@ -746,7 +757,7 @@ ctx->led.ledMode = get_option_enum_val(slot_num, "ledMode", "none", "flash", "gl
 distanceSens->inverse = get_option_flag_val(slot_num, "inverse");
 distanceSens->threshold = get_option_int_val(slot_num, "threshold", "", 0, 0, 65535);
 distanceSens->deadBand = get_option_int_val(slot_num, "deadBand", "", 0, 0, 65535);
-distanceSens->k = get_option_float_val(slot_num, "k", "", 1.0, 0.0, 1.0);
+distanceSens->k = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
 ```
 
 ---

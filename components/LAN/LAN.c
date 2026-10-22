@@ -157,30 +157,33 @@ void osc_recive_task(){
 					//len, // the number of bytes in the OSC message
 					//tosc_getAddress(&osc), // the OSC address string, e.g. "/button1"
 					
-					tosc_getFormat(&osc); // the OSC format string, e.g. "f"
-				for (int i = 0; osc.format[i] != '\0'; i++) {
-					if(osc.format[i]== 'i'){
-						
-						//char strT[255];
-						sprintf(sringForReport, "%s:%ld", tosc_getAddress(&osc), tosc_getNextInt32(&osc));
-						char *temp = sringForReport;
-						if (strstr(temp, me_config.deviceName) != NULL) {
-							temp += 1;
-						}
-						execute(temp);
-						
-					} 
-					if(osc.format[i]== 'f'){
-						//printf("%i ", ); break;
-						//char strT[255];
-						sprintf(sringForReport, "%s:%f", tosc_getAddress(&osc), tosc_getNextFloat(&osc));
-						char *temp = sringForReport;
-						if (strstr(temp, me_config.deviceName) != NULL) {
-							temp += 1;
-						}
-						execute(temp);
-					} 
+				/* Одно OSC-сообщение = одна команда, как в MQTT: "<адрес>" без
+				   аргументов или "<адрес>:<payload>". Несколько аргументов
+				   склеиваем через пробел (rgb - "255 0 0", Конституция §4).
+				   Раньше execute() звался только из цикла по i/f-аргументам,
+				   и команды без аргументов (toggleLedState, getTaskList)
+				   молча терялись. */
+				int pos = snprintf(sringForReport, buff_size, "%s", tosc_getAddress(&osc));
+				char sep = ':';
+				for (int i = 0; osc.format[i] != '\0' && pos < buff_size; i++) {
+					int n = 0;
+					switch (osc.format[i]) {
+						case 'i': n = snprintf(sringForReport + pos, buff_size - pos, "%c%ld", sep, tosc_getNextInt32(&osc)); break;
+						case 'f': n = snprintf(sringForReport + pos, buff_size - pos, "%c%f", sep, tosc_getNextFloat(&osc)); break;
+						case 's': n = snprintf(sringForReport + pos, buff_size - pos, "%c%s", sep, tosc_getNextString(&osc)); break;
+						case 'T': n = snprintf(sringForReport + pos, buff_size - pos, "%c1", sep); break;
+						case 'F': n = snprintf(sringForReport + pos, buff_size - pos, "%c0", sep); break;
+						default: n = -1; break; /* неизвестный тип - дальше данные не разобрать */
+					}
+					if (n < 0) break;
+					pos += n;
+					sep = ' ';
 				}
+				char *temp = sringForReport;
+				if (strstr(temp, me_config.deviceName) != NULL) {
+					temp += 1;
+				}
+				execute(temp);
 			}
 		}
 		// UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);

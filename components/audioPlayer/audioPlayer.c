@@ -170,12 +170,12 @@ void configure_mp3Player(PAUDIOCONFIG c, int slot_num)
 
 	/* Скорость воспроизведения. Float 0.1-3.0, По умолчанию 1.09
 	*/
-	c->speed = get_option_float_val(slot_num, "speed", 1.09);
+	c->speed = get_option_float_val(slot_num, "speed", 1.09f, 0.1f, 3.0f);
 	ESP_LOGD(TAG, "Set speed:%f", c->speed);
 
 	/* Сдвиг тональности. Float 0.1-3.0, По умолчанию 1.0
 	*/
-	c->tone = get_option_float_val(slot_num, "tone", 1.0);
+	c->tone = get_option_float_val(slot_num, "tone", 1.0f, 0.1f, 3.0f);
 	ESP_LOGD(TAG, "Set tone:%f", c->tone);
 
 	/* Нижняя граница эквалайзера. Int -20..0, По умолчанию -13

@@ -54,22 +54,22 @@ void servoRod_task(void *arg) {
 
     float kP=10.0f;
 	if (strstr(me_config.slot_options[slot_num], "kP")!=NULL){
-		kP = get_option_float_val(slot_num, "kP", 10.0f);
+		kP = get_option_float_val(slot_num, "kP", 10.0f, 0.0f, 1000000.0f);
 	}
 
     float kI=0.0005f;
 	if (strstr(me_config.slot_options[slot_num], "kI")!=NULL){
-		kI = get_option_float_val(slot_num, "kI", 0.0005f);
+		kI = get_option_float_val(slot_num, "kI", 0.0005f, 0.0f, 1000000.0f);
 	}
 
     float fGain=0.0005f;
 	if (strstr(me_config.slot_options[slot_num], "fGain")!=NULL){
-		fGain = get_option_float_val(slot_num, "fGain", 0.0005f);
+		fGain = get_option_float_val(slot_num, "fGain", 0.0005f, 0.0f, 1000000.0f);
 	}
 
     float maxCurrent=1.0f;
 	if (strstr(me_config.slot_options[slot_num], "maxCurrent")!=NULL){
-		maxCurrent = get_option_float_val(slot_num, "maxCurrent", 1.0f);
+		maxCurrent = get_option_float_val(slot_num, "maxCurrent", 1.0f, 0.0f, 1000000.0f);
 	}
 
     int16_t maxVal = INT16_MAX;

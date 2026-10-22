@@ -92,7 +92,7 @@ void configure_encoderAS5600(PAS5600CONFIG c, int slot_num)
     ESP_LOGD(TAG, "[encoder_%d] zeroShift:%d", slot_num, c->zeroShift);
 
     /* Коэффициент фильтра скользящее среднее от 0 до 1 - 1 без фильтрации - По умолчанию 1 */
-    c->filterK = get_option_float_val(slot_num, "filterK", 1.0);
+    c->filterK = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
     ESP_LOGD(TAG, "[encoder_%d] filterK:%f", slot_num, c->filterK);
 
     c->minVal = 0;

@@ -354,7 +354,7 @@ void configure_analog(PANALOG_CHANNEL ch, int slot_num)
 
     /* Коэффициент фильтрации - По умолчанию 1
     */
-    ch->k = get_option_float_val(slot_num, "filterK", 1);
+    ch->k = get_option_float_val(slot_num, "filterK", 1.0f, 0.0f, 1.0f);
     ESP_LOGD(TAG, "S%d: filter k:%f", slot_num, ch->k);
 
     /* Порог срабатывания фильтра дребезга - По умолчанию 10
